@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   formatDate,
+  formatDuration,
   getDayStatus,
   type DayItinerary,
 } from '@/lib/itinerary-data'
@@ -39,6 +40,9 @@ import {
   Backpack,
   Lightbulb,
   Tag,
+  Euro,
+  Ticket,
+  Timer,
 } from 'lucide-react'
 
 interface DayDetailProps {
@@ -72,6 +76,28 @@ function getTransportIcon(type: string) {
       return Plane
     default:
       return Train
+  }
+}
+
+function getPriorityLabel(priority: 'low' | 'medium' | 'high'): string {
+  switch (priority) {
+    case 'high':
+      return 'Incontournable'
+    case 'medium':
+      return 'Recommandé'
+    case 'low':
+      return 'Facultatif'
+  }
+}
+
+function getPriorityClassName(priority: 'low' | 'medium' | 'high'): string {
+  switch (priority) {
+    case 'high':
+      return 'bg-red-50 text-red-600 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900'
+    case 'medium':
+      return 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900'
+    case 'low':
+      return 'bg-zinc-50 text-zinc-500 border-zinc-200 dark:bg-zinc-900 dark:text-zinc-400 dark:border-zinc-800'
   }
 }
 
@@ -416,11 +442,17 @@ export function DayDetail({ day }: DayDetailProps) {
           </CardHeader>
           <CardContent className="px-4 pt-0 pb-4">
             <div className="divide-border/40 flex flex-col divide-y">
-              {day.activities.map((activity, index) => {
+              {day.activities.map((activity) => {
                 const Icon = getActivityIcon(activity.type)
+                const hasTimeWindow =
+                  activity.timeWindow?.start || activity.timeWindow?.end
+                const hasMeta =
+                  hasTimeWindow ||
+                  activity.duration !== undefined ||
+                  activity.budget !== undefined
                 return (
                   <div
-                    key={index}
+                    key={activity.id}
                     className="flex gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <div className="bg-primary/10 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg">
@@ -430,10 +462,23 @@ export function DayDetail({ day }: DayDetailProps) {
                       />
                     </div>
                     <div className="min-w-0 flex-1 leading-none">
+                      {/* Name row: name + priority badge + maps link */}
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-foreground text-sm leading-snug font-semibold">
-                          {activity.name}
-                        </p>
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <p className="text-foreground text-sm leading-snug font-semibold">
+                            {activity.name}
+                          </p>
+                          {activity.priority && (
+                            <span
+                              className={cn(
+                                'inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium',
+                                getPriorityClassName(activity.priority),
+                              )}
+                            >
+                              {getPriorityLabel(activity.priority)}
+                            </span>
+                          )}
+                        </div>
                         {activity.coordinates && (
                           <a
                             href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}
@@ -448,15 +493,97 @@ export function DayDetail({ day }: DayDetailProps) {
                           </a>
                         )}
                       </div>
+
+                      {/* Description */}
                       {activity.description && (
                         <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
                           {activity.description}
                         </p>
                       )}
-                      {activity.duration && (
-                        <div className="text-muted-foreground/70 mt-1 flex items-center gap-1 text-[11px]">
-                          <Clock className="h-3 w-3" strokeWidth={1.75} />
-                          <span>{activity.duration}</span>
+
+                      {/* Notes */}
+                      {activity.notes && (
+                        <p className="text-muted-foreground/70 mt-0.5 text-[11px] leading-relaxed italic">
+                          {activity.notes}
+                        </p>
+                      )}
+
+                      {/* Meta row: time window · duration · budget */}
+                      {hasMeta && (
+                        <div className="text-muted-foreground/70 mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                          {hasTimeWindow && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" strokeWidth={1.75} />
+                              {activity.timeWindow!.start}
+                              {activity.timeWindow!.start &&
+                                activity.timeWindow!.end &&
+                                ` – ${activity.timeWindow!.end}`}
+                              {!activity.timeWindow!.start &&
+                                activity.timeWindow!.end}
+                            </span>
+                          )}
+                          {activity.duration !== undefined && (
+                            <span className="flex items-center gap-1">
+                              <Timer className="h-3 w-3" strokeWidth={1.75} />
+                              {formatDuration(activity.duration)}
+                            </span>
+                          )}
+                          {activity.budget !== undefined && (
+                            <span className="flex items-center gap-1">
+                              <Euro className="h-3 w-3" strokeWidth={1.75} />
+                              {activity.budget} €
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Prerequisites */}
+                      {activity.preRequisites &&
+                        activity.preRequisites.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                            <Ticket
+                              className="text-muted-foreground/60 h-3 w-3 shrink-0"
+                              strokeWidth={1.75}
+                            />
+                            {activity.preRequisites.map((req, i) => (
+                              <span
+                                key={i}
+                                className="bg-muted/60 text-muted-foreground rounded px-1.5 py-0.5 text-[10px]"
+                              >
+                                {req}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                      {/* External link */}
+                      {activity.link && (
+                        <a
+                          href={activity.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:text-primary/80 mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium transition-colors hover:underline"
+                        >
+                          Site officiel
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+
+                      {/* Activity images strip */}
+                      {activity.images && activity.images.length > 0 && (
+                        <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
+                          {activity.images.map((img, i) => (
+                            <div
+                              key={i}
+                              className="h-14 w-14 shrink-0 overflow-hidden rounded-md"
+                            >
+                              <img
+                                src={img}
+                                alt={`${activity.name} ${i + 1}`}
+                                className="h-full w-full object-cover"
+                              />
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
