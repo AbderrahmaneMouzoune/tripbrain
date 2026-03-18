@@ -1,16 +1,17 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { itinerary, type DayItinerary } from '@/lib/itinerary-data'
+import { type DayItinerary } from '@/lib/itinerary-data'
 import { Card } from '@/components/ui/card'
 import { MapPin } from 'lucide-react'
 
 interface TripMapProps {
+  itinerary: DayItinerary[]
   selectedDay: number
   onSelectDay?: (index: number) => void
 }
 
-export function TripMap({ selectedDay, onSelectDay }: TripMapProps) {
+export function TripMap({ itinerary, selectedDay, onSelectDay }: TripMapProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<L.Map | null>(null)
   const markersRef = useRef<L.Marker[]>([])

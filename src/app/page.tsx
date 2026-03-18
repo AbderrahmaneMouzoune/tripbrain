@@ -1,12 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import {
-  itinerary,
-  getCurrentDayIndex,
-  tripStartDate,
-  tripEndDate,
-} from '@/lib/itinerary-data'
+import { useTripData } from '@/hooks/use-trip-data'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
 import { TripMap } from '@/components/trip-map'
@@ -16,7 +11,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronLeft, ChevronRight, Map, List, Compass, FolderOpen } from 'lucide-react'
 import { DocumentsView } from '@/components/documents-view'
 
-function getTripCountdown(): {
+function getTripCountdown(
+  tripStartDate: Date,
+  tripEndDate: Date,
+): {
   type: 'before' | 'during' | 'after'
   days: number
 } {
@@ -49,14 +47,19 @@ function getTripCountdown(): {
 }
 
 export default function HomePage() {
+  const {
+    itinerary,
+    tripStartDate,
+    tripEndDate,
+    currentDayIndex,
+  } = useTripData()
   const [selectedDay, setSelectedDay] = useState(0)
   const [activeTab, setActiveTab] = useState<'roadbook' | 'map' | 'documents'>('roadbook')
-  const countdown = getTripCountdown()
+  const countdown = getTripCountdown(tripStartDate, tripEndDate)
 
   useEffect(() => {
-    const currentIndex = getCurrentDayIndex()
-    setSelectedDay(currentIndex)
-  }, [])
+    setSelectedDay(currentDayIndex)
+  }, [currentDayIndex])
 
   const handlePrevDay = () => {
     setSelectedDay((prev) => Math.max(0, prev - 1))
@@ -111,7 +114,7 @@ export default function HomePage() {
                 </p>
               </div>
             </div>
-            <ShareDialog selectedDay={selectedDay} />
+            <ShareDialog itinerary={itinerary} selectedDay={selectedDay} />
           </div>
         </div>
       </header>
@@ -119,7 +122,7 @@ export default function HomePage() {
       {/* Timeline */}
       <section className="border-border/60 bg-card/55 border-b backdrop-blur-md">
         <div className="mx-auto max-w-4xl">
-          <Timeline selectedDay={selectedDay} onSelectDay={setSelectedDay} />
+          <Timeline itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
         </div>
       </section>
 
@@ -193,7 +196,7 @@ export default function HomePage() {
           <DayDetail day={currentDay} />
         ) : activeTab === 'map' ? (
           <div className="flex flex-col gap-4">
-            <TripMap selectedDay={selectedDay} onSelectDay={setSelectedDay} />
+            <TripMap itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
             <DayDetail day={currentDay} />
           </div>
         ) : (
