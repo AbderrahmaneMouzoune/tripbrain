@@ -20,6 +20,25 @@ export interface DayImage {
   caption: string
 }
 
+export interface Transport {
+  id: string
+  type: 'train' | 'car' | 'plane' | 'bus' | 'boat'
+  from?: string
+  to?: string
+  departureTime?: string
+  arrivalTime?: string
+  duration?: number
+  details?: string
+  coordinates?: {
+    from?: [number, number]
+    to?: [number, number]
+  }
+  price?: number
+  link?: string
+  notes?: string
+  flightNumber?: string
+}
+
 export interface DayItinerary {
   date: string
   dayNumber: number
@@ -34,12 +53,7 @@ export interface DayItinerary {
   tips?: string[]
   accommodation?: Accommodation
   activities: Activity[]
-  transport?: {
-    type: 'train' | 'car' | 'plane' | 'bus'
-    from?: string
-    to?: string
-    details?: string
-  }
+  transport?: Transport
   coordinates: [number, number]
   images?: DayImage[]
 }
@@ -170,7 +184,7 @@ export const itinerary: DayItinerary[] = [
         coordinates: [31.2139, 121.4701],
       },
     ],
-    transport: { type: 'train', from: 'Shanghai', to: 'Qingdao' },
+    transport: { id: 'transport-day2', type: 'train', from: 'Shanghai', to: 'Qingdao' },
   },
 
   {
@@ -234,7 +248,7 @@ export const itinerary: DayItinerary[] = [
       },
       { name: 'Dîner fruits de mer', type: 'food', duration: '1h30' },
     ],
-    transport: { type: 'train', from: 'Qingdao', to: 'Beijing' },
+    transport: { id: 'transport-day3', type: 'train', from: 'Qingdao', to: 'Beijing' },
   },
 
   {
@@ -393,7 +407,7 @@ export const itinerary: DayItinerary[] = [
       { name: 'Téléphérique', type: 'experience', duration: '20m' },
       { name: 'Descente luge', type: 'experience', duration: '10m' },
     ],
-    transport: { type: 'plane', from: 'Beijing', to: "Xi'an" },
+    transport: { id: 'transport-day6', type: 'plane', from: 'Beijing', to: "Xi'an" },
   },
 
   {
@@ -490,7 +504,7 @@ export const itinerary: DayItinerary[] = [
       { name: "Remparts Xi'an vélo", type: 'experience', duration: '2h' },
       { name: "Pagode de l'oie sauvage", type: 'visit', duration: '1h' },
     ],
-    transport: { type: 'train', from: "Xi'an", to: 'Chongqing' },
+    transport: { id: 'transport-day8', type: 'train', from: "Xi'an", to: 'Chongqing' },
   },
 
   {
@@ -585,7 +599,7 @@ export const itinerary: DayItinerary[] = [
       { name: 'Ciqikou Ancient Town', type: 'visit', duration: '2h' },
       { name: 'Hot pot traditionnel', type: 'food', duration: '2h' },
     ],
-    transport: { type: 'plane', from: 'Chongqing', to: 'Zhangjiajie' },
+    transport: { id: 'transport-day10', type: 'plane', from: 'Chongqing', to: 'Zhangjiajie' },
   },
 
   {
@@ -713,7 +727,7 @@ export const itinerary: DayItinerary[] = [
       { name: 'Glass skywalk', type: 'experience', duration: '1h' },
       { name: "Heaven's Gate stairs", type: 'visit', duration: '1h' },
     ],
-    transport: { type: 'plane', from: 'Zhangjiajie', to: 'Shanghai' },
+    transport: { id: 'transport-day13', type: 'plane', from: 'Zhangjiajie', to: 'Shanghai' },
   },
 
   {
@@ -806,7 +820,7 @@ export const itinerary: DayItinerary[] = [
       { name: 'Lujiazui district walk', type: 'visit', duration: '1h30' },
       { name: 'Aquarium Shanghai', type: 'visit', duration: '1h' },
     ],
-    transport: { type: 'plane', from: 'Shanghai', to: 'Taipei' },
+    transport: { id: 'transport-day15', type: 'plane', from: 'Shanghai', to: 'Taipei' },
   },
 
   {
@@ -928,7 +942,7 @@ export const itinerary: DayItinerary[] = [
       { name: 'Dihua Street', type: 'visit', duration: '1h' },
       { name: 'Tea house traditionnel', type: 'food', duration: '1h' },
     ],
-    transport: { type: 'plane', from: 'Taipei', to: 'Shanghai' },
+    transport: { id: 'transport-day18', type: 'plane', from: 'Taipei', to: 'Shanghai' },
   },
 
   {

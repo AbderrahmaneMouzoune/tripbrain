@@ -40,10 +40,23 @@ function buildEventDescription(day: DayItinerary): string {
   }
 
   if (day.transport) {
-    const { type, from, to, details } = day.transport
-    const label = { train: 'Train', car: 'Voiture', plane: 'Avion', bus: 'Bus' }[type]
+    const { type, from, to, details, flightNumber, departureTime, arrivalTime, duration, price, notes } = day.transport
+    const label = { train: 'Train', car: 'Voiture', plane: 'Avion', bus: 'Bus', boat: 'Bateau' }[type]
     const route = from && to ? ` ${from} → ${to}` : ''
-    parts.push(`Transport : ${label}${route}${details ? ` (${details})` : ''}`)
+    const parts2: string[] = [`Transport : ${label}${route}${details ? ` (${details})` : ''}`]
+    if (flightNumber) parts2.push(`N° vol : ${flightNumber}`)
+    if (departureTime || arrivalTime) {
+      const times = [departureTime, arrivalTime].filter(Boolean).join(' → ')
+      parts2.push(`Horaires : ${times}`)
+    }
+    if (duration !== undefined) {
+      const h = Math.floor(duration / 60)
+      const m = duration % 60
+      parts2.push(`Durée : ${h}h${m > 0 ? `${m}m` : ''}`)
+    }
+    if (price !== undefined) parts2.push(`Prix : ${price} €`)
+    if (notes) parts2.push(notes)
+    parts.push(parts2.join(' | '))
   }
 
   if (day.accommodation) {

@@ -25,6 +25,8 @@ import {
   Train,
   Car,
   Plane,
+  Bus,
+  Ship,
   Camera,
   Utensils,
   ShoppingBag,
@@ -70,6 +72,10 @@ function getTransportIcon(type: string) {
       return Car
     case 'plane':
       return Plane
+    case 'bus':
+      return Bus
+    case 'boat':
+      return Ship
     default:
       return Train
   }
@@ -317,6 +323,74 @@ export function DayDetail({ day }: DayDetailProps) {
                       <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
                         {transport.details}
                       </p>
+                    )}
+
+                    {transport.flightNumber && (
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        <span className="font-medium">Vol :</span>{' '}
+                        {transport.flightNumber}
+                      </p>
+                    )}
+
+                    {(transport.departureTime || transport.arrivalTime) && (
+                      <p className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
+                        <Clock className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                        {transport.departureTime && (
+                          <span>{transport.departureTime}</span>
+                        )}
+                        {transport.departureTime && transport.arrivalTime && (
+                          <span>→</span>
+                        )}
+                        {transport.arrivalTime && (
+                          <span>{transport.arrivalTime}</span>
+                        )}
+                        {transport.duration !== undefined && (
+                          <span className="text-muted-foreground/70">
+                            ({Math.floor(transport.duration / 60)}h
+                            {transport.duration % 60 > 0
+                              ? `${transport.duration % 60}m`
+                              : ''}
+                            )
+                          </span>
+                        )}
+                      </p>
+                    )}
+
+                    {transport.duration !== undefined &&
+                      !transport.departureTime &&
+                      !transport.arrivalTime && (
+                        <p className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
+                          <Clock className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                          {Math.floor(transport.duration / 60)}h
+                          {transport.duration % 60 > 0
+                            ? `${transport.duration % 60}m`
+                            : ''}
+                        </p>
+                      )}
+
+                    {transport.price !== undefined && (
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        <span className="font-medium">Prix :</span>{' '}
+                        {transport.price} €
+                      </p>
+                    )}
+
+                    {transport.notes && (
+                      <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                        {transport.notes}
+                      </p>
+                    )}
+
+                    {transport.link && (
+                      <a
+                        href={transport.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary mt-1.5 inline-flex items-center gap-1 text-xs hover:underline"
+                      >
+                        <ExternalLink className="h-3 w-3" strokeWidth={1.75} />
+                        Réserver / infos
+                      </a>
                     )}
                   </div>
                 </div>

@@ -7,7 +7,7 @@ import {
   getDayStatus,
   type DayItinerary,
 } from '@/lib/itinerary-data'
-import { Train, Car, Plane, MapPin, Tent } from 'lucide-react'
+import { Train, Car, Plane, Bus, Ship, MapPin, Tent } from 'lucide-react'
 
 interface TimelineProps {
   selectedDay: number
@@ -18,6 +18,8 @@ function getCityIcon(city: string, transport?: DayItinerary['transport']) {
   if (transport?.type === 'train') return Train
   if (transport?.type === 'plane') return Plane
   if (transport?.type === 'car') return Car
+  if (transport?.type === 'bus') return Bus
+  if (transport?.type === 'boat') return Ship
   if (city.includes('Desert')) return Tent
   return MapPin
 }
