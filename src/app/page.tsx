@@ -69,10 +69,17 @@ export default function HomePage() {
   const currentDay = itinerary[selectedDay]
 
   return (
-    <main className="bg-background min-h-screen">
-      {/* Header */}
+    <main className="bg-background relative min-h-screen overflow-x-clip">
+      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="animate-sticker-float bg-primary/12 border-primary/30 absolute top-8 -left-8 h-24 w-24 rotate-12 rounded-2xl border-2" />
+        <div className="animate-sticker-bounce bg-secondary/16 border-secondary/35 absolute top-16 right-3 h-20 w-20 -rotate-12 rounded-full border-2" />
+        <div className="animate-sticker-float [animation-delay:180ms] bg-accent/14 border-accent/35 absolute top-72 right-10 h-16 w-16 rotate-6 rounded-xl border-2" />
+      </div>
+
+      <div className="relative z-10">
+        {/* Header */}
       <header
-        className="bg-card/95 border-border/70 sticky top-0 z-50 border-b backdrop-blur-md"
+        className="bg-card/85 border-border/60 sticky top-0 z-50 border-b backdrop-blur-xl"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="mx-auto max-w-4xl px-4 py-3">
@@ -90,11 +97,7 @@ export default function HomePage() {
               </div>
               <div>
                 <h1
-                  className="text-foreground text-base leading-tight font-bold tracking-wide"
-                  style={{
-                    fontFamily: 'var(--font-playfair), serif',
-                    fontStyle: 'italic',
-                  }}
+                  className="text-foreground font-display text-base leading-tight font-bold tracking-[0.08em] uppercase"
                 >
                   Ouzbekistan 2026
                 </h1>
@@ -114,7 +117,7 @@ export default function HomePage() {
       </header>
 
       {/* Timeline */}
-      <section className="border-border/70 bg-card/60 border-b backdrop-blur-sm">
+      <section className="border-border/60 bg-card/55 border-b backdrop-blur-md">
         <div className="mx-auto max-w-4xl">
           <Timeline selectedDay={selectedDay} onSelectDay={setSelectedDay} />
         </div>
@@ -203,7 +206,7 @@ export default function HomePage() {
 
       {/* Mobile bottom navigation */}
       <nav
-        className="bg-card/95 border-border/70 fixed right-0 bottom-0 left-0 z-40 border-t backdrop-blur-md md:hidden"
+        className="bg-card/85 border-border/60 fixed right-0 bottom-0 left-0 z-40 border-t backdrop-blur-xl md:hidden"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
         <div className="flex items-center justify-around py-2">
@@ -264,6 +267,7 @@ export default function HomePage() {
           </Button>
         </div>
       </nav>
+      </div>
     </main>
   )
 }

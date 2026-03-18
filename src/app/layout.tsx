@@ -1,19 +1,19 @@
 import type { Metadata } from 'next'
-import { DM_Sans, Playfair_Display, Geist_Mono } from 'next/font/google'
+import { Nunito, Paytone_One, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { PWARegister } from '@/components/pwa-register'
 import './globals.css'
 
-const dmSans = DM_Sans({
+const nunito = Nunito({
   subsets: ['latin'],
   variable: '--font-dm-sans',
   display: 'swap',
 })
 
-const playfairDisplay = Playfair_Display({
+const paytoneOne = Paytone_One({
   subsets: ['latin'],
   variable: '--font-playfair',
-  style: ['normal', 'italic'],
+  weight: '400',
   display: 'swap',
 })
 
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   description:
     'Itineraire de voyage en Ouzbekistan: Tachkent, Samarcande, Boukhara, Khiva et le desert Kyzylkum',
   manifest: '/manifest.json',
-  themeColor: '#8B5A2B',
+  themeColor: '#2268c7',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
@@ -66,7 +66,7 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body
-        className={`${dmSans.variable} ${playfairDisplay.variable} font-sans antialiased`}
+        className={`${nunito.variable} ${paytoneOne.variable} font-sans antialiased`}
       >
         <PWARegister />
         {children}

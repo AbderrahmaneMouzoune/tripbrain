@@ -159,13 +159,7 @@ export function DayDetail({ day }: DayDetailProps) {
               {formatDate(day.date)}
             </span>
           </div>
-          <h2
-            className="text-foreground text-2xl leading-tight font-bold"
-            style={{
-              fontFamily: 'var(--font-playfair), serif',
-              fontStyle: 'italic',
-            }}
-          >
+          <h2 className="text-foreground font-display text-2xl leading-tight font-bold tracking-[0.03em]">
             {day.title}
           </h2>
           <div className="text-muted-foreground flex items-center gap-1.5">
@@ -218,7 +212,7 @@ export function DayDetail({ day }: DayDetailProps) {
                             alt={img.caption}
                             className="h-full w-full object-cover"
                           />
-                          <div className="from-primary/75 via-primary/20 absolute inset-x-0 bottom-0 bg-linear-to-t to-transparent px-4 py-3">
+                          <div className="bg-primary/70 absolute inset-x-0 bottom-0 px-4 py-3">
                             <p className="text-primary-foreground text-xs leading-snug font-medium drop-shadow">
                               {img.caption}
                             </p>
@@ -262,7 +256,7 @@ export function DayDetail({ day }: DayDetailProps) {
         {/* Highlights */}
         {day.highlights && day.highlights.length > 0 && (
           <Card className="border-border/70 bg-card/90 bg-tile-pattern relative overflow-hidden shadow-none">
-            <div className="from-background/35 to-background/75 pointer-events-none absolute inset-0 bg-linear-to-b" />
+            <div className="bg-background/55 pointer-events-none absolute inset-0" />
             <CardHeader className="relative px-5 pt-4 pb-2">
               <CardTitle className="text-muted-foreground flex items-center gap-2 text-xs font-semibold uppercase">
                 <Star
@@ -294,28 +288,40 @@ export function DayDetail({ day }: DayDetailProps) {
 
         {/* Transport info */}
         {day.transport && (
-          <div className="bg-primary/8 border-primary/15 flex items-center gap-3 rounded-xl border px-4 py-3">
+          <div className="border-border/60 bg-card/80 rounded-xl border px-4 py-3">
             {(() => {
-              const Icon = getTransportIcon(day.transport!.type)
+              const transport = day.transport!
+              const Icon = getTransportIcon(transport.type)
+              const hasRoute = Boolean(transport.from && transport.to)
+
               return (
-                <Icon
-                  className="text-primary h-4 w-4 shrink-0"
-                  strokeWidth={1.75}
-                />
+                <div className="flex items-start gap-3">
+                  <div className="bg-primary/10 mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+                    <Icon className="text-primary h-4 w-4" strokeWidth={1.75} />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                      <p className="text-muted-foreground text-[10px] font-semibold tracking-[0.14em] uppercase">
+                        Transport
+                      </p>
+                    </div>
+
+                    <p className="text-foreground text-sm leading-snug font-semibold">
+                      {hasRoute
+                        ? `${transport.from} → ${transport.to}`
+                        : transport.details}
+                    </p>
+
+                    {transport.details && hasRoute && (
+                      <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                        {transport.details}
+                      </p>
+                    )}
+                  </div>
+                </div>
               )
             })()}
-            <div className="min-w-0 flex-1 leading-none">
-              <p className="text-foreground text-sm font-semibold">
-                {day.transport.from && day.transport.to
-                  ? `${day.transport.from} → ${day.transport.to}`
-                  : day.transport.details}
-              </p>
-              {day.transport.details && day.transport.from && (
-                <p className="text-muted-foreground mt-0.5 text-xs">
-                  {day.transport.details}
-                </p>
-              )}
-            </div>
           </div>
         )}
 
