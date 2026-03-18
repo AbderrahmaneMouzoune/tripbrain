@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
   formatDate,
+  formatDuration,
   getDayStatus,
   type DayItinerary,
 } from '@/lib/itinerary-data'
@@ -39,6 +40,10 @@ import {
   Backpack,
   Lightbulb,
   Tag,
+  Flag,
+  Banknote,
+  Globe,
+  ListChecks,
 } from 'lucide-react'
 
 interface DayDetailProps {
@@ -416,11 +421,11 @@ export function DayDetail({ day }: DayDetailProps) {
           </CardHeader>
           <CardContent className="px-4 pt-0 pb-4">
             <div className="divide-border/40 flex flex-col divide-y">
-              {day.activities.map((activity, index) => {
+              {day.activities.map((activity) => {
                 const Icon = getActivityIcon(activity.type)
                 return (
                   <div
-                    key={index}
+                    key={activity.id}
                     className="flex gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <div className="bg-primary/10 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg">
@@ -431,32 +436,136 @@ export function DayDetail({ day }: DayDetailProps) {
                     </div>
                     <div className="min-w-0 flex-1 leading-none">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-foreground text-sm leading-snug font-semibold">
-                          {activity.name}
-                        </p>
-                        {activity.coordinates && (
-                          <a
-                            href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
-                          >
-                            <Navigation
-                              className="h-3.5 w-3.5"
-                              strokeWidth={1.5}
-                            />
-                          </a>
-                        )}
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                          <p className="text-foreground text-sm leading-snug font-semibold">
+                            {activity.name}
+                          </p>
+                          {activity.priority && (
+                            <span
+                              className={cn(
+                                'inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold leading-none',
+                                activity.priority === 'high'
+                                  ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                                  : activity.priority === 'medium'
+                                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                                    : 'bg-muted text-muted-foreground',
+                              )}
+                            >
+                              <Flag className="h-2.5 w-2.5" strokeWidth={2} />
+                              {activity.priority === 'high'
+                                ? 'Incontournable'
+                                : activity.priority === 'medium'
+                                  ? 'Recommandé'
+                                  : 'Optionnel'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {activity.link && (
+                            <a
+                              href={activity.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-muted-foreground/50 hover:text-primary mt-0.5 pt-1.5 transition-colors"
+                              title="Site web"
+                            >
+                              <Globe className="h-3.5 w-3.5" strokeWidth={1.5} />
+                            </a>
+                          )}
+                          {activity.coordinates && (
+                            <a
+                              href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-muted-foreground/50 hover:text-primary mt-0.5 pt-1.5 pr-1.5 transition-colors"
+                              title="Voir sur la carte"
+                            >
+                              <Navigation
+                                className="h-3.5 w-3.5"
+                                strokeWidth={1.5}
+                              />
+                            </a>
+                          )}
+                        </div>
                       </div>
                       {activity.description && (
                         <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
                           {activity.description}
                         </p>
                       )}
-                      {activity.duration && (
-                        <div className="text-muted-foreground/70 mt-1 flex items-center gap-1 text-[11px]">
-                          <Clock className="h-3 w-3" strokeWidth={1.75} />
-                          <span>{activity.duration}</span>
+                      {/* Meta row: duration, timeWindow, budget */}
+                      {(activity.duration ||
+                        activity.timeWindow ||
+                        activity.budget !== undefined) && (
+                        <div className="text-muted-foreground/70 mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                          {activity.duration && (
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" strokeWidth={1.75} />
+                              {formatDuration(activity.duration)}
+                            </span>
+                          )}
+                          {activity.timeWindow &&
+                            (activity.timeWindow.start ||
+                              activity.timeWindow.end) && (
+                              <span className="flex items-center gap-1">
+                                <Star className="h-3 w-3" strokeWidth={1.75} />
+                                {activity.timeWindow.start ?? ''}
+                                {activity.timeWindow.start &&
+                                  activity.timeWindow.end &&
+                                  ' – '}
+                                {activity.timeWindow.end ?? ''}
+                              </span>
+                            )}
+                          {activity.budget !== undefined && (
+                            <span className="flex items-center gap-1">
+                              <Banknote
+                                className="h-3 w-3"
+                                strokeWidth={1.75}
+                              />
+                              {activity.budget} ¥
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {/* Prerequisites */}
+                      {activity.preRequisites &&
+                        activity.preRequisites.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                            <ListChecks
+                              className="text-muted-foreground/60 h-3 w-3 shrink-0"
+                              strokeWidth={1.75}
+                            />
+                            {activity.preRequisites.map((req, i) => (
+                              <span
+                                key={i}
+                                className="bg-secondary/15 text-muted-foreground rounded px-1.5 py-0.5 text-[10px] leading-none"
+                              >
+                                {req}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      {/* Activity notes */}
+                      {activity.notes && (
+                        <p className="text-muted-foreground/70 mt-1.5 flex items-start gap-1 text-[11px] leading-relaxed">
+                          <StickyNote
+                            className="mt-px h-3 w-3 shrink-0"
+                            strokeWidth={1.75}
+                          />
+                          {activity.notes}
+                        </p>
+                      )}
+                      {/* Activity images */}
+                      {activity.images && activity.images.length > 0 && (
+                        <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
+                          {activity.images.map((src, i) => (
+                            <img
+                              key={i}
+                              src={src}
+                              alt={`${activity.name} ${i + 1}`}
+                              className="h-16 w-24 shrink-0 rounded-md object-cover"
+                            />
+                          ))}
                         </div>
                       )}
                     </div>

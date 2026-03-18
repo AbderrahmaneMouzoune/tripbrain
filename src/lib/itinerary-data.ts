@@ -8,11 +8,22 @@ export interface Accommodation {
 }
 
 export interface Activity {
+  id: string
   name: string
   description?: string
   type: 'visit' | 'transport' | 'food' | 'experience' | 'shopping'
-  duration?: string
+  duration?: number
   coordinates?: [number, number]
+  timeWindow?: {
+    start?: string
+    end?: string
+  }
+  priority?: 'low' | 'medium' | 'high'
+  preRequisites?: string[]
+  budget?: number
+  link?: string
+  images?: string[]
+  notes?: string
 }
 
 export interface DayImage {
@@ -100,20 +111,32 @@ export const itinerary: DayItinerary[] = [
       ],
     },
     activities: [
-      { name: 'Check-in hôtel', type: 'experience', duration: '1h' },
       {
+        id: 'act-1-1',
+        name: 'Check-in hôtel',
+        type: 'experience',
+        duration: 60,
+      },
+      {
+        id: 'act-1-2',
         name: "Temple Jing'an",
         type: 'visit',
-        duration: '1h30',
+        duration: 90,
         coordinates: [31.2235, 121.4452],
       },
       {
+        id: 'act-1-3',
         name: 'Promenade sur le Bund',
         type: 'visit',
-        duration: '2h',
+        duration: 120,
         coordinates: [31.24, 121.49],
       },
-      { name: 'Dîner Xiaolongbao', type: 'food', duration: '1h30' },
+      {
+        id: 'act-1-4',
+        name: 'Dîner Xiaolongbao',
+        type: 'food',
+        duration: 90,
+      },
     ],
   },
 
@@ -156,17 +179,29 @@ export const itinerary: DayItinerary[] = [
     ],
     activities: [
       {
+        id: 'act-2-1',
         name: 'Yu Garden',
         type: 'visit',
-        duration: '2h',
+        duration: 120,
         coordinates: [31.227, 121.4923],
       },
-      { name: 'Bazar Yuyuan', type: 'shopping', duration: '1h30' },
-      { name: 'Nanxiang Dumpling House', type: 'food', duration: '1h' },
       {
+        id: 'act-2-2',
+        name: 'Bazar Yuyuan',
+        type: 'shopping',
+        duration: 90,
+      },
+      {
+        id: 'act-2-3',
+        name: 'Nanxiang Dumpling House',
+        type: 'food',
+        duration: 60,
+      },
+      {
+        id: 'act-2-4',
         name: 'Balade concession française',
         type: 'visit',
-        duration: '2h',
+        duration: 120,
         coordinates: [31.2139, 121.4701],
       },
     ],
@@ -215,24 +250,32 @@ export const itinerary: DayItinerary[] = [
     },
     activities: [
       {
+        id: 'act-3-1',
         name: 'Jetée Zhanqiao',
         type: 'visit',
-        duration: '1h',
+        duration: 60,
         coordinates: [36.0605, 120.3203],
       },
       {
+        id: 'act-3-2',
         name: 'Cathédrale Saint-Michel',
         type: 'visit',
-        duration: '45m',
+        duration: 45,
         coordinates: [36.064, 120.327],
       },
       {
+        id: 'act-3-3',
         name: 'Musée bière Tsingtao',
         type: 'visit',
-        duration: '1h30',
+        duration: 90,
         coordinates: [36.0775, 120.32],
       },
-      { name: 'Dîner fruits de mer', type: 'food', duration: '1h30' },
+      {
+        id: 'act-3-4',
+        name: 'Dîner fruits de mer',
+        type: 'food',
+        duration: 90,
+      },
     ],
     transport: { type: 'train', from: 'Qingdao', to: 'Beijing' },
   },
@@ -281,14 +324,25 @@ export const itinerary: DayItinerary[] = [
       checkOut: '2026-05-16',
     },
     activities: [
-      { name: 'Installation hôtel', type: 'experience', duration: '1h' },
       {
+        id: 'act-4-1',
+        name: 'Installation hôtel',
+        type: 'experience',
+        duration: 60,
+      },
+      {
+        id: 'act-4-2',
         name: 'Balade Wangfujing',
         type: 'visit',
-        duration: '1h30',
+        duration: 90,
         coordinates: [39.9153, 116.404],
       },
-      { name: 'Marché street food', type: 'food', duration: '1h30' },
+      {
+        id: 'act-4-3',
+        name: 'Marché street food',
+        type: 'food',
+        duration: 90,
+      },
     ],
   },
 
@@ -327,19 +381,37 @@ export const itinerary: DayItinerary[] = [
     ],
     activities: [
       {
+        id: 'act-5-1',
         name: 'Place Tiananmen',
         type: 'visit',
-        duration: '45m',
+        duration: 45,
         coordinates: [39.9056, 116.3976],
       },
       {
+        id: 'act-5-2',
         name: 'Cité interdite',
         type: 'visit',
-        duration: '3h',
+        duration: 180,
         coordinates: [39.9163, 116.3972],
+        priority: 'high',
+        timeWindow: { start: '08:30', end: '17:00' },
+        preRequisites: ['Réservation en ligne obligatoire', 'Passeport requis'],
+        budget: 100,
+        link: 'https://www.dpm.org.cn',
+        notes: "Réserver le billet bien à l'avance, surtout en haute saison.",
       },
-      { name: 'Parc Jingshan', type: 'visit', duration: '1h' },
-      { name: 'Dîner canard laqué', type: 'food', duration: '1h30' },
+      {
+        id: 'act-5-3',
+        name: 'Parc Jingshan',
+        type: 'visit',
+        duration: 60,
+      },
+      {
+        id: 'act-5-4',
+        name: 'Dîner canard laqué',
+        type: 'food',
+        duration: 90,
+      },
     ],
   },
 
@@ -385,13 +457,30 @@ export const itinerary: DayItinerary[] = [
     ],
     activities: [
       {
+        id: 'act-6-1',
         name: 'Grande Muraille Mutianyu',
         type: 'visit',
-        duration: '4h',
+        duration: 240,
         coordinates: [40.4319, 116.5704],
+        priority: 'high',
+        timeWindow: { start: '07:30', end: '17:30' },
+        preRequisites: ['Billet entrée', 'Réservation recommandée'],
+        budget: 150,
+        link: 'https://www.mutianyugreatwall.com',
+        notes: 'Préférer la section Mutianyu pour moins de foule.',
       },
-      { name: 'Téléphérique', type: 'experience', duration: '20m' },
-      { name: 'Descente luge', type: 'experience', duration: '10m' },
+      {
+        id: 'act-6-2',
+        name: 'Téléphérique',
+        type: 'experience',
+        duration: 20,
+      },
+      {
+        id: 'act-6-3',
+        name: 'Descente luge',
+        type: 'experience',
+        duration: 10,
+      },
     ],
     transport: { type: 'plane', from: 'Beijing', to: "Xi'an" },
   },
@@ -437,9 +526,24 @@ export const itinerary: DayItinerary[] = [
       checkOut: '2026-05-18',
     },
     activities: [
-      { name: 'Quartier musulman', type: 'visit', duration: '2h' },
-      { name: 'Grande mosquée', type: 'visit', duration: '1h' },
-      { name: 'Street food noodles', type: 'food', duration: '1h' },
+      {
+        id: 'act-7-1',
+        name: 'Quartier musulman',
+        type: 'visit',
+        duration: 120,
+      },
+      {
+        id: 'act-7-2',
+        name: 'Grande mosquée',
+        type: 'visit',
+        duration: 60,
+      },
+      {
+        id: 'act-7-3',
+        name: 'Street food noodles',
+        type: 'food',
+        duration: 60,
+      },
     ],
   },
 
@@ -482,13 +586,33 @@ export const itinerary: DayItinerary[] = [
     ],
     activities: [
       {
+        id: 'act-8-1',
         name: 'Terracotta Army Museum',
         type: 'visit',
-        duration: '3h',
+        duration: 180,
         coordinates: [34.3849, 109.2786],
+        priority: 'high',
+        timeWindow: { start: '08:30', end: '18:00' },
+        preRequisites: ['Billet entrée', 'Guide audio recommandé'],
+        budget: 150,
+        link: 'https://www.bmy.com.cn',
+        notes: 'Incontournable ! Prévoir au moins 3h pour tout voir.',
       },
-      { name: "Remparts Xi'an vélo", type: 'experience', duration: '2h' },
-      { name: "Pagode de l'oie sauvage", type: 'visit', duration: '1h' },
+      {
+        id: 'act-8-2',
+        name: "Remparts Xi'an vélo",
+        type: 'experience',
+        duration: 120,
+        priority: 'medium',
+        budget: 50,
+        notes: 'Location de vélo disponible sur place.',
+      },
+      {
+        id: 'act-8-3',
+        name: "Pagode de l'oie sauvage",
+        type: 'visit',
+        duration: 60,
+      },
     ],
     transport: { type: 'train', from: "Xi'an", to: 'Chongqing' },
   },
@@ -537,9 +661,24 @@ export const itinerary: DayItinerary[] = [
       checkOut: '2026-05-20',
     },
     activities: [
-      { name: 'Hongyadong', type: 'visit', duration: '2h' },
-      { name: 'Promenade Yangtze', type: 'visit', duration: '1h30' },
-      { name: 'Rooftop photo spot', type: 'experience', duration: '1h' },
+      {
+        id: 'act-9-1',
+        name: 'Hongyadong',
+        type: 'visit',
+        duration: 120,
+      },
+      {
+        id: 'act-9-2',
+        name: 'Promenade Yangtze',
+        type: 'visit',
+        duration: 90,
+      },
+      {
+        id: 'act-9-3',
+        name: 'Rooftop photo spot',
+        type: 'experience',
+        duration: 60,
+      },
     ],
   },
 
@@ -581,9 +720,24 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Station Liziba', type: 'visit', duration: '30m' },
-      { name: 'Ciqikou Ancient Town', type: 'visit', duration: '2h' },
-      { name: 'Hot pot traditionnel', type: 'food', duration: '2h' },
+      {
+        id: 'act-10-1',
+        name: 'Station Liziba',
+        type: 'visit',
+        duration: 30,
+      },
+      {
+        id: 'act-10-2',
+        name: 'Ciqikou Ancient Town',
+        type: 'visit',
+        duration: 120,
+      },
+      {
+        id: 'act-10-3',
+        name: 'Hot pot traditionnel',
+        type: 'food',
+        duration: 120,
+      },
     ],
     transport: { type: 'plane', from: 'Chongqing', to: 'Zhangjiajie' },
   },
@@ -629,9 +783,24 @@ export const itinerary: DayItinerary[] = [
       checkOut: '2026-05-23',
     },
     activities: [
-      { name: 'Parc national Zhangjiajie', type: 'visit', duration: '4h' },
-      { name: 'Bailong Elevator', type: 'experience', duration: '30m' },
-      { name: 'Points de vue Avatar', type: 'visit', duration: '2h' },
+      {
+        id: 'act-11-1',
+        name: 'Parc national Zhangjiajie',
+        type: 'visit',
+        duration: 240,
+      },
+      {
+        id: 'act-11-2',
+        name: 'Bailong Elevator',
+        type: 'experience',
+        duration: 30,
+      },
+      {
+        id: 'act-11-3',
+        name: 'Points de vue Avatar',
+        type: 'visit',
+        duration: 120,
+      },
     ],
   },
 
@@ -669,9 +838,24 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Tianzi Mountain', type: 'visit', duration: '3h' },
-      { name: 'Téléphérique', type: 'experience', duration: '30m' },
-      { name: 'Randonnée vallée', type: 'experience', duration: '2h' },
+      {
+        id: 'act-12-1',
+        name: 'Tianzi Mountain',
+        type: 'visit',
+        duration: 180,
+      },
+      {
+        id: 'act-12-2',
+        name: 'Téléphérique',
+        type: 'experience',
+        duration: 30,
+      },
+      {
+        id: 'act-12-3',
+        name: 'Randonnée vallée',
+        type: 'experience',
+        duration: 120,
+      },
     ],
   },
 
@@ -709,9 +893,24 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Téléphérique Tianmen', type: 'experience', duration: '30m' },
-      { name: 'Glass skywalk', type: 'experience', duration: '1h' },
-      { name: "Heaven's Gate stairs", type: 'visit', duration: '1h' },
+      {
+        id: 'act-13-1',
+        name: 'Téléphérique Tianmen',
+        type: 'experience',
+        duration: 30,
+      },
+      {
+        id: 'act-13-2',
+        name: 'Glass skywalk',
+        type: 'experience',
+        duration: 60,
+      },
+      {
+        id: 'act-13-3',
+        name: "Heaven's Gate stairs",
+        type: 'visit',
+        duration: 60,
+      },
     ],
     transport: { type: 'plane', from: 'Zhangjiajie', to: 'Shanghai' },
   },
@@ -757,8 +956,18 @@ export const itinerary: DayItinerary[] = [
       checkOut: '2026-05-25',
     },
     activities: [
-      { name: 'Nanjing Road', type: 'shopping', duration: '2h' },
-      { name: 'Skyline night photos', type: 'experience', duration: '1h' },
+      {
+        id: 'act-14-1',
+        name: 'Nanjing Road',
+        type: 'shopping',
+        duration: 120,
+      },
+      {
+        id: 'act-14-2',
+        name: 'Skyline night photos',
+        type: 'experience',
+        duration: 60,
+      },
     ],
   },
 
@@ -802,9 +1011,24 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Shanghai Tower observatory', type: 'visit', duration: '2h' },
-      { name: 'Lujiazui district walk', type: 'visit', duration: '1h30' },
-      { name: 'Aquarium Shanghai', type: 'visit', duration: '1h' },
+      {
+        id: 'act-15-1',
+        name: 'Shanghai Tower observatory',
+        type: 'visit',
+        duration: 120,
+      },
+      {
+        id: 'act-15-2',
+        name: 'Lujiazui district walk',
+        type: 'visit',
+        duration: 90,
+      },
+      {
+        id: 'act-15-3',
+        name: 'Aquarium Shanghai',
+        type: 'visit',
+        duration: 60,
+      },
     ],
     transport: { type: 'plane', from: 'Shanghai', to: 'Taipei' },
   },
@@ -846,10 +1070,11 @@ export const itinerary: DayItinerary[] = [
         caption: 'Ambiance nocturne de Taiwan',
       },
     ],
-    activities: [{ name: 'Shilin Night Market', type: 'food', duration: '2h' }],
+    activities: [{ name: 'Shilin Night Market', type: 'food', duration: 120 }],
   },
 
   {
+    id: 'act-16-1',
     date: '2026-05-26',
     dayNumber: 17,
     city: 'Taipei',
@@ -883,8 +1108,25 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Taipei 101 observatory', type: 'visit', duration: '2h' },
-      { name: 'Elephant Mountain hike', type: 'experience', duration: '1h' },
+      {
+        id: 'act-17-1',
+        name: 'Taipei 101 observatory',
+        type: 'visit',
+        duration: 120,
+        priority: 'medium',
+        timeWindow: { start: '09:00', end: '22:00' },
+        budget: 200,
+        link: 'https://www.taipei-101.com.tw',
+        notes: 'Meilleure vue au coucher du soleil (vers 18h30).',
+      },
+      {
+        id: 'act-17-2',
+        name: 'Elephant Mountain hike',
+        type: 'experience',
+        duration: 60,
+        priority: 'medium',
+        notes: 'Prévoir chaussures confortables. Vue panoramique sur Taipei 101.',
+      },
     ],
   },
 
@@ -924,9 +1166,24 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Temple Longshan', type: 'visit', duration: '1h' },
-      { name: 'Dihua Street', type: 'visit', duration: '1h' },
-      { name: 'Tea house traditionnel', type: 'food', duration: '1h' },
+      {
+        id: 'act-18-1',
+        name: 'Temple Longshan',
+        type: 'visit',
+        duration: 60,
+      },
+      {
+        id: 'act-18-2',
+        name: 'Dihua Street',
+        type: 'visit',
+        duration: 60,
+      },
+      {
+        id: 'act-18-3',
+        name: 'Tea house traditionnel',
+        type: 'food',
+        duration: 60,
+      },
     ],
     transport: { type: 'plane', from: 'Taipei', to: 'Shanghai' },
   },
@@ -976,9 +1233,24 @@ export const itinerary: DayItinerary[] = [
       checkOut: '2026-05-29',
     },
     activities: [
-      { name: 'Brunch', type: 'food', duration: '1h' },
-      { name: 'Derniers achats', type: 'shopping', duration: '1h' },
-      { name: 'Aéroport', type: 'transport', duration: '2h' },
+      {
+        id: 'act-19-1',
+        name: 'Brunch',
+        type: 'food',
+        duration: 60,
+      },
+      {
+        id: 'act-19-2',
+        name: 'Derniers achats',
+        type: 'shopping',
+        duration: 60,
+      },
+      {
+        id: 'act-19-3',
+        name: 'Aéroport',
+        type: 'transport',
+        duration: 120,
+      },
     ],
   },
 ]
@@ -1002,6 +1274,14 @@ export function getCurrentDayIndex(): number {
   if (today > tripEndDate) return itinerary.length - 1
 
   return 0
+}
+
+export function formatDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h === 0) return `${m}min`
+  if (m === 0) return `${h}h`
+  return `${h}h${m.toString().padStart(2, '0')}`
 }
 
 export function formatDate(
