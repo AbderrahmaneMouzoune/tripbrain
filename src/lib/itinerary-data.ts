@@ -382,6 +382,11 @@ export const itinerary: DayItinerary[] = [
         link: 'https://www.dpm.org.cn/',
         description: "Ancienne résidence impériale de la dynastie Ming et Qing, l'un des plus grands complexes de palais au monde.",
         notes: "Réserver les billets au moins 2 semaines à l'avance.",
+        images: [
+          'https://images.pexels.com/photos/20694747/pexels-photo-20694747.jpeg',
+          'https://images.pexels.com/photos/29474218/pexels-photo-29474218.jpeg',
+          'https://images.pexels.com/photos/3229784/pexels-photo-3229784.jpeg',
+        ],
       },
       {
         id: 'act-d5-3',

@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
 
@@ -12,9 +13,26 @@ interface LightboxProps {
   images: LightboxItem[]
   isOpen: boolean
   onClose: () => void
+  initialIndex?: number
 }
 
-export function Lightbox({ images, isOpen, onClose }: LightboxProps) {
+export function Lightbox({
+  images,
+  isOpen,
+  onClose,
+  initialIndex = 0,
+}: LightboxProps) {
+  const targetRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isOpen || !targetRef.current) return
+    // Scroll the target image into view after mount
+    const items = targetRef.current.querySelectorAll('img')
+    if (items[initialIndex]) {
+      items[initialIndex].scrollIntoView({ block: 'start' })
+    }
+  }, [isOpen, initialIndex])
+
   if (!isOpen) return null
 
   return (
@@ -32,6 +50,7 @@ export function Lightbox({ images, isOpen, onClose }: LightboxProps) {
         <X className="h-5 w-5" />
       </Button>
       <div
+        ref={targetRef}
         className="flex-1 overflow-y-auto px-4 py-14"
         onClick={(e) => e.stopPropagation()}
       >
