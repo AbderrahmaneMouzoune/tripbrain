@@ -21,6 +21,8 @@ import {
   FileArchive,
   FileSpreadsheet,
   Eye,
+  Inbox,
+  ArrowUpRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,7 +44,211 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+} from '@/components/ui/drawer'
 import { useDocuments, StoredFile } from '@/hooks/use-documents'
+
+// ---------------------------------------------------------------------------
+// Sources data
+// ---------------------------------------------------------------------------
+
+interface Source {
+  name: string
+  deepLink: string
+  fallback: string
+}
+
+interface SourceCategory {
+  label: string
+  items: Source[]
+}
+
+const SOURCE_CATEGORIES: SourceCategory[] = [
+  {
+    label: '✈️ Transports',
+    items: [
+      {
+        name: 'Air France',
+        deepLink: 'airfrance://',
+        fallback: 'https://www.airfrance.fr',
+      },
+      {
+        name: 'Ryanair',
+        deepLink: 'ryanair://',
+        fallback: 'https://www.ryanair.com',
+      },
+      {
+        name: 'easyJet',
+        deepLink: 'easyjet://',
+        fallback: 'https://www.easyjet.com',
+      },
+      {
+        name: 'Trainline',
+        deepLink: 'trainline://',
+        fallback: 'https://www.thetrainline.com',
+      },
+      {
+        name: 'SNCF Connect',
+        deepLink: 'sncfconnect://',
+        fallback: 'https://www.sncf-connect.com',
+      },
+    ],
+  },
+  {
+    label: '🏨 Hébergements',
+    items: [
+      {
+        name: 'Booking.com',
+        deepLink: 'booking://',
+        fallback: 'https://booking.com',
+      },
+      {
+        name: 'Airbnb',
+        deepLink: 'airbnb://',
+        fallback: 'https://airbnb.com',
+      },
+      {
+        name: 'Hotels.com',
+        deepLink: 'hotelscom://',
+        fallback: 'https://hotels.com',
+      },
+    ],
+  },
+  {
+    label: '🎟️ Activités',
+    items: [
+      {
+        name: 'GetYourGuide',
+        deepLink: 'getyourguide://',
+        fallback: 'https://www.getyourguide.com',
+      },
+      {
+        name: 'Viator',
+        deepLink: 'viator://',
+        fallback: 'https://www.viator.com',
+      },
+      {
+        name: 'Klook',
+        deepLink: 'klook://',
+        fallback: 'https://www.klook.com',
+      },
+    ],
+  },
+  {
+    label: '📧 Emails & fichiers',
+    items: [
+      {
+        name: 'Gmail',
+        deepLink: 'googlegmail://',
+        fallback: 'https://mail.google.com',
+      },
+      {
+        name: 'Google Drive',
+        deepLink: 'googledrive://',
+        fallback: 'https://drive.google.com',
+      },
+      {
+        name: 'Dropbox',
+        deepLink: 'dbapi-2://',
+        fallback: 'https://dropbox.com',
+      },
+    ],
+  },
+]
+
+/**
+ * Opens a source: tries the deep link first; if the app is not installed the
+ * browser stays visible and the fallback URL is opened in a new tab after 1.5s.
+ */
+function openSource(deepLink: string, fallback: string) {
+  try {
+    window.location.href = deepLink
+  } catch {
+    // If the deep link assignment fails, open the fallback directly
+    try {
+      window.open(fallback, '_blank', 'noopener,noreferrer')
+    } catch {
+      // Silently ignore popup-blocker or CSP errors
+    }
+    return
+  }
+
+  const handleVisibilityChange = () => {
+    if (document.hidden) {
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }
+
+  const timer = setTimeout(() => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
+    try {
+      window.open(fallback, '_blank', 'noopener,noreferrer')
+    } catch {
+      // Silently ignore popup-blocker or CSP errors
+    }
+  }, 1500)
+
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+}
+
+// ---------------------------------------------------------------------------
+// DocumentSourcesDrawer
+// ---------------------------------------------------------------------------
+
+interface DocumentSourcesDrawerProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+function DocumentSourcesDrawer({
+  open,
+  onOpenChange,
+}: DocumentSourcesDrawerProps) {
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="max-h-[85vh]">
+        <DrawerHeader className="pb-2">
+          <DrawerTitle>Importe depuis tes apps</DrawerTitle>
+          <DrawerDescription>
+            Retrouve tes réservations en 1 clic · Plus besoin de chercher dans
+            tes emails
+          </DrawerDescription>
+        </DrawerHeader>
+
+        <div className="overflow-y-auto px-4 pb-8">
+          {SOURCE_CATEGORIES.map((category) => (
+            <div key={category.label} className="mt-4">
+              <p className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wide">
+                {category.label}
+              </p>
+              <div className="flex flex-col gap-1">
+                {category.items.map((source) => (
+                  <button
+                    key={source.name}
+                    onClick={() => openSource(source.deepLink, source.fallback)}
+                    className="hover:bg-muted flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors"
+                  >
+                    <span className="text-sm font-medium">{source.name}</span>
+                    <ArrowUpRight className="text-muted-foreground h-4 w-4 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <DrawerClose className="sr-only">Fermer</DrawerClose>
+      </DrawerContent>
+    </Drawer>
+  )
+}
 
 type SortField = 'name' | 'size' | 'addedAt'
 type SortOrder = 'asc' | 'desc'
@@ -311,6 +517,7 @@ export function DocumentsView() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [sourcesOpen, setSourcesOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dragCounterRef = useRef(0)
   // Track blob URLs opened for preview so we can revoke on unmount
@@ -416,7 +623,39 @@ export function DocumentsView() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Upload area */}
+      {/* ----------------------------------------------------------------- */}
+      {/* 1. Récupérer mes documents */}
+      {/* ----------------------------------------------------------------- */}
+      <div className="from-primary/5 to-primary/10 rounded-2xl border bg-gradient-to-br p-4">
+        <div className="flex items-start gap-3">
+          <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+            <Inbox className="text-primary h-5 w-5" />
+          </div>
+          <div className="flex-1 space-y-1">
+            <p className="text-sm font-semibold">Récupérer mes documents</p>
+            <p className="text-muted-foreground text-xs">
+              Importe tes réservations depuis tes apps ou emails en quelques
+              secondes
+            </p>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          className="mt-3 w-full"
+          onClick={() => setSourcesOpen(true)}
+        >
+          Voir les sources
+        </Button>
+      </div>
+
+      <DocumentSourcesDrawer
+        open={sourcesOpen}
+        onOpenChange={setSourcesOpen}
+      />
+
+      {/* ----------------------------------------------------------------- */}
+      {/* 2. Ajouter des documents (upload) */}
+      {/* ----------------------------------------------------------------- */}
       <div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
@@ -442,9 +681,7 @@ export function DocumentsView() {
         </div>
         <div className="text-center">
           <p className="text-foreground text-sm font-medium">
-            {isDragging
-              ? 'Déposez vos fichiers ici'
-              : 'Glissez-déposez des fichiers'}
+            {isDragging ? 'Déposez vos fichiers ici' : 'Ajoute tes documents'}
           </p>
           <p className="text-muted-foreground mt-0.5 text-xs">
             ou cliquez pour parcourir · tous types de fichiers acceptés
@@ -606,9 +843,12 @@ export function DocumentsView() {
           <div className="text-center">
             <p className="text-foreground font-semibold">Aucun document</p>
             <p className="text-muted-foreground mt-1 text-sm">
-              Déposez vos billets, réservations, cartes et photos ici
+              Tu as sûrement déjà tes réservations sur Booking, Airbnb ou Gmail
             </p>
           </div>
+          <Button onClick={() => setSourcesOpen(true)}>
+            Importer mes documents
+          </Button>
         </div>
       ) : filteredAndSorted.length === 0 ? (
         /* No results */
