@@ -12,7 +12,6 @@ import {
   FileImage,
   FileVideo,
   FileAudio,
-  FolderOpen,
   SortAsc,
   SortDesc,
   LayoutGrid,
@@ -21,9 +20,10 @@ import {
   FileArchive,
   FileSpreadsheet,
   Eye,
-  Inbox,
   ArrowUpRight,
   PlusCircle,
+  AlertCircle,
+  HelpCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -147,8 +147,10 @@ function DocumentSourcesDrawer({
                       className="hover:border-primary/40 hover:bg-primary/5 group flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition-all"
                     >
                       <div className="flex w-full items-start justify-between gap-1">
-                        <span className="text-xl leading-none">
-                          {source.icon}
+                        <span
+                          className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-white ${source.bgColor}`}
+                        >
+                          {source.letter}
                         </span>
                         <ArrowUpRight className="text-muted-foreground group-hover:text-primary h-3.5 w-3.5 shrink-0 transition-colors" />
                       </div>
@@ -178,7 +180,6 @@ type ViewMode = 'grid' | 'list'
 // ---------------------------------------------------------------------------
 
 interface DocumentsEmptyStateProps {
-  onOpenSources: () => void
   onAddFiles: () => void
   isDragging: boolean
   onDrop: (e: React.DragEvent) => void
@@ -188,7 +189,6 @@ interface DocumentsEmptyStateProps {
 }
 
 function DocumentsEmptyState({
-  onOpenSources,
   onAddFiles,
   isDragging,
   onDrop,
@@ -196,58 +196,97 @@ function DocumentsEmptyState({
   onDragEnter,
   onDragLeave,
 }: DocumentsEmptyStateProps) {
+  // Flatten all sources for the inline list
+  const allSources = SOURCE_CATEGORIES.flatMap((c) => c.items)
+
   return (
-    <div
-      onDrop={onDrop}
-      onDragOver={onDragOver}
-      onDragEnter={onDragEnter}
-      onDragLeave={onDragLeave}
-      className={`flex flex-col items-center gap-6 rounded-3xl border-2 border-dashed px-6 py-16 text-center transition-all ${
-        isDragging
-          ? 'border-primary bg-primary/5'
-          : 'border-border/50 hover:border-border/80'
-      }`}
-    >
-      {/* Icon */}
+    <div className="flex flex-col gap-4">
+      {/* Info banner */}
+      <div className="bg-primary/10 text-primary flex items-start gap-3 rounded-2xl px-4 py-3">
+        <HelpCircle className="mt-0.5 h-4 w-4 shrink-0" />
+        <p className="text-sm font-medium">
+          Pas encore de document&nbsp;? Voici comment en ajouter un.
+        </p>
+      </div>
+
+      {/* Primary action — upload zone */}
       <div
-        className={`flex h-20 w-20 items-center justify-center rounded-3xl transition-colors ${
-          isDragging ? 'bg-primary/10' : 'bg-muted'
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        onDragEnter={onDragEnter}
+        onDragLeave={onDragLeave}
+        onClick={onAddFiles}
+        className={`flex cursor-pointer flex-col items-center gap-4 rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-all ${
+          isDragging
+            ? 'border-primary bg-primary/5'
+            : 'border-border/50 hover:border-primary/40 hover:bg-muted/30'
         }`}
       >
-        {isDragging ? (
-          <Upload className="text-primary h-10 w-10" strokeWidth={1.5} />
-        ) : (
-          <FolderOpen
-            className="text-muted-foreground h-10 w-10"
-            strokeWidth={1}
+        <div
+          className={`flex h-14 w-14 items-center justify-center rounded-2xl transition-colors ${
+            isDragging ? 'bg-primary/15' : 'bg-muted'
+          }`}
+        >
+          <Upload
+            className={`h-6 w-6 transition-colors ${
+              isDragging ? 'text-primary' : 'text-muted-foreground'
+            }`}
           />
-        )}
-      </div>
-
-      {/* Copy */}
-      <div className="max-w-sm space-y-2">
-        <p className="text-foreground font-semibold">
-          {isDragging ? 'Déposez vos fichiers ici' : 'Aucun document'}
-        </p>
-        <p className="text-muted-foreground text-sm">
-          {isDragging
-            ? 'Déposez vos fichiers pour les ajouter.'
-            : 'On ne voit encore aucun document… Commence par importer tes réservations depuis Booking, Airbnb ou Gmail, ou ajoute tes fichiers ici.'}
-        </p>
-      </div>
-
-      {/* Actions */}
-      {!isDragging && (
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-          <Button onClick={onOpenSources} className="gap-2">
-            <Inbox className="h-4 w-4" />
-            Importer depuis mes apps
-          </Button>
-          <Button variant="outline" onClick={onAddFiles} className="gap-2">
-            <Upload className="h-4 w-4" />
-            Ajouter un fichier
-          </Button>
         </div>
+        <div>
+          <p className="text-foreground font-medium">
+            {isDragging ? 'Déposez vos fichiers ici' : 'Dépose ton document ici'}
+          </p>
+          <p className="text-muted-foreground mt-1 text-xs">
+            ou clique pour parcourir · PDF, JPG, PNG — tous formats acceptés
+          </p>
+        </div>
+      </div>
+
+      {/* Secondary — app sources */}
+      {!isDragging && (
+        <>
+          <p className="text-muted-foreground text-center text-sm">
+            tu ne l&apos;as pas sous la main&nbsp;?
+          </p>
+
+          <div className="space-y-1">
+            <p className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wider">
+              Retrouve-le depuis une app
+            </p>
+            {allSources.map((source) => (
+              <button
+                key={source.name}
+                onClick={() => openSource(source.deepLink, source.fallback)}
+                className="hover:bg-muted/60 group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors"
+              >
+                <span
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white ${source.bgColor}`}
+                >
+                  {source.letter}
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="text-foreground block text-sm font-medium">
+                    {source.name}
+                  </span>
+                  <span className="text-muted-foreground block text-xs">
+                    {source.description}
+                  </span>
+                </span>
+                <ArrowUpRight className="text-muted-foreground group-hover:text-primary h-4 w-4 shrink-0 transition-colors" />
+              </button>
+            ))}
+          </div>
+
+          {/* Redirection warning */}
+          <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Ces liens t&apos;ouvrent l&apos;app — télécharge ton document
+              là-bas, puis reviens le déposer ici.
+            </p>
+          </div>
+        </>
       )}
     </div>
   )
@@ -650,7 +689,6 @@ export function DocumentsView() {
         /* Unified empty state                                               */
         /* ---------------------------------------------------------------- */
         <DocumentsEmptyState
-          onOpenSources={() => setSourcesOpen(true)}
           onAddFiles={() => fileInputRef.current?.click()}
           isDragging={isDragging}
           onDrop={handleDrop}
@@ -668,8 +706,7 @@ export function DocumentsView() {
             onClick={() => setSourcesOpen(true)}
             className="text-primary hover:text-primary/80 flex items-center gap-1.5 self-start text-sm font-medium transition-colors"
           >
-            <Inbox className="h-4 w-4" />
-            Importer depuis mes apps
+            Aller chercher sur mes apps
             <ArrowUpRight className="h-3.5 w-3.5" />
           </button>
 
