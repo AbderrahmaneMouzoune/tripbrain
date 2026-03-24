@@ -1,16 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { HelpCircle, Download, ChevronDown, ChevronRight, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { Download, ChevronDown, ChevronRight, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { generateExampleCsv } from '@/lib/csv-parser'
@@ -85,26 +86,31 @@ function FieldRow({
   )
 }
 
-export function ImportFormatGuide() {
+export function ImportFormatGuide({ trigger }: { trigger?: React.ReactNode }) {
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm" className="gap-1.5 text-xs">
-          <HelpCircle className="h-3.5 w-3.5" />
-          Guide du format
-        </Button>
-      </DialogTrigger>
+    <Sheet>
+      <SheetTrigger asChild>
+        {trigger ?? (
+          <Button variant="ghost" size="sm" className="gap-1.5 text-xs">
+            Guide du format
+          </Button>
+        )}
+      </SheetTrigger>
 
-      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-2xl">
-        <DialogHeader className="shrink-0">
-          <DialogTitle>Guide d&apos;import des données</DialogTitle>
-          <DialogDescription>
+      <SheetContent
+        side="right"
+        className="flex w-[80%] flex-col gap-0 p-0 sm:max-w-md"
+      >
+        {/* pr-10 reserves space for the absolute close button (top-4 right-4) */}
+        <SheetHeader className="shrink-0 border-b px-4 pb-3 pt-5 pr-10">
+          <SheetTitle>Guide d&apos;import des données</SheetTitle>
+          <SheetDescription>
             Comment préparer votre fichier pour l&apos;importer dans TripBrain.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         <Tabs defaultValue="csv" className="flex min-h-0 flex-1 flex-col">
-          <TabsList className="mx-0 shrink-0">
+          <TabsList className="mx-4 mt-3 shrink-0">
             <TabsTrigger value="csv">Format CSV</TabsTrigger>
             <TabsTrigger value="json">Format JSON</TabsTrigger>
             <TabsTrigger value="errors">Erreurs fréquentes</TabsTrigger>
@@ -112,25 +118,13 @@ export function ImportFormatGuide() {
 
           {/* ── CSV Tab ── */}
           <TabsContent value="csv" className="min-h-0 flex-1 overflow-hidden">
-            <ScrollArea className="h-full pr-3">
-              <div className="space-y-4 pb-4">
+            <ScrollArea className="h-full">
+              <div className="space-y-4 px-4 pb-4 pt-3">
                 <p className="text-muted-foreground text-sm">
                   Le format CSV est recommandé pour les utilisateurs souhaitant
                   remplir leur itinéraire dans un tableur (Excel, Google Sheets,
                   LibreOffice Calc, etc.).
                 </p>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-2"
-                    onClick={downloadCsvExample}
-                  >
-                    <Download className="h-4 w-4" />
-                    Télécharger l&apos;exemple CSV
-                  </Button>
-                </div>
 
                 <CollapsibleSection title="Structure générale" defaultOpen>
                   <ul className="text-muted-foreground list-disc space-y-1.5 pl-4 text-xs">
@@ -305,8 +299,8 @@ export function ImportFormatGuide() {
 
           {/* ── JSON Tab ── */}
           <TabsContent value="json" className="min-h-0 flex-1 overflow-hidden">
-            <ScrollArea className="h-full pr-3">
-              <div className="space-y-4 pb-4">
+            <ScrollArea className="h-full">
+              <div className="space-y-4 px-4 pb-4 pt-3">
                 <p className="text-muted-foreground text-sm">
                   Le format JSON est le format natif de TripBrain. Il permet de
                   conserver toutes les données, y compris les photos.
@@ -347,7 +341,7 @@ export function ImportFormatGuide() {
                   <FieldRow name="walkingDistance" type="Texte" required={false} description="Distance à pied" />
                   <FieldRow name="accommodation" type="Objet" required={false} description="Informations hébergement" />
                   <FieldRow name="transport" type="Objet" required={false} description="Transport du jour" />
-                  <FieldRow name="images" type="Tableau d'objets" required={false} description="Photos { url, caption }" />
+                  <FieldRow name="images" type="Tableau d'objets" required={false} description="Photos \{ url, caption \}" />
                 </CollapsibleSection>
 
                 <CollapsibleSection title="Exemple minimal">
@@ -380,8 +374,8 @@ export function ImportFormatGuide() {
 
           {/* ── Errors Tab ── */}
           <TabsContent value="errors" className="min-h-0 flex-1 overflow-hidden">
-            <ScrollArea className="h-full pr-3">
-              <div className="space-y-3 pb-4">
+            <ScrollArea className="h-full">
+              <div className="space-y-3 px-4 pb-4 pt-3">
                 <p className="text-muted-foreground text-sm">
                   Voici les erreurs les plus courantes et comment les corriger.
                 </p>
@@ -440,7 +434,14 @@ export function ImportFormatGuide() {
             </ScrollArea>
           </TabsContent>
         </Tabs>
-      </DialogContent>
-    </Dialog>
+
+        <SheetFooter className="shrink-0 border-t px-4 py-3">
+          <Button className="w-full gap-2" onClick={downloadCsvExample}>
+            <Download className="h-4 w-4" />
+            Télécharger l&apos;exemple CSV
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }

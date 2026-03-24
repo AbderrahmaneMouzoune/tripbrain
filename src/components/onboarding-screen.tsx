@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { Compass, Upload, PlayCircle, AlertCircle } from 'lucide-react'
+import { Compass, Upload, PlayCircle, AlertCircle, ExternalLink } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { ImportFormatGuide } from '@/components/import-format-guide'
 
@@ -82,9 +82,8 @@ export function OnboardingScreen({
       </div>
 
       <div className="relative z-10 w-full max-w-sm">
-        {/* Unified card */}
         <Card className="shadow-md">
-          <CardContent className="space-y-5 p-6">
+          <CardContent className="space-y-4 p-6">
             {/* Header */}
             <div className="flex items-center gap-3">
               <div className="relative h-10 w-10 shrink-0">
@@ -98,7 +97,7 @@ export function OnboardingScreen({
                   TripBrain
                 </h1>
                 <p className="text-muted-foreground text-xs">
-                  Importez vos données ou explorez la démo
+                  Votre roadbook de voyage intelligent
                 </p>
               </div>
             </div>
@@ -111,30 +110,79 @@ export function OnboardingScreen({
               </div>
             )}
 
-            {/* Import row */}
+            {/* Demo block — primary CTA */}
             <button
               type="button"
-              className={`border-border hover:border-primary/50 focus-visible:ring-ring flex w-full items-center gap-3 rounded-xl border p-3.5 text-left transition-all focus-visible:ring-2 focus-visible:outline-none ${
-                isDragging ? 'border-primary ring-primary/30 ring-2' : ''
-              }`}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={loadingImport}
+              className="bg-primary hover:bg-primary/90 focus-visible:ring-ring flex w-full items-center gap-3 rounded-xl p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60"
+              onClick={handleMockData}
+              disabled={loadingMock}
             >
-              <div className="bg-primary/10 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
-                <Upload className="text-primary h-4 w-4" />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/20">
+                <PlayCircle className="text-primary-foreground h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-foreground text-sm font-semibold">
-                  {loadingImport ? 'Chargement…' : 'Importer mes données'}
+                <p className="text-primary-foreground text-sm font-semibold">
+                  {loadingMock ? 'Chargement…' : 'Utiliser les données de démo'}
                 </p>
-                <p className="text-muted-foreground truncate text-xs">
-                  Glissez-déposez ou cliquez · JSON ou CSV
+                <p className="text-primary-foreground/70 truncate text-xs">
+                  Commencez en 1 clic — aucun fichier requis
                 </p>
               </div>
             </button>
+
+            {/* Contextual separator */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="border-border w-full border-t" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-card text-muted-foreground px-3 text-xs">
+                  Vous avez déjà vos propres données ?
+                </span>
+              </div>
+            </div>
+
+            {/* Import block — secondary */}
+            <div>
+              <button
+                type="button"
+                className={`border-border hover:border-primary/50 focus-visible:ring-ring flex w-full items-center gap-3 rounded-xl border p-3.5 text-left transition-all focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60 ${
+                  isDragging ? 'border-primary ring-primary/30 ring-2' : ''
+                }`}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loadingImport}
+              >
+                <div className="bg-primary/10 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+                  <Upload className="text-primary h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-foreground text-sm font-semibold">
+                    {loadingImport ? 'Chargement…' : 'Importer mes données'}
+                  </p>
+                  <p className="text-muted-foreground truncate text-xs">
+                    Glissez-déposez ou cliquez · JSON ou CSV
+                  </p>
+                </div>
+              </button>
+
+              {/* Format guide link anchored under import */}
+              <div className="mt-2 flex justify-end">
+                <ImportFormatGuide
+                  trigger={
+                    <button
+                      type="button"
+                      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs transition-colors"
+                    >
+                      Voir le format attendu (CSV / JSON)
+                      <ExternalLink className="h-3 w-3" />
+                    </button>
+                  }
+                />
+              </div>
+            </div>
 
             <input
               ref={fileInputRef}
@@ -143,43 +191,6 @@ export function OnboardingScreen({
               className="sr-only"
               onChange={handleFileChange}
             />
-
-            {/* Divider */}
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="border-border w-full border-t" />
-              </div>
-              <div className="relative flex justify-center">
-                <span className="bg-card text-muted-foreground px-3 text-xs uppercase tracking-wider">
-                  ou
-                </span>
-              </div>
-            </div>
-
-            {/* Demo row */}
-            <button
-              type="button"
-              className="border-border hover:border-primary/50 focus-visible:ring-ring flex w-full items-center gap-3 rounded-xl border p-3.5 text-left transition-all focus-visible:ring-2 focus-visible:outline-none"
-              onClick={handleMockData}
-              disabled={loadingMock}
-            >
-              <div className="bg-secondary/20 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
-                <PlayCircle className="text-secondary-foreground h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-foreground text-sm font-semibold">
-                  {loadingMock ? 'Chargement…' : 'Utiliser les données de démo'}
-                </p>
-                <p className="text-muted-foreground truncate text-xs">
-                  Exemple de voyage prêt à explorer
-                </p>
-              </div>
-            </button>
-
-            {/* Format guide */}
-            <div className="flex justify-center pt-1">
-              <ImportFormatGuide />
-            </div>
           </CardContent>
         </Card>
       </div>
