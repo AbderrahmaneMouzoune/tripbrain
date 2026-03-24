@@ -2,7 +2,6 @@
 
 import { useRef, useState } from 'react'
 import { Compass, Upload, PlayCircle, AlertCircle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { ImportFormatGuide } from '@/components/import-format-guide'
 
@@ -74,7 +73,7 @@ export function OnboardingScreen({
   }
 
   return (
-    <div className="bg-background flex min-h-screen flex-col items-center justify-center px-4 py-12">
+    <div className="bg-background flex min-h-screen items-center justify-center px-4 py-8">
       {/* Background decoration */}
       <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="animate-sticker-float bg-primary/12 border-primary/30 absolute top-8 -left-8 h-24 w-24 rotate-12 rounded-2xl border-2" />
@@ -82,126 +81,107 @@ export function OnboardingScreen({
         <div className="animate-sticker-float [animation-delay:180ms] bg-accent/14 border-accent/35 absolute top-72 right-10 h-16 w-16 rotate-6 rounded-xl border-2" />
       </div>
 
-      <div className="relative z-10 w-full max-w-md space-y-8">
-        {/* Logo / brand */}
-        <div className="flex flex-col items-center gap-3">
-          <div className="relative h-16 w-16 shrink-0">
-            <div className="bg-primary absolute inset-0 rotate-6 rounded-2xl opacity-20" />
-            <div className="bg-primary relative flex h-16 w-16 items-center justify-center rounded-2xl shadow-sm">
-              <Compass className="text-primary-foreground h-8 w-8" strokeWidth={1.5} />
+      <div className="relative z-10 w-full max-w-sm">
+        {/* Unified card */}
+        <Card className="shadow-md">
+          <CardContent className="space-y-5 p-6">
+            {/* Header */}
+            <div className="flex items-center gap-3">
+              <div className="relative h-10 w-10 shrink-0">
+                <div className="bg-primary absolute inset-0 rotate-6 rounded-xl opacity-20" />
+                <div className="bg-primary relative flex h-10 w-10 items-center justify-center rounded-xl shadow-sm">
+                  <Compass className="text-primary-foreground h-5 w-5" strokeWidth={1.5} />
+                </div>
+              </div>
+              <div>
+                <h1 className="text-foreground font-display text-base font-bold tracking-[0.08em] uppercase leading-tight">
+                  TripBrain
+                </h1>
+                <p className="text-muted-foreground text-xs">
+                  Importez vos données ou explorez la démo
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="text-center">
-            <h1 className="text-foreground font-display text-2xl font-bold tracking-[0.08em] uppercase">
-              TripBrain
-            </h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Votre roadbook de voyage intelligent
-            </p>
-          </div>
-        </div>
 
-        {/* Intro text */}
-        <p className="text-muted-foreground text-center text-sm leading-relaxed">
-          Bienvenue ! Pour commencer, importez votre fichier de données de
-          voyage (JSON ou CSV) ou utilisez les données de démonstration pour
-          explorer l&apos;application.
-        </p>
-
-        {/* Format guide link */}
-        <div className="flex justify-center">
-          <ImportFormatGuide />
-        </div>
-
-        {/* Error */}
-        {error && (
-          <div className="bg-destructive/10 text-destructive flex items-start gap-2 rounded-lg px-4 py-3 text-sm">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {/* Options */}
-        <div className="space-y-4">
-          {/* Import file */}
-          <Card
-            className={`cursor-pointer transition-all ${isDragging ? 'border-primary ring-primary/30 ring-2' : 'hover:border-primary/50'}`}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <CardContent className="flex flex-col items-center gap-4 py-8">
-              <div className="bg-primary/10 flex h-12 w-12 items-center justify-center rounded-xl">
-                <Upload className="text-primary h-6 w-6" />
+            {/* Error */}
+            {error && (
+              <div className="bg-destructive/10 text-destructive flex items-start gap-2 rounded-lg px-3 py-2.5 text-xs">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{error}</span>
               </div>
-              <div className="text-center">
-                <p className="text-foreground font-semibold">
-                  Importer mes données
+            )}
+
+            {/* Import row */}
+            <button
+              type="button"
+              className={`border-border hover:border-primary/50 focus-visible:ring-ring flex w-full items-center gap-3 rounded-xl border p-3.5 text-left transition-all focus-visible:ring-2 focus-visible:outline-none ${
+                isDragging ? 'border-primary ring-primary/30 ring-2' : ''
+              }`}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={loadingImport}
+            >
+              <div className="bg-primary/10 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+                <Upload className="text-primary h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-foreground text-sm font-semibold">
+                  {loadingImport ? 'Chargement…' : 'Importer mes données'}
                 </p>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  Glissez-déposez ou cliquez pour sélectionner un fichier
-                  JSON ou CSV
+                <p className="text-muted-foreground truncate text-xs">
+                  Glissez-déposez ou cliquez · JSON ou CSV
                 </p>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="pointer-events-none"
-                disabled={loadingImport}
-              >
-                {loadingImport ? 'Chargement…' : 'Choisir un fichier .json / .csv'}
-              </Button>
-            </CardContent>
-          </Card>
+            </button>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,application/json,.csv,text/csv"
-            className="sr-only"
-            onChange={handleFileChange}
-          />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json,.csv,text/csv"
+              className="sr-only"
+              onChange={handleFileChange}
+            />
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="border-border w-full border-t" />
+            {/* Divider */}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="border-border w-full border-t" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-card text-muted-foreground px-3 text-xs uppercase tracking-wider">
+                  ou
+                </span>
+              </div>
             </div>
-            <div className="relative flex justify-center">
-              <span className="bg-background text-muted-foreground px-3 text-xs uppercase tracking-wider">
-                ou
-              </span>
-            </div>
-          </div>
 
-          {/* Mock data */}
-          <Card
-            className="cursor-pointer transition-all hover:border-primary/50"
-            onClick={handleMockData}
-          >
-            <CardContent className="flex flex-col items-center gap-4 py-8">
-              <div className="bg-secondary/20 flex h-12 w-12 items-center justify-center rounded-xl">
-                <PlayCircle className="text-secondary-foreground h-6 w-6" />
+            {/* Demo row */}
+            <button
+              type="button"
+              className="border-border hover:border-primary/50 focus-visible:ring-ring flex w-full items-center gap-3 rounded-xl border p-3.5 text-left transition-all focus-visible:ring-2 focus-visible:outline-none"
+              onClick={handleMockData}
+              disabled={loadingMock}
+            >
+              <div className="bg-secondary/20 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+                <PlayCircle className="text-secondary-foreground h-4 w-4" />
               </div>
-              <div className="text-center">
-                <p className="text-foreground font-semibold">
-                  Utiliser les données de démo
+              <div className="min-w-0 flex-1">
+                <p className="text-foreground text-sm font-semibold">
+                  {loadingMock ? 'Chargement…' : 'Utiliser les données de démo'}
                 </p>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  Explorez l&apos;application avec un exemple de voyage
+                <p className="text-muted-foreground truncate text-xs">
+                  Exemple de voyage prêt à explorer
                 </p>
               </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="pointer-events-none"
-                disabled={loadingMock}
-              >
-                {loadingMock ? 'Chargement…' : 'Démarrer la démo'}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+            </button>
+
+            {/* Format guide */}
+            <div className="flex justify-center pt-1">
+              <ImportFormatGuide />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
