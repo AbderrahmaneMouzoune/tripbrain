@@ -1,22 +1,22 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import {
-  itinerary,
-  getCurrentDayIndex,
-  tripStartDate,
-  tripEndDate,
-} from '@/lib/itinerary-data'
+import { useTripData } from '@/hooks/use-trip-data'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
 import { TripMap } from '@/components/trip-map'
 import { ShareDialog } from '@/components/share-dialog'
+import { DataManager } from '@/components/data-manager'
+import { OnboardingScreen } from '@/components/onboarding-screen'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronLeft, ChevronRight, Map, List, Compass, FolderOpen } from 'lucide-react'
 import { DocumentsView } from '@/components/documents-view'
 
-function getTripCountdown(): {
+function getTripCountdown(
+  tripStartDate: Date,
+  tripEndDate: Date,
+): {
   type: 'before' | 'during' | 'after'
   days: number
 } {
@@ -49,14 +49,53 @@ function getTripCountdown(): {
 }
 
 export default function HomePage() {
+  const {
+    isLoading,
+    hasData,
+    itinerary,
+    tripStartDate,
+    tripEndDate,
+    loadMockData,
+    importData,
+    exportData,
+    clearData,
+    getCurrentDayIndex,
+  } = useTripData()
+
   const [selectedDay, setSelectedDay] = useState(0)
   const [activeTab, setActiveTab] = useState<'roadbook' | 'map' | 'documents'>('roadbook')
-  const countdown = getTripCountdown()
 
   useEffect(() => {
-    const currentIndex = getCurrentDayIndex()
-    setSelectedDay(currentIndex)
-  }, [])
+    if (hasData) {
+      setSelectedDay(getCurrentDayIndex())
+    }
+  }, [hasData, getCurrentDayIndex])
+
+  if (isLoading) {
+    return (
+      <div className="bg-background flex min-h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="bg-primary flex h-14 w-14 items-center justify-center rounded-2xl">
+            <Compass className="text-primary-foreground h-7 w-7 animate-pulse" strokeWidth={1.5} />
+          </div>
+          <p className="text-muted-foreground text-sm">Chargement…</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!hasData) {
+    return (
+      <OnboardingScreen
+        onImportFile={importData}
+        onUseMockData={loadMockData}
+      />
+    )
+  }
+
+  const countdown = getTripCountdown(tripStartDate, tripEndDate)
+  const safeDay = Math.min(selectedDay, itinerary.length - 1)
+  const currentDay = itinerary[safeDay]
 
   const handlePrevDay = () => {
     setSelectedDay((prev) => Math.max(0, prev - 1))
@@ -65,8 +104,6 @@ export default function HomePage() {
   const handleNextDay = () => {
     setSelectedDay((prev) => Math.min(itinerary.length - 1, prev + 1))
   }
-
-  const currentDay = itinerary[selectedDay]
 
   return (
     <main className="bg-background relative min-h-screen overflow-x-clip">
@@ -99,7 +136,7 @@ export default function HomePage() {
                 <h1
                   className="text-foreground font-display text-base leading-tight font-bold tracking-[0.08em] uppercase"
                 >
-                  Ouzbekistan 2026
+                  TripBrain
                 </h1>
                 <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
                   {countdown.type === 'before' &&
@@ -111,7 +148,14 @@ export default function HomePage() {
                 </p>
               </div>
             </div>
-            <ShareDialog selectedDay={selectedDay} />
+            <div className="flex items-center gap-1">
+              <DataManager
+                onExport={exportData}
+                onImport={importData}
+                onClear={clearData}
+              />
+              <ShareDialog itinerary={itinerary} selectedDay={selectedDay} />
+            </div>
           </div>
         </div>
       </header>
@@ -119,7 +163,7 @@ export default function HomePage() {
       {/* Timeline */}
       <section className="border-border/60 bg-card/55 border-b backdrop-blur-md">
         <div className="mx-auto max-w-4xl">
-          <Timeline selectedDay={selectedDay} onSelectDay={setSelectedDay} />
+          <Timeline itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
         </div>
       </section>
 
@@ -193,7 +237,7 @@ export default function HomePage() {
           <DayDetail day={currentDay} />
         ) : activeTab === 'map' ? (
           <div className="flex flex-col gap-4">
-            <TripMap selectedDay={selectedDay} onSelectDay={setSelectedDay} />
+            <TripMap itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
             <DayDetail day={currentDay} />
           </div>
         ) : (

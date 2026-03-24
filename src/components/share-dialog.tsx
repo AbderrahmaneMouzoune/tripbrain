@@ -23,15 +23,16 @@ import {
   CalendarDays,
   CalendarPlus,
 } from 'lucide-react'
-import { itinerary } from '@/lib/itinerary-data'
+import type { DayItinerary } from '@/lib/itinerary-data'
 import { downloadICS, getGoogleCalendarUrl } from '@/lib/calendar-export'
 
 interface ShareDialogProps {
+  itinerary: DayItinerary[]
   selectedDay?: number
   trigger?: React.ReactNode
 }
 
-export function ShareDialog({ selectedDay, trigger }: ShareDialogProps) {
+export function ShareDialog({ itinerary, selectedDay, trigger }: ShareDialogProps) {
   const [copied, setCopied] = useState(false)
   const [open, setOpen] = useState(false)
 
