@@ -53,114 +53,10 @@ import {
   DrawerDescription,
 } from '@/components/ui/drawer'
 import { useDocuments, StoredFile } from '@/hooks/use-documents'
-
-// ---------------------------------------------------------------------------
-// Sources data
-// ---------------------------------------------------------------------------
-
-interface Source {
-  name: string
-  deepLink: string
-  fallback: string
-}
-
-interface SourceCategory {
-  label: string
-  items: Source[]
-}
-
-const SOURCE_CATEGORIES: SourceCategory[] = [
-  {
-    label: '✈️ Transports',
-    items: [
-      {
-        name: 'Air France',
-        deepLink: 'airfrance://',
-        fallback: 'https://www.airfrance.fr',
-      },
-      {
-        name: 'Ryanair',
-        deepLink: 'ryanair://',
-        fallback: 'https://www.ryanair.com',
-      },
-      {
-        name: 'easyJet',
-        deepLink: 'easyjet://',
-        fallback: 'https://www.easyjet.com',
-      },
-      {
-        name: 'Trainline',
-        deepLink: 'trainline://',
-        fallback: 'https://www.thetrainline.com',
-      },
-      {
-        name: 'SNCF Connect',
-        deepLink: 'sncfconnect://',
-        fallback: 'https://www.sncf-connect.com',
-      },
-    ],
-  },
-  {
-    label: '🏨 Hébergements',
-    items: [
-      {
-        name: 'Booking.com',
-        deepLink: 'booking://',
-        fallback: 'https://booking.com',
-      },
-      {
-        name: 'Airbnb',
-        deepLink: 'airbnb://',
-        fallback: 'https://airbnb.com',
-      },
-      {
-        name: 'Hotels.com',
-        deepLink: 'hotelscom://',
-        fallback: 'https://hotels.com',
-      },
-    ],
-  },
-  {
-    label: '🎟️ Activités',
-    items: [
-      {
-        name: 'GetYourGuide',
-        deepLink: 'getyourguide://',
-        fallback: 'https://www.getyourguide.com',
-      },
-      {
-        name: 'Viator',
-        deepLink: 'viator://',
-        fallback: 'https://www.viator.com',
-      },
-      {
-        name: 'Klook',
-        deepLink: 'klook://',
-        fallback: 'https://www.klook.com',
-      },
-    ],
-  },
-  {
-    label: '📧 Emails & fichiers',
-    items: [
-      {
-        name: 'Gmail',
-        deepLink: 'googlegmail://',
-        fallback: 'https://mail.google.com',
-      },
-      {
-        name: 'Google Drive',
-        deepLink: 'googledrive://',
-        fallback: 'https://drive.google.com',
-      },
-      {
-        name: 'Dropbox',
-        deepLink: 'dbapi-2://',
-        fallback: 'https://dropbox.com',
-      },
-    ],
-  },
-]
+import {
+  SOURCE_CATEGORIES,
+  CATEGORY_COLOR_CLASSES,
+} from '@/lib/document-sources'
 
 /**
  * Opens a source: tries the deep link first; if the app is not installed the
@@ -223,25 +119,47 @@ function DocumentSourcesDrawer({
         </DrawerHeader>
 
         <div className="overflow-y-auto px-4 pb-8">
-          {SOURCE_CATEGORIES.map((category) => (
-            <div key={category.label} className="mt-4">
-              <p className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wide">
-                {category.label}
-              </p>
-              <div className="flex flex-col gap-1">
-                {category.items.map((source) => (
-                  <button
-                    key={source.name}
-                    onClick={() => openSource(source.deepLink, source.fallback)}
-                    className="hover:bg-muted flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors"
-                  >
-                    <span className="text-sm font-medium">{source.name}</span>
-                    <ArrowUpRight className="text-muted-foreground h-4 w-4 shrink-0" />
-                  </button>
-                ))}
+          {SOURCE_CATEGORIES.map((category) => {
+            const colors =
+              CATEGORY_COLOR_CLASSES[category.color] ??
+              CATEGORY_COLOR_CLASSES['blue']
+            return (
+              <div key={category.label} className="mt-5">
+                {/* Category header */}
+                <div className="mb-3 flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 rounded-full ${colors.dot}`}
+                    aria-hidden
+                  />
+                  <p className="text-foreground text-xs font-semibold uppercase tracking-wider">
+                    {category.label}
+                  </p>
+                </div>
+                {/* Source cards grid */}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {category.items.map((source) => (
+                    <button
+                      key={source.name}
+                      onClick={() =>
+                        openSource(source.deepLink, source.fallback)
+                      }
+                      className="hover:border-primary/40 hover:bg-primary/5 group flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition-all"
+                    >
+                      <div className="flex w-full items-start justify-between gap-1">
+                        <span className="text-xl leading-none">
+                          {source.icon}
+                        </span>
+                        <ArrowUpRight className="text-muted-foreground group-hover:text-primary h-3.5 w-3.5 shrink-0 transition-colors" />
+                      </div>
+                      <span className="text-foreground text-sm font-medium leading-tight">
+                        {source.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
 
         <DrawerClose className="sr-only">Fermer</DrawerClose>
@@ -624,29 +542,40 @@ export function DocumentsView() {
   return (
     <div className="flex flex-col gap-6">
       {/* ----------------------------------------------------------------- */}
-      {/* 1. Récupérer mes documents */}
+      {/* 1. Récupérer mes documents — full card (no docs) / compact link (has docs) */}
       {/* ----------------------------------------------------------------- */}
-      <div className="from-primary/5 to-primary/10 rounded-2xl border bg-gradient-to-br p-4">
-        <div className="flex items-start gap-3">
-          <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
-            <Inbox className="text-primary h-5 w-5" />
+      {files.length === 0 ? (
+        <div className="from-primary/5 to-primary/10 rounded-2xl border bg-gradient-to-br p-4">
+          <div className="flex items-start gap-3">
+            <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+              <Inbox className="text-primary h-5 w-5" />
+            </div>
+            <div className="flex-1 space-y-1">
+              <p className="text-sm font-semibold">Récupérer mes documents</p>
+              <p className="text-muted-foreground text-xs">
+                Importe tes réservations depuis tes apps ou emails en quelques
+                secondes
+              </p>
+            </div>
           </div>
-          <div className="flex-1 space-y-1">
-            <p className="text-sm font-semibold">Récupérer mes documents</p>
-            <p className="text-muted-foreground text-xs">
-              Importe tes réservations depuis tes apps ou emails en quelques
-              secondes
-            </p>
-          </div>
+          <Button
+            size="sm"
+            className="mt-3 w-full"
+            onClick={() => setSourcesOpen(true)}
+          >
+            Voir les sources
+          </Button>
         </div>
-        <Button
-          size="sm"
-          className="mt-3 w-full"
+      ) : (
+        <button
           onClick={() => setSourcesOpen(true)}
+          className="text-primary hover:text-primary/80 flex items-center gap-1.5 self-start text-sm font-medium transition-colors"
         >
-          Voir les sources
-        </Button>
-      </div>
+          <Inbox className="h-4 w-4" />
+          Importer depuis mes apps
+          <ArrowUpRight className="h-3.5 w-3.5" />
+        </button>
+      )}
 
       <DocumentSourcesDrawer
         open={sourcesOpen}
