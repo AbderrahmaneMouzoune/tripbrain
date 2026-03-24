@@ -110,10 +110,10 @@ export function ImportFormatGuide({ trigger }: { trigger?: React.ReactNode }) {
         </SheetHeader>
 
         <Tabs defaultValue="csv" className="flex min-h-0 flex-1 flex-col">
-          <TabsList className="mx-4 mt-3 shrink-0">
-            <TabsTrigger value="csv">Format CSV</TabsTrigger>
-            <TabsTrigger value="json">Format JSON</TabsTrigger>
-            <TabsTrigger value="errors">Erreurs fréquentes</TabsTrigger>
+          <TabsList className="mx-4 mt-3 w-[calc(100%-2rem)] shrink-0">
+            <TabsTrigger value="csv">CSV</TabsTrigger>
+            <TabsTrigger value="json">JSON</TabsTrigger>
+            <TabsTrigger value="errors">Erreurs</TabsTrigger>
           </TabsList>
 
           {/* ── CSV Tab ── */}
