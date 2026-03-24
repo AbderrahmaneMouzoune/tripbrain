@@ -38,8 +38,8 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.name.endsWith('.json')) {
-      setError('Veuillez sélectionner un fichier JSON.')
+    if (!file.name.endsWith('.json') && !file.name.endsWith('.csv')) {
+      setError('Veuillez sélectionner un fichier JSON ou CSV.')
       return
     }
     setError(null)
@@ -122,7 +122,7 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
                 {loadingImport ? 'Chargement…' : 'Importer des données'}
               </p>
               <p className="text-muted-foreground text-xs">
-                Remplacer avec un fichier JSON TripBrain
+                Remplacer avec un fichier JSON ou CSV TripBrain
               </p>
             </div>
           </Button>
@@ -130,7 +130,7 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".json,application/json"
+            accept=".json,application/json,.csv,text/csv"
             className="sr-only"
             onChange={handleFileChange}
           />

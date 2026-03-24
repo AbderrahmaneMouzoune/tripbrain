@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { Compass, Upload, PlayCircle, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { ImportFormatGuide } from '@/components/import-format-guide'
 
 interface OnboardingScreenProps {
   onImportFile: (file: File) => Promise<void>
@@ -21,17 +22,20 @@ export function OnboardingScreen({
   const [loadingImport, setLoadingImport] = useState(false)
 
   const handleFile = async (file: File) => {
-    if (!file.name.endsWith('.json')) {
-      setError('Veuillez sélectionner un fichier JSON.')
+    if (!file.name.endsWith('.json') && !file.name.endsWith('.csv')) {
+      setError('Veuillez sélectionner un fichier JSON ou CSV.')
       return
     }
     setError(null)
     setLoadingImport(true)
     try {
       await onImportFile(file)
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : null
       setError(
-        "Impossible de lire le fichier. Vérifiez qu'il s'agit d'un export TripBrain valide.",
+        message
+          ? `Erreur : ${message}`
+          : "Impossible de lire le fichier. Vérifiez qu'il respecte le format TripBrain.",
       )
     } finally {
       setLoadingImport(false)
@@ -99,9 +103,15 @@ export function OnboardingScreen({
 
         {/* Intro text */}
         <p className="text-muted-foreground text-center text-sm leading-relaxed">
-          Bienvenue ! Pour commencer, importez votre fichier de données de voyage
-          ou utilisez les données de démonstration pour explorer l&apos;application.
+          Bienvenue ! Pour commencer, importez votre fichier de données de
+          voyage (JSON ou CSV) ou utilisez les données de démonstration pour
+          explorer l&apos;application.
         </p>
+
+        {/* Format guide link */}
+        <div className="flex justify-center">
+          <ImportFormatGuide />
+        </div>
 
         {/* Error */}
         {error && (
@@ -131,7 +141,7 @@ export function OnboardingScreen({
                 </p>
                 <p className="text-muted-foreground mt-1 text-xs">
                   Glissez-déposez ou cliquez pour sélectionner un fichier
-                  JSON exporté depuis TripBrain
+                  JSON ou CSV
                 </p>
               </div>
               <Button
@@ -140,7 +150,7 @@ export function OnboardingScreen({
                 className="pointer-events-none"
                 disabled={loadingImport}
               >
-                {loadingImport ? 'Chargement…' : 'Choisir un fichier .json'}
+                {loadingImport ? 'Chargement…' : 'Choisir un fichier .json / .csv'}
               </Button>
             </CardContent>
           </Card>
@@ -148,7 +158,7 @@ export function OnboardingScreen({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".json,application/json"
+            accept=".json,application/json,.csv,text/csv"
             className="sr-only"
             onChange={handleFileChange}
           />
