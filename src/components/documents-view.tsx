@@ -23,6 +23,7 @@ import {
   Eye,
   Inbox,
   ArrowUpRight,
+  PlusCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -171,6 +172,86 @@ function DocumentSourcesDrawer({
 type SortField = 'name' | 'size' | 'addedAt'
 type SortOrder = 'asc' | 'desc'
 type ViewMode = 'grid' | 'list'
+
+// ---------------------------------------------------------------------------
+// DocumentsEmptyState
+// ---------------------------------------------------------------------------
+
+interface DocumentsEmptyStateProps {
+  onOpenSources: () => void
+  onAddFiles: () => void
+  isDragging: boolean
+  onDrop: (e: React.DragEvent) => void
+  onDragOver: (e: React.DragEvent) => void
+  onDragEnter: (e: React.DragEvent) => void
+  onDragLeave: (e: React.DragEvent) => void
+}
+
+function DocumentsEmptyState({
+  onOpenSources,
+  onAddFiles,
+  isDragging,
+  onDrop,
+  onDragOver,
+  onDragEnter,
+  onDragLeave,
+}: DocumentsEmptyStateProps) {
+  return (
+    <div
+      onDrop={onDrop}
+      onDragOver={onDragOver}
+      onDragEnter={onDragEnter}
+      onDragLeave={onDragLeave}
+      className={`flex flex-col items-center gap-6 rounded-3xl border-2 border-dashed px-6 py-16 text-center transition-all ${
+        isDragging
+          ? 'border-primary bg-primary/5'
+          : 'border-border/50 hover:border-border/80'
+      }`}
+    >
+      {/* Icon */}
+      <div
+        className={`flex h-20 w-20 items-center justify-center rounded-3xl transition-colors ${
+          isDragging ? 'bg-primary/10' : 'bg-muted'
+        }`}
+      >
+        {isDragging ? (
+          <Upload className="text-primary h-10 w-10" strokeWidth={1.5} />
+        ) : (
+          <FolderOpen
+            className="text-muted-foreground h-10 w-10"
+            strokeWidth={1}
+          />
+        )}
+      </div>
+
+      {/* Copy */}
+      <div className="max-w-sm space-y-2">
+        <p className="text-foreground font-semibold">
+          {isDragging ? 'Déposez vos fichiers ici' : 'Aucun document'}
+        </p>
+        <p className="text-muted-foreground text-sm">
+          {isDragging
+            ? 'Déposez vos fichiers pour les ajouter.'
+            : 'On ne voit encore aucun document… Commence par importer tes réservations depuis Booking, Airbnb ou Gmail, ou ajoute tes fichiers ici.'}
+        </p>
+      </div>
+
+      {/* Actions */}
+      {!isDragging && (
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Button onClick={onOpenSources} className="gap-2">
+            <Inbox className="h-4 w-4" />
+            Importer depuis mes apps
+          </Button>
+          <Button variant="outline" onClick={onAddFiles} className="gap-2">
+            <Upload className="h-4 w-4" />
+            Ajouter un fichier
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B'
@@ -541,41 +622,15 @@ export function DocumentsView() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* ----------------------------------------------------------------- */}
-      {/* 1. Récupérer mes documents — full card (no docs) / compact link (has docs) */}
-      {/* ----------------------------------------------------------------- */}
-      {files.length === 0 ? (
-        <div className="from-primary/5 to-primary/10 rounded-2xl border bg-gradient-to-br p-4">
-          <div className="flex items-start gap-3">
-            <div className="bg-primary/10 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
-              <Inbox className="text-primary h-5 w-5" />
-            </div>
-            <div className="flex-1 space-y-1">
-              <p className="text-sm font-semibold">Récupérer mes documents</p>
-              <p className="text-muted-foreground text-xs">
-                Importe tes réservations depuis tes apps ou emails en quelques
-                secondes
-              </p>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            className="mt-3 w-full"
-            onClick={() => setSourcesOpen(true)}
-          >
-            Voir les sources
-          </Button>
-        </div>
-      ) : (
-        <button
-          onClick={() => setSourcesOpen(true)}
-          className="text-primary hover:text-primary/80 flex items-center gap-1.5 self-start text-sm font-medium transition-colors"
-        >
-          <Inbox className="h-4 w-4" />
-          Importer depuis mes apps
-          <ArrowUpRight className="h-3.5 w-3.5" />
-        </button>
-      )}
+      {/* Hidden file input — always mounted so the ref is stable */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="sr-only"
+        onChange={handleFileInput}
+        aria-label="Ajouter des fichiers"
+      />
 
       <DocumentSourcesDrawer
         open={sourcesOpen}
@@ -583,249 +638,250 @@ export function DocumentsView() {
       />
 
       {/* ----------------------------------------------------------------- */}
-      {/* 2. Ajouter des documents (upload) */}
+      {/* Loading */}
       {/* ----------------------------------------------------------------- */}
-      <div
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-2xl px-6 py-10 flex flex-col items-center justify-center gap-3 cursor-pointer transition-all ${
-          isDragging
-            ? 'border-primary bg-primary/5 scale-[1.01]'
-            : 'border-border/60 hover:border-primary/50 hover:bg-muted/30'
-        }`}
-      >
-        <div
-          className={`flex h-14 w-14 items-center justify-center rounded-2xl transition-colors ${
-            isDragging ? 'bg-primary/15' : 'bg-muted'
-          }`}
-        >
-          <Upload
-            className={`h-6 w-6 transition-colors ${
-              isDragging ? 'text-primary' : 'text-muted-foreground'
-            }`}
-          />
-        </div>
-        <div className="text-center">
-          <p className="text-foreground text-sm font-medium">
-            {isDragging ? 'Déposez vos fichiers ici' : 'Ajoute tes documents'}
-          </p>
-          <p className="text-muted-foreground mt-0.5 text-xs">
-            ou cliquez pour parcourir · tous types de fichiers acceptés
-          </p>
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="sr-only"
-          onChange={handleFileInput}
-          aria-label="Ajouter des fichiers"
-        />
-      </div>
-
-      {/* Stats + toolbar */}
-      {files.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Stats */}
-          <div className="flex items-center gap-3">
-            <span className="text-muted-foreground text-sm">
-              <span className="text-foreground font-semibold">{files.length}</span>{' '}
-              fichier{files.length > 1 ? 's' : ''}
-            </span>
-            <span className="text-border">·</span>
-            <span className="text-muted-foreground text-sm">
-              {formatFileSize(totalSize)} utilisé{totalSize !== 1 ? 's' : ''}
-            </span>
-          </div>
-
-          {/* Toolbar */}
-          <div className="flex items-center gap-2">
-            {/* Search */}
-            <div className="relative">
-              <Search className="text-muted-foreground absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Rechercher…"
-                className="h-8 w-40 pl-8 text-sm sm:w-52"
-              />
-              {search && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute top-1/2 right-1 h-6 w-6 -translate-y-1/2"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setSearch('')
-                  }}
-                >
-                  <X className="h-3 w-3" />
-                  <span className="sr-only">Effacer la recherche</span>
-                </Button>
-              )}
-            </div>
-
-            {/* Sort */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 gap-1.5">
-                  {sortOrder === 'asc' ? (
-                    <SortAsc className="h-3.5 w-3.5" />
-                  ) : (
-                    <SortDesc className="h-3.5 w-3.5" />
-                  )}
-                  <span className="hidden text-xs sm:inline">Trier</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSortField('addedAt')
-                    setSortOrder('desc')
-                  }}
-                >
-                  Plus récent
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSortField('addedAt')
-                    setSortOrder('asc')
-                  }}
-                >
-                  Plus ancien
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSortField('name')
-                    setSortOrder('asc')
-                  }}
-                >
-                  Nom (A → Z)
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSortField('name')
-                    setSortOrder('desc')
-                  }}
-                >
-                  Nom (Z → A)
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSortField('size')
-                    setSortOrder('desc')
-                  }}
-                >
-                  Taille (grand → petit)
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => {
-                    setSortField('size')
-                    setSortOrder('asc')
-                  }}
-                >
-                  Taille (petit → grand)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* View mode toggle */}
-            <div className="border-border/60 flex overflow-hidden rounded-lg border">
-              <Button
-                variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                size="icon"
-                className="h-8 w-8 rounded-none"
-                onClick={() => setViewMode('grid')}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                <span className="sr-only">Vue grille</span>
-              </Button>
-              <Button
-                variant={viewMode === 'list' ? 'default' : 'ghost'}
-                size="icon"
-                className="h-8 w-8 rounded-none border-l"
-                onClick={() => setViewMode('list')}
-              >
-                <LayoutList className="h-3.5 w-3.5" />
-                <span className="sr-only">Vue liste</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* File list */}
       {loading ? (
         <div className="flex flex-col items-center gap-3 py-16">
           <div className="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
           <p className="text-muted-foreground text-sm">Chargement…</p>
         </div>
       ) : files.length === 0 ? (
-        /* Empty state */
-        <div className="flex flex-col items-center gap-4 py-16">
-          <div className="bg-muted flex h-20 w-20 items-center justify-center rounded-3xl">
-            <FolderOpen className="text-muted-foreground h-10 w-10" strokeWidth={1} />
-          </div>
-          <div className="text-center">
-            <p className="text-foreground font-semibold">Aucun document</p>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Tu as sûrement déjà tes réservations sur Booking, Airbnb ou Gmail
-            </p>
-          </div>
-          <Button onClick={() => setSourcesOpen(true)}>
-            Importer mes documents
-          </Button>
-        </div>
-      ) : filteredAndSorted.length === 0 ? (
-        /* No results */
-        <div className="flex flex-col items-center gap-3 py-12">
-          <Search className="text-muted-foreground h-8 w-8" strokeWidth={1.5} />
-          <p className="text-muted-foreground text-sm">
-            Aucun fichier ne correspond à &ldquo;{search}&rdquo;
-          </p>
-          <Button variant="ghost" size="sm" onClick={() => setSearch('')}>
-            Effacer la recherche
-          </Button>
-        </div>
-      ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-          {filteredAndSorted.map((file) => (
-            <div
-              key={file.id}
-              className={`transition-opacity ${deletingId === file.id ? 'opacity-40' : ''}`}
-            >
-              <FileCard
-                file={file}
-                viewMode="grid"
-                onDelete={handleDelete}
-                onDownload={downloadFile}
-                onPreview={openPreview}
-                previewUrl={previewUrls[file.id] ?? null}
-              />
-            </div>
-          ))}
-        </div>
+        /* ---------------------------------------------------------------- */
+        /* Unified empty state                                               */
+        /* ---------------------------------------------------------------- */
+        <DocumentsEmptyState
+          onOpenSources={() => setSourcesOpen(true)}
+          onAddFiles={() => fileInputRef.current?.click()}
+          isDragging={isDragging}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+        />
       ) : (
-        <div className="flex flex-col gap-2">
-          {filteredAndSorted.map((file) => (
-            <div
-              key={file.id}
-              className={`transition-opacity ${deletingId === file.id ? 'opacity-40' : ''}`}
-            >
-              <FileCard
-                file={file}
-                viewMode="list"
-                onDelete={handleDelete}
-                onDownload={downloadFile}
-                onPreview={openPreview}
-                previewUrl={previewUrls[file.id] ?? null}
-              />
+        /* ---------------------------------------------------------------- */
+        /* Has documents                                                      */
+        /* ---------------------------------------------------------------- */
+        <>
+          {/* Compact import link */}
+          <button
+            onClick={() => setSourcesOpen(true)}
+            className="text-primary hover:text-primary/80 flex items-center gap-1.5 self-start text-sm font-medium transition-colors"
+          >
+            <Inbox className="h-4 w-4" />
+            Importer depuis mes apps
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </button>
+
+          {/* Stats + toolbar */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Stats */}
+            <div className="flex items-center gap-3">
+              <span className="text-muted-foreground text-sm">
+                <span className="text-foreground font-semibold">
+                  {files.length}
+                </span>{' '}
+                fichier{files.length > 1 ? 's' : ''}
+              </span>
+              <span className="text-border">·</span>
+              <span className="text-muted-foreground text-sm">
+                {formatFileSize(totalSize)} utilisé
+                {totalSize !== 1 ? 's' : ''}
+              </span>
             </div>
-          ))}
-        </div>
+
+            {/* Toolbar */}
+            <div className="flex items-center gap-2">
+              {/* Search */}
+              <div className="relative">
+                <Search className="text-muted-foreground absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Rechercher…"
+                  className="h-8 w-40 pl-8 text-sm sm:w-52"
+                />
+                {search && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-1/2 right-1 h-6 w-6 -translate-y-1/2"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSearch('')
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                    <span className="sr-only">Effacer la recherche</span>
+                  </Button>
+                )}
+              </div>
+
+              {/* Sort */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                    {sortOrder === 'asc' ? (
+                      <SortAsc className="h-3.5 w-3.5" />
+                    ) : (
+                      <SortDesc className="h-3.5 w-3.5" />
+                    )}
+                    <span className="hidden text-xs sm:inline">Trier</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSortField('addedAt')
+                      setSortOrder('desc')
+                    }}
+                  >
+                    Plus récent
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSortField('addedAt')
+                      setSortOrder('asc')
+                    }}
+                  >
+                    Plus ancien
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSortField('name')
+                      setSortOrder('asc')
+                    }}
+                  >
+                    Nom (A → Z)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSortField('name')
+                      setSortOrder('desc')
+                    }}
+                  >
+                    Nom (Z → A)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSortField('size')
+                      setSortOrder('desc')
+                    }}
+                  >
+                    Taille (grand → petit)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSortField('size')
+                      setSortOrder('asc')
+                    }}
+                  >
+                    Taille (petit → grand)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* View mode toggle */}
+              <div className="border-border/60 flex overflow-hidden rounded-lg border">
+                <Button
+                  variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                  size="icon"
+                  className="h-8 w-8 rounded-none"
+                  onClick={() => setViewMode('grid')}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span className="sr-only">Vue grille</span>
+                </Button>
+                <Button
+                  variant={viewMode === 'list' ? 'default' : 'ghost'}
+                  size="icon"
+                  className="h-8 w-8 rounded-none border-l"
+                  onClick={() => setViewMode('list')}
+                >
+                  <LayoutList className="h-3.5 w-3.5" />
+                  <span className="sr-only">Vue liste</span>
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* File list */}
+          {filteredAndSorted.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-12">
+              <Search
+                className="text-muted-foreground h-8 w-8"
+                strokeWidth={1.5}
+              />
+              <p className="text-muted-foreground text-sm">
+                Aucun fichier ne correspond à &ldquo;{search}&rdquo;
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSearch('')}
+              >
+                Effacer la recherche
+              </Button>
+            </div>
+          ) : viewMode === 'grid' ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+              {filteredAndSorted.map((file) => (
+                <div
+                  key={file.id}
+                  className={`transition-opacity ${deletingId === file.id ? 'opacity-40' : ''}`}
+                >
+                  <FileCard
+                    file={file}
+                    viewMode="grid"
+                    onDelete={handleDelete}
+                    onDownload={downloadFile}
+                    onPreview={openPreview}
+                    previewUrl={previewUrls[file.id] ?? null}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {filteredAndSorted.map((file) => (
+                <div
+                  key={file.id}
+                  className={`transition-opacity ${deletingId === file.id ? 'opacity-40' : ''}`}
+                >
+                  <FileCard
+                    file={file}
+                    viewMode="list"
+                    onDelete={handleDelete}
+                    onDownload={downloadFile}
+                    onPreview={openPreview}
+                    previewUrl={previewUrls[file.id] ?? null}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ---------------------------------------------------------------- */}
+          {/* Add more documents button                                         */}
+          {/* ---------------------------------------------------------------- */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed py-4 text-sm font-medium transition-all ${
+              isDragging
+                ? 'border-primary bg-primary/5 text-primary'
+                : 'border-border/50 text-muted-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary'
+            }`}
+          >
+            <PlusCircle className="h-4 w-4" />
+            {isDragging
+              ? 'Déposez vos fichiers ici'
+              : "Ajouter d'autres documents"}
+          </button>
+        </>
       )}
     </div>
   )
