@@ -1,6 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import {
+  exportDocumentsAsZip,
+  parseDocumentsZip,
+  uniqueFileName,
+  type ExportProgress,
+  type ImportProgress,
+} from '@/lib/document-zip'
 
 const DB_NAME = 'ouzbekistan-documents'
 const DB_VERSION = 1
@@ -123,11 +130,87 @@ export function useDocuments() {
     URL.revokeObjectURL(url)
   }, [])
 
+  const exportAll = useCallback(
+    async (onProgress?: (p: ExportProgress) => void) => {
+      await exportDocumentsAsZip(files, onProgress)
+    },
+    [files],
+  )
+
+  const importZip = useCallback(
+    async (
+      zipFile: File,
+      onProgress?: (p: ImportProgress) => void,
+    ): Promise<{ imported: number; failed: number }> => {
+      const { documents } = await parseDocumentsZip(zipFile)
+
+      const existingNames = new Set(files.map((f) => f.name))
+      const total = documents.length
+      let imported = 0
+      let failed = 0
+
+      const db = await openDB()
+      const tx = db.transaction(STORE_NAME, 'readwrite')
+      const store = tx.objectStore(STORE_NAME)
+
+      for (let i = 0; i < documents.length; i++) {
+        const doc = documents[i]
+        onProgress?.({
+          status: 'importing',
+          current: i + 1,
+          total,
+          message: `Import en cours… (${i + 1}/${total})`,
+        })
+        try {
+          const safeName = uniqueFileName(doc.name, existingNames)
+          existingNames.add(safeName)
+
+          const storedFile: StoredFile = {
+            id: crypto.randomUUID(),
+            name: safeName,
+            size: doc.blob.size,
+            type: doc.type || 'application/octet-stream',
+            lastModified: Date.now(),
+            addedAt: Date.now(),
+            blob: doc.blob,
+          }
+
+          store.put(storedFile)
+          imported++
+        } catch {
+          failed++
+        }
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+      })
+
+      await loadFiles()
+
+      onProgress?.({
+        status: 'done',
+        current: total,
+        total,
+        message:
+          failed === 0
+            ? 'Documents importés avec succès'
+            : `Certains documents n'ont pas pu être importés`,
+      })
+
+      return { imported, failed }
+    },
+    [files, loadFiles],
+  )
+
   return {
     files,
     loading,
     addFiles,
     deleteFile,
     downloadFile,
+    exportAll,
+    importZip,
   }
 }
