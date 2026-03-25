@@ -246,12 +246,11 @@ export default function HomePage() {
       </div>
 
       {/* Mobile bottom nav spacer */}
-      <div className="h-20 md:hidden" />
+      <div className="h-20 mb-[env(safe-area-inset-bottom)] [@media(display-mode:standalone)]:mb-[calc(env(safe-area-inset-bottom)+1.5rem)] md:hidden" />
 
       {/* Mobile bottom navigation */}
       <nav
-        className="bg-card/85 border-border/60 fixed right-0 bottom-0 left-0 z-40 border-t backdrop-blur-xl md:hidden"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        className="bg-card/85 border-border/60 fixed right-0 bottom-0 left-0 z-40 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-xl [@media(display-mode:standalone)]:pb-[calc(env(safe-area-inset-bottom)+1.5rem)] md:hidden"
       >
         <div className="flex items-center justify-around py-2">
           <Button
