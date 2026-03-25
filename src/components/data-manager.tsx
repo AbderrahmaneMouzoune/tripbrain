@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { Separator } from '@/components/ui/separator'
 import { Download, Upload, Trash2, Database, AlertCircle } from 'lucide-react'
 
 interface DataManagerProps {
@@ -72,13 +73,15 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="sm:max-w-sm">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Gestion des données</DialogTitle>
           <DialogDescription>
             Exportez, importez ou réinitialisez les données de votre voyage.
           </DialogDescription>
         </DialogHeader>
+
+        <Separator />
 
         {error && (
           <div className="bg-destructive/10 text-destructive flex items-start gap-2 rounded-lg px-4 py-3 text-sm">
@@ -87,11 +90,11 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
           </div>
         )}
 
-        <div className="flex flex-col gap-3 pt-2">
+        <div className="flex flex-col gap-3">
           {/* Export */}
           <Button
             variant="outline"
-            className="w-full justify-start gap-3"
+            className="h-auto w-full justify-start gap-3 py-3"
             onClick={() => {
               onExport()
               setOpen(false)
@@ -109,7 +112,7 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
           {/* Import */}
           <Button
             variant="outline"
-            className="w-full justify-start gap-3"
+            className="h-auto w-full justify-start gap-3 py-3"
             onClick={() => {
               setError(null)
               fileInputRef.current?.click()
@@ -140,7 +143,7 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
             <AlertDialogTrigger asChild>
               <Button
                 variant="outline"
-                className="text-destructive hover:text-destructive w-full justify-start gap-3"
+                className="text-destructive hover:text-destructive h-auto w-full justify-start gap-3 py-3"
               >
                 <Trash2 className="h-4 w-4 shrink-0" />
                 <div className="text-left">
