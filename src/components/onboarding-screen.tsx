@@ -1,10 +1,13 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { Compass, Upload, PlayCircle, AlertCircle } from 'lucide-react'
+import { Compass, Upload, PlayCircle, AlertCircle, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { FormatGuideDialog } from '@/components/format-guide-dialog'
+
+/** URL of the AI itinerary generator — replace with the production URL when the tool is live. */
+const ITINERARY_GENERATOR_URL = 'https://tripbrain.vercel.app/generate'
 
 interface OnboardingScreenProps {
   onImportFile: (file: File) => Promise<void>
@@ -114,7 +117,7 @@ export function OnboardingScreen({
           </div>
         )}
 
-        {/* Options — side by side on md+ */}
+        {/* Options — side by side on sm+ */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {/* Import file */}
           <Card
@@ -144,6 +147,19 @@ export function OnboardingScreen({
                 disabled={loadingImport}
               >
                 {loadingImport ? 'Chargement…' : 'Choisir un fichier'}
+              </Button>
+              {/* Link to the itinerary generator */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-primary hover:text-primary w-full gap-1.5 text-xs"
+                asChild
+                onClick={(e) => e.stopPropagation()}
+              >
+                <a href={ITINERARY_GENERATOR_URL} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Générer mon itinéraire
+                </a>
               </Button>
             </CardContent>
           </Card>
@@ -193,4 +209,5 @@ export function OnboardingScreen({
     </div>
   )
 }
+
 
