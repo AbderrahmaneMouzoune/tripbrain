@@ -205,7 +205,8 @@ function DocumentsEmptyState({
       <div className="bg-primary/10 text-primary flex items-start gap-3 rounded-2xl px-4 py-3">
         <HelpCircle className="mt-0.5 h-4 w-4 shrink-0" />
         <p className="text-sm font-medium">
-          Pas encore de document&nbsp;? Voici comment en ajouter un.
+          Garde tous tes documents de voyage au même endroit — billets,
+          réservations et confirmations.
         </p>
       </div>
 
@@ -257,7 +258,9 @@ function DocumentsEmptyState({
             {allSources.map((source) => (
               <button
                 key={source.name}
-                onClick={() => openSource(source.deepLink, source.fallback)}
+                onClick={() =>
+                  window.open(source.fallback, '_blank', 'noopener,noreferrer')
+                }
                 className="hover:bg-muted/60 group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors"
               >
                 <span
