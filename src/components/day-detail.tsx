@@ -19,7 +19,26 @@ import {
 } from '@/components/ui/carousel'
 import { Lightbox } from '@/components/lightbox'
 import { Badge } from '@/components/ui/badge'
-import { Camera, Utensils, ShoppingBag, Sparkles, ExternalLink, Clock, Navigation, Images, Star, Footprints, StickyNote, Backpack, Lightbulb, Tag, MapPin, Hotel, Train, Car, Plane,
+import {
+  MapPin,
+  Hotel,
+  Train,
+  Car,
+  Plane,
+  Camera,
+  Utensils,
+  ShoppingBag,
+  Sparkles,
+  ExternalLink,
+  Clock,
+  Navigation,
+  Images,
+  Star,
+  Footprints,
+  StickyNote,
+  Backpack,
+  Lightbulb,
+  Tag,
 } from 'lucide-react'
 import { CachedImage } from '@/components/cached-image'
 

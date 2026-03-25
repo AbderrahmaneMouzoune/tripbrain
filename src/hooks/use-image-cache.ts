@@ -243,7 +243,12 @@ export function useImageCache(
         URL.revokeObjectURL(objectUrl)
       }
     }
-  }, [itinerary]) // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // `currentDayIndex` is intentionally excluded: it only sets initial download
+  // priority order. Including it would cancel all in-flight downloads and restart
+  // from scratch on every day navigation — wasteful overhead. Priority is captured
+  // via `currentDayRef.current` at the moment the itinerary first loads.
+  }, [itinerary])
 
   const stats: ImageCacheStats = {
     total: Object.keys(statuses).length,
