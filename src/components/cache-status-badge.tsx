@@ -1,7 +1,7 @@
 'use client'
 
-import { type ReactNode, useState } from 'react'
-import { CloudDownload, CheckCircle2, AlertCircle, WifiOff, RefreshCw, X } from 'lucide-react'
+import { type ReactNode, useState, useEffect } from 'react'
+import { CloudDownload, CheckCircle2, AlertCircle, WifiOff, RefreshCw, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Popover,
@@ -22,11 +22,11 @@ import { useImageCacheContext } from '@/components/image-cache-provider'
  * | Some errors, rest cached | Alert circle        | amber   |
  */
 export function CacheStatusBadge() {
-  const { stats, retryErrors } = useImageCacheContext()
+  const { stats, statuses, retryErrors } = useImageCacheContext()
   const [dismissed, setDismissed] = useState(false)
   const [open, setOpen] = useState(false)
-
-  if (stats.total === 0) return null
+  const [retrying, setRetrying] = useState(false)
+  const [showUrls, setShowUrls] = useState(false)
 
   const isActive = stats.downloading > 0 || stats.pending > 0
   const allCached = stats.cached === stats.total && stats.error === 0
@@ -34,7 +34,17 @@ export function CacheStatusBadge() {
   const hasErrors = stats.error > 0 && !isActive
   const progress = stats.total > 0 ? Math.round((stats.cached / stats.total) * 100) : 0
 
+  // Clear the retrying flag as soon as the hook transitions into active download
+  useEffect(() => {
+    if (retrying && isActive) setRetrying(false)
+  }, [retrying, isActive])
+
+  if (stats.total === 0) return null
   if (dismissed && hasErrors) return null
+
+  const errorUrls = Object.entries(statuses)
+    .filter(([, s]) => s === 'error')
+    .map(([url]) => url)
 
   let trigger: ReactNode
   let popoverContent: ReactNode
@@ -127,18 +137,41 @@ export function CacheStatusBadge() {
             </span>
           </p>
         </div>
+        {/* Collapsible URL list */}
+        <button
+          className="text-muted-foreground flex items-center gap-1 text-xs underline-offset-2 hover:underline"
+          onClick={() => setShowUrls((v) => !v)}
+        >
+          {showUrls ? (
+            <ChevronUp className="h-3 w-3" />
+          ) : (
+            <ChevronDown className="h-3 w-3" />
+          )}
+          {showUrls ? 'Masquer les URLs' : 'Voir les URLs en erreur'}
+        </button>
+        {showUrls && (
+          <ul className="bg-muted max-h-32 overflow-y-auto rounded p-2">
+            {errorUrls.map((url) => (
+              <li key={url} className="text-muted-foreground break-all py-0.5 text-[10px]">
+                {url}
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="flex gap-2 pt-1">
           <Button
             size="sm"
             variant="outline"
             className="h-7 flex-1 gap-1.5 text-xs"
+            disabled={retrying}
             onClick={() => {
+              setRetrying(true)
               retryErrors()
-              setOpen(false)
+              // keep popover open so the user sees the transition to downloading
             }}
           >
-            <RefreshCw className="h-3 w-3" />
-            Réessayer
+            <RefreshCw className={`h-3 w-3 ${retrying ? 'animate-spin' : ''}`} />
+            {retrying ? 'Reprise…' : 'Réessayer'}
           </Button>
           <Button
             size="sm"
@@ -162,7 +195,7 @@ export function CacheStatusBadge() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent align="end" className="w-64 text-sm">
+      <PopoverContent align="end" className="w-72 text-sm">
         {popoverContent}
       </PopoverContent>
     </Popover>
