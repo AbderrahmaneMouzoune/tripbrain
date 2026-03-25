@@ -221,7 +221,7 @@ export function TripMap({ itinerary, selectedDay, onSelectDay, fullPage }: TripM
 
   if (fullPage) {
     return (
-      <div className="relative min-h-0 flex-1 overflow-hidden">
+      <div className="relative isolate min-h-0 flex-1 overflow-hidden">
         <div
           ref={mapRef}
           className="absolute inset-0"
@@ -234,7 +234,7 @@ export function TripMap({ itinerary, selectedDay, onSelectDay, fullPage }: TripM
 
   return (
     <Card className="overflow-hidden">
-      <div className="relative">
+      <div className="relative isolate">
         <div
           ref={mapRef}
           className="h-64 w-full md:h-80 lg:h-96"
