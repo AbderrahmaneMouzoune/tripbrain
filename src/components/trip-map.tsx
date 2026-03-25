@@ -9,9 +9,10 @@ interface TripMapProps {
   itinerary: DayItinerary[]
   selectedDay: number
   onSelectDay?: (index: number) => void
+  fullPage?: boolean
 }
 
-export function TripMap({ itinerary, selectedDay, onSelectDay }: TripMapProps) {
+export function TripMap({ itinerary, selectedDay, onSelectDay, fullPage }: TripMapProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<L.Map | null>(null)
   const markersRef = useRef<L.Marker[]>([])
@@ -209,6 +210,28 @@ export function TripMap({ itinerary, selectedDay, onSelectDay }: TripMapProps) {
     loadLeaflet()
   }, [selectedDay, isLoaded, itinerary])
 
+  const loadingOverlay = !isLoaded && (
+    <div className="bg-muted/50 absolute inset-0 flex items-center justify-center">
+      <div className="text-muted-foreground flex items-center gap-2">
+        <MapPin className="h-5 w-5 animate-pulse" />
+        <span>Chargement de la carte...</span>
+      </div>
+    </div>
+  )
+
+  if (fullPage) {
+    return (
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div
+          ref={mapRef}
+          className="absolute inset-0"
+          style={{ background: '#f3f4f6' }}
+        />
+        {loadingOverlay}
+      </div>
+    )
+  }
+
   return (
     <Card className="overflow-hidden">
       <div className="relative">
@@ -217,14 +240,7 @@ export function TripMap({ itinerary, selectedDay, onSelectDay }: TripMapProps) {
           className="h-64 w-full md:h-80 lg:h-96"
           style={{ background: '#f3f4f6' }}
         />
-        {!isLoaded && (
-          <div className="bg-muted/50 absolute inset-0 flex items-center justify-center">
-            <div className="text-muted-foreground flex items-center gap-2">
-              <MapPin className="h-5 w-5 animate-pulse" />
-              <span>Chargement de la carte...</span>
-            </div>
-          </div>
-        )}
+        {loadingOverlay}
       </div>
     </Card>
   )

@@ -96,6 +96,7 @@ export default function HomePage() {
   const countdown = getTripCountdown(tripStartDate, tripEndDate)
   const safeDay = Math.min(selectedDay, itinerary.length - 1)
   const currentDay = itinerary[safeDay]
+  const isMapView = activeTab === 'map'
 
   const handlePrevDay = () => {
     setSelectedDay((prev) => Math.max(0, prev - 1))
@@ -106,14 +107,14 @@ export default function HomePage() {
   }
 
   return (
-    <main className="bg-background relative min-h-screen overflow-x-clip">
+    <main className={`bg-background relative ${isMapView ? 'flex h-screen flex-col overflow-hidden' : 'min-h-screen overflow-x-clip'}`}>
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="animate-sticker-float bg-primary/12 border-primary/30 absolute top-8 -left-8 h-24 w-24 rotate-12 rounded-2xl border-2" />
         <div className="animate-sticker-bounce bg-secondary/16 border-secondary/35 absolute top-16 right-3 h-20 w-20 -rotate-12 rounded-full border-2" />
         <div className="animate-sticker-float [animation-delay:180ms] bg-accent/14 border-accent/35 absolute top-72 right-10 h-16 w-16 rotate-6 rounded-xl border-2" />
       </div>
 
-      <div className="relative z-10">
+      <div className={`relative z-10 ${isMapView ? 'flex flex-1 flex-col min-h-0' : ''}`}>
         {/* Header */}
       <header
         className="bg-card/85 border-border/60 sticky top-0 z-50 border-b backdrop-blur-xl"
@@ -168,9 +169,9 @@ export default function HomePage() {
       </section>
 
       {/* Main Content */}
-      <div className="mx-auto max-w-4xl px-4 py-6">
+      <div className={isMapView ? 'flex flex-1 flex-col min-h-0' : 'mx-auto max-w-4xl px-4 py-6'}>
         {/* Navigation + tabs bar */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className={isMapView ? 'border-border/60 mx-auto flex w-full max-w-4xl shrink-0 items-center justify-between border-b px-4 py-3' : 'mb-6 flex items-center justify-between'}>
           {activeTab === 'documents' ? (
             <div className="w-[88px]" aria-hidden />
           ) : (
@@ -236,17 +237,17 @@ export default function HomePage() {
         {activeTab === 'roadbook' ? (
           <DayDetail day={currentDay} />
         ) : activeTab === 'map' ? (
-          <div className="flex flex-col gap-4">
-            <TripMap itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
-            <DayDetail day={currentDay} />
-          </div>
+          <>
+            <TripMap itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} fullPage />
+            <div className="h-20 shrink-0 md:hidden" />
+          </>
         ) : (
           <DocumentsView />
         )}
       </div>
 
       {/* Mobile bottom nav spacer */}
-      <div className="h-20 md:hidden" />
+      {!isMapView && <div className="h-20 md:hidden" />}
 
       {/* Mobile bottom navigation */}
       <nav
