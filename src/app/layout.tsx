@@ -23,21 +23,21 @@ const _geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Ouzbekistan 2026 - Mon Itineraire',
-  description:
-    'Itineraire de voyage en Ouzbekistan: Tachkent, Samarcande, Boukhara, Khiva et le desert Kyzylkum',
+  title: 'TripBrain',
+  description: 'Planifiez et consultez votre itineraire de voyage avec TripBrain',
   manifest: '/manifest.json',
   themeColor: '#2268c7',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Ouzbekistan 2026',
+    title: 'TripBrain',
   },
   viewport: {
     width: 'device-width',
     initialScale: 1,
     maximumScale: 1,
     userScalable: false,
+    viewportFit: 'cover',
   },
   icons: {
     icon: [

@@ -1,7 +1,7 @@
 {
-  "name": "Ouzbekistan 2026 - Itineraire de Voyage",
-  "short_name": "Ouzbekistan",
-  "description": "Mon itineraire de voyage en Ouzbekistan: Tachkent, Samarcande, Boukhara, Khiva",
+  "name": "TripBrain",
+  "short_name": "TripBrain",
+  "description": "Planifiez et consultez votre itineraire de voyage avec TripBrain",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FBF8F4",

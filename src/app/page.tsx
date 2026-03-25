@@ -246,7 +246,7 @@ export default function HomePage() {
       </div>
 
       {/* Mobile bottom nav spacer */}
-      <div className="h-20 md:hidden" />
+      <div className="h-20 mb-[env(safe-area-inset-bottom)] md:hidden" />
 
       {/* Mobile bottom navigation */}
       <nav
