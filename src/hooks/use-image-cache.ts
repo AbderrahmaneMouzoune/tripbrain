@@ -46,7 +46,7 @@
  * unmount to prevent memory leaks.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { DayItinerary } from '@/lib/itinerary-data'
 
 const IMAGE_DB_NAME = 'tripbrain-images'
@@ -71,6 +71,8 @@ export interface ImageCacheValue {
   statuses: Record<string, ImageStatus>
   /** Aggregate counts for UI indicators */
   stats: ImageCacheStats
+  /** Re-attempt downloading all URLs that are currently in error state */
+  retryErrors: () => void
 }
 
 // ─── IndexedDB helpers ────────────────────────────────────────────────────────
@@ -165,6 +167,7 @@ export function useImageCache(
 ): ImageCacheValue {
   const [statuses, setStatuses] = useState<Record<string, ImageStatus>>({})
   const [cachedSrcs, setCachedSrcs] = useState<Record<string, string>>({})
+  const [retryKey, setRetryKey] = useState(0)
 
   // Keep a ref to currentDayIndex so the effect closure captures the latest
   // value when the itinerary changes, without re-running on every navigation.
@@ -172,6 +175,13 @@ export function useImageCache(
   useEffect(() => {
     currentDayRef.current = currentDayIndex
   }, [currentDayIndex])
+
+  // Keep a ref to statuses so the retry effect can read the latest value
+  // without adding statuses as a dependency (which would cause infinite loops).
+  const statusesRef = useRef(statuses)
+  useEffect(() => {
+    statusesRef.current = statuses
+  }, [statuses])
 
   useEffect(() => {
     if (itinerary.length === 0) return
@@ -250,6 +260,69 @@ export function useImageCache(
   // via `currentDayRef.current` at the moment the itinerary first loads.
   }, [itinerary])
 
+  // ── Retry effect ─────────────────────────────────────────────────────────────
+  // Triggered by incrementing `retryKey`. Re-downloads all URLs in error state.
+  useEffect(() => {
+    if (retryKey === 0) return
+
+    const errorUrls = Object.entries(statusesRef.current)
+      .filter(([, s]) => s === 'error')
+      .map(([url]) => url)
+
+    if (errorUrls.length === 0) return
+
+    let cancelled = false
+    const localObjectUrls: string[] = []
+
+    // Reset error URLs to pending immediately
+    setStatuses((prev) => {
+      const next = { ...prev }
+      for (const url of errorUrls) next[url] = 'pending'
+      return next
+    })
+
+    async function downloadOne(url: string): Promise<void> {
+      if (cancelled) return
+      setStatuses((prev) => ({ ...prev, [url]: 'downloading' }))
+      try {
+        const res = await fetch(url)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const blob = await res.blob()
+        await saveBlobToDB(url, blob)
+        if (cancelled) return
+        const objectUrl = URL.createObjectURL(blob)
+        localObjectUrls.push(objectUrl)
+        setCachedSrcs((prev) => ({ ...prev, [url]: objectUrl }))
+        setStatuses((prev) => ({ ...prev, [url]: 'cached' }))
+      } catch {
+        if (!cancelled) {
+          setStatuses((prev) => ({ ...prev, [url]: 'error' }))
+        }
+      }
+    }
+
+    async function processQueue(queue: string[]): Promise<void> {
+      if (cancelled || queue.length === 0) return
+      const batch = queue.splice(0, CONCURRENCY)
+      await Promise.all(batch.map(downloadOne))
+      return processQueue(queue)
+    }
+
+    processQueue([...errorUrls])
+
+    return () => {
+      cancelled = true
+      for (const objectUrl of localObjectUrls) {
+        URL.revokeObjectURL(objectUrl)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryKey])
+
+  const retryErrors = useCallback(() => {
+    setRetryKey((k) => k + 1)
+  }, [])
+
   const stats: ImageCacheStats = {
     total: Object.keys(statuses).length,
     cached: Object.values(statuses).filter((s) => s === 'cached').length,
@@ -259,5 +332,5 @@ export function useImageCache(
     error: Object.values(statuses).filter((s) => s === 'error').length,
   }
 
-  return { statuses, cachedSrcs, stats }
+  return { statuses, cachedSrcs, stats, retryErrors }
 }

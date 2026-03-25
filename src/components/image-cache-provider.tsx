@@ -11,6 +11,7 @@ const defaultValue: ImageCacheValue = {
   cachedSrcs: {},
   statuses: {},
   stats: { total: 0, cached: 0, downloading: 0, pending: 0, error: 0 },
+  retryErrors: () => {},
 }
 
 const ImageCacheContext = createContext<ImageCacheValue>(defaultValue)
