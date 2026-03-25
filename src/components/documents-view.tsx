@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import type React from 'react'
 import {
   Upload,
@@ -24,6 +24,9 @@ import {
   PlusCircle,
   AlertCircle,
   HelpCircle,
+  PackageOpen,
+  PackagePlus,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -58,42 +61,11 @@ import {
   SOURCE_CATEGORIES,
   CATEGORY_COLOR_CLASSES,
 } from '@/lib/document-sources'
+import type { ExportProgress, ImportProgress } from '@/lib/document-zip'
 
-/**
- * Opens a source: tries the deep link first; if the app is not installed the
- * browser stays visible and the fallback URL is opened in a new tab after 1.5s.
- */
-function openSource(deepLink: string, fallback: string) {
-  try {
-    window.location.href = deepLink
-  } catch {
-    // If the deep link assignment fails, open the fallback directly
-    try {
-      window.open(fallback, '_blank', 'noopener,noreferrer')
-    } catch {
-      // Silently ignore popup-blocker or CSP errors
-    }
-    return
-  }
-
-  const handleVisibilityChange = () => {
-    if (document.hidden) {
-      clearTimeout(timer)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }
-
-  const timer = setTimeout(() => {
-    document.removeEventListener('visibilitychange', handleVisibilityChange)
-    try {
-      window.open(fallback, '_blank', 'noopener,noreferrer')
-    } catch {
-      // Silently ignore popup-blocker or CSP errors
-    }
-  }, 1500)
-
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-}
+type SortField = 'name' | 'size' | 'addedAt'
+type SortOrder = 'asc' | 'desc'
+type ViewMode = 'grid' | 'list'
 
 // ---------------------------------------------------------------------------
 // DocumentSourcesDrawer
@@ -142,7 +114,7 @@ function DocumentSourcesDrawer({
                     <button
                       key={source.name}
                       onClick={() =>
-                        openSource(source.deepLink, source.fallback)
+                        window.open(source.fallback, '_blank', 'noopener,noreferrer')
                       }
                       className="hover:border-primary/40 hover:bg-primary/5 group flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition-all"
                     >
@@ -170,10 +142,6 @@ function DocumentSourcesDrawer({
     </Drawer>
   )
 }
-
-type SortField = 'name' | 'size' | 'addedAt'
-type SortOrder = 'asc' | 'desc'
-type ViewMode = 'grid' | 'list'
 
 // ---------------------------------------------------------------------------
 // DocumentsEmptyState
@@ -549,7 +517,7 @@ function FileCard({
 }
 
 export function DocumentsView() {
-  const { files, loading, addFiles, deleteFile, downloadFile } =
+  const { files, loading, addFiles, deleteFile, downloadFile, exportAll, importZip } =
     useDocuments()
   const [isDragging, setIsDragging] = useState(false)
   const [search, setSearch] = useState('')
@@ -560,9 +528,17 @@ export function DocumentsView() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const importZipInputRef = useRef<HTMLInputElement>(null)
   const dragCounterRef = useRef(0)
   // Track blob URLs opened for preview so we can revoke on unmount
   const openedPreviewUrlsRef = useRef<Set<string>>(new Set())
+
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null)
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+
+  /** Duration (ms) to display success/error feedback before clearing it. */
+  const FEEDBACK_DISPLAY_DURATION = 3000
 
   // Revoke all preview-tab blob URLs on unmount
   useEffect(() => {
@@ -650,6 +626,36 @@ export function DocumentsView() {
     [deleteFile],
   )
 
+  const handleExportAll = useCallback(async () => {
+    setExportProgress({ status: 'preparing', message: 'Préparation des documents…' })
+    try {
+      await exportAll((p) => setExportProgress(p))
+    } finally {
+      setTimeout(() => setExportProgress(null), FEEDBACK_DISPLAY_DURATION)
+    }
+  }, [exportAll, FEEDBACK_DISPLAY_DURATION])
+
+  const handleImportZipInput = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const zipFile = e.target.files?.[0]
+      if (!zipFile) return
+      if (importZipInputRef.current) importZipInputRef.current.value = ''
+
+      setImportError(null)
+      setImportProgress({ status: 'importing', current: 0, total: 0, message: 'Import en cours…' })
+      try {
+        await importZip(zipFile, (p) => setImportProgress(p))
+        setTimeout(() => setImportProgress(null), FEEDBACK_DISPLAY_DURATION)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Erreur lors de l'import"
+        setImportError(msg)
+        setImportProgress(null)
+        setTimeout(() => setImportError(null), FEEDBACK_DISPLAY_DURATION * 2)
+      }
+    },
+    [importZip, FEEDBACK_DISPLAY_DURATION],
+  )
+
   const filteredAndSorted = files
     .filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
@@ -660,7 +666,10 @@ export function DocumentsView() {
       return sortOrder === 'asc' ? cmp : -cmp
     })
 
-  const totalSize = files.reduce((acc, f) => acc + f.size, 0)
+  const totalSize = useMemo(
+    () => files.reduce((acc, f) => acc + f.size, 0),
+    [files],
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -678,6 +687,68 @@ export function DocumentsView() {
         open={sourcesOpen}
         onOpenChange={setSourcesOpen}
       />
+
+      {/* Export / Import actions */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          disabled={files.length === 0 || exportProgress?.status === 'preparing'}
+          onClick={handleExportAll}
+        >
+          {exportProgress?.status === 'preparing' ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <PackageOpen className="h-4 w-4" />
+          )}
+          {exportProgress?.status === 'done'
+            ? 'Export terminé ✓'
+            : exportProgress?.status === 'preparing'
+              ? 'Export…'
+              : 'Exporter tous mes documents'}
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          disabled={importProgress?.status === 'importing'}
+          onClick={() => importZipInputRef.current?.click()}
+        >
+          {importProgress?.status === 'importing' ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <PackagePlus className="h-4 w-4" />
+          )}
+          {importProgress?.status === 'importing'
+            ? importProgress.message
+            : importProgress?.status === 'done'
+              ? 'Import terminé ✓'
+              : 'Importer des documents'}
+        </Button>
+
+        <input
+          ref={importZipInputRef}
+          type="file"
+          accept=".zip,application/zip"
+          className="sr-only"
+          onChange={handleImportZipInput}
+          aria-label="Importer un fichier ZIP"
+        />
+
+        {/* Error feedback */}
+        {importError && (
+          <p className="text-destructive text-sm">{importError}</p>
+        )}
+
+        {/* Size warning */}
+        {files.length > 0 && totalSize > 50 * 1024 * 1024 && (
+          <p className="text-muted-foreground text-xs">
+            ⚠️ Le fichier peut être volumineux à partager
+          </p>
+        )}
+      </div>
 
       {/* ----------------------------------------------------------------- */}
       {/* Loading */}
