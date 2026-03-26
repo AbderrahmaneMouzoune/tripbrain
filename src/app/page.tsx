@@ -10,8 +10,9 @@ import { DataManager } from '@/components/data-manager'
 import { OnboardingScreen } from '@/components/onboarding-screen'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ChevronLeft, ChevronRight, Map, List, Compass, FolderOpen } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Map, List, Compass, FolderOpen, Hotel } from 'lucide-react'
 import { DocumentsView } from '@/components/documents-view'
+import { AccommodationsView } from '@/components/accommodations-view'
 
 function getTripCountdown(
   tripStartDate: Date,
@@ -63,7 +64,7 @@ export default function HomePage() {
   } = useTripData()
 
   const [selectedDay, setSelectedDay] = useState(0)
-  const [activeTab, setActiveTab] = useState<'roadbook' | 'map' | 'documents'>('roadbook')
+  const [activeTab, setActiveTab] = useState<'roadbook' | 'map' | 'documents' | 'accommodations'>('roadbook')
 
   useEffect(() => {
     if (hasData) {
@@ -171,7 +172,7 @@ export default function HomePage() {
       <div className="mx-auto max-w-4xl px-4 py-6">
         {/* Navigation + tabs bar */}
         <div className="mb-6 flex items-center justify-between">
-          {activeTab === 'documents' ? (
+          {activeTab === 'documents' || activeTab === 'accommodations' ? (
             <div className="w-[88px]" aria-hidden />
           ) : (
             <Button
@@ -188,10 +189,10 @@ export default function HomePage() {
 
           <Tabs
             value={activeTab}
-            onValueChange={(v) => setActiveTab(v as 'roadbook' | 'map' | 'documents')}
+            onValueChange={(v) => setActiveTab(v as 'roadbook' | 'map' | 'documents' | 'accommodations')}
             className="shrink-0"
           >
-            <TabsList className="bg-muted/70 grid h-9 w-full grid-cols-3">
+            <TabsList className="bg-muted/70 grid h-9 w-full grid-cols-4">
               <TabsTrigger
                 value="roadbook"
                 className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1.5 text-xs"
@@ -207,6 +208,13 @@ export default function HomePage() {
                 Carte
               </TabsTrigger>
               <TabsTrigger
+                value="accommodations"
+                className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1.5 text-xs"
+              >
+                <Hotel className="h-3.5 w-3.5" />
+                Hôtels
+              </TabsTrigger>
+              <TabsTrigger
                 value="documents"
                 className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1.5 text-xs"
               >
@@ -216,7 +224,7 @@ export default function HomePage() {
             </TabsList>
           </Tabs>
 
-          {activeTab === 'documents' ? (
+          {activeTab === 'documents' || activeTab === 'accommodations' ? (
             <div className="w-[88px]" aria-hidden />
           ) : (
             <Button
@@ -240,6 +248,8 @@ export default function HomePage() {
             <TripMap itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
             <DayDetail day={currentDay} />
           </div>
+        ) : activeTab === 'accommodations' ? (
+          <AccommodationsView itinerary={itinerary} />
         ) : (
           <DocumentsView />
         )}
@@ -257,10 +267,10 @@ export default function HomePage() {
             variant="ghost"
             size="sm"
             onClick={handlePrevDay}
-            disabled={selectedDay === 0 || activeTab === 'documents'}
-            className={`h-auto flex-col gap-0.5 py-2 ${activeTab === 'documents' ? 'pointer-events-none opacity-0' : ''}`}
-            aria-hidden={activeTab === 'documents'}
-            tabIndex={activeTab === 'documents' ? -1 : undefined}
+            disabled={selectedDay === 0 || activeTab === 'documents' || activeTab === 'accommodations'}
+            className={`h-auto flex-col gap-0.5 py-2 ${activeTab === 'documents' || activeTab === 'accommodations' ? 'pointer-events-none opacity-0' : ''}`}
+            aria-hidden={activeTab === 'documents' || activeTab === 'accommodations'}
+            tabIndex={activeTab === 'documents' || activeTab === 'accommodations' ? -1 : undefined}
           >
             <ChevronLeft className="h-5 w-5" />
             <span className="text-[10px]">Précédent</span>
@@ -287,6 +297,16 @@ export default function HomePage() {
           </Button>
 
           <Button
+            variant={activeTab === 'accommodations' ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setActiveTab('accommodations')}
+            className="h-auto flex-col gap-0.5 py-2"
+          >
+            <Hotel className="h-5 w-5" />
+            <span className="text-[10px]">Hôtels</span>
+          </Button>
+
+          <Button
             variant={activeTab === 'documents' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setActiveTab('documents')}
@@ -300,10 +320,10 @@ export default function HomePage() {
             variant="ghost"
             size="sm"
             onClick={handleNextDay}
-            disabled={selectedDay === itinerary.length - 1 || activeTab === 'documents'}
-            className={`h-auto flex-col gap-0.5 py-2 ${activeTab === 'documents' ? 'pointer-events-none opacity-0' : ''}`}
-            aria-hidden={activeTab === 'documents'}
-            tabIndex={activeTab === 'documents' ? -1 : undefined}
+            disabled={selectedDay === itinerary.length - 1 || activeTab === 'documents' || activeTab === 'accommodations'}
+            className={`h-auto flex-col gap-0.5 py-2 ${activeTab === 'documents' || activeTab === 'accommodations' ? 'pointer-events-none opacity-0' : ''}`}
+            aria-hidden={activeTab === 'documents' || activeTab === 'accommodations'}
+            tabIndex={activeTab === 'documents' || activeTab === 'accommodations' ? -1 : undefined}
           >
             <ChevronRight className="h-5 w-5" />
             <span className="text-[10px]">Suivant</span>

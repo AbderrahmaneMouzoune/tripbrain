@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import {
   formatDate,
@@ -39,6 +39,8 @@ import {
   Backpack,
   Lightbulb,
   Tag,
+  Copy,
+  Check,
 } from 'lucide-react'
 
 interface DayDetailProps {
@@ -85,6 +87,33 @@ export function DayDetail({ day }: DayDetailProps) {
   const [accommodationLightboxOpen, setAccommodationLightboxOpen] =
     useState(false)
   const [dayLightboxOpen, setDayLightboxOpen] = useState(false)
+  const [copiedAddress, setCopiedAddress] = useState(false)
+  const [copiedName, setCopiedName] = useState(false)
+  const copyAddressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const copyNameTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleCopyAddress = async () => {
+    if (!day.accommodation?.address) return
+    await navigator.clipboard.writeText(day.accommodation.address)
+    setCopiedAddress(true)
+    if (copyAddressTimerRef.current) clearTimeout(copyAddressTimerRef.current)
+    copyAddressTimerRef.current = setTimeout(() => setCopiedAddress(false), 2000)
+  }
+
+  const handleCopyName = async () => {
+    if (!day.accommodation?.name) return
+    await navigator.clipboard.writeText(day.accommodation.name)
+    setCopiedName(true)
+    if (copyNameTimerRef.current) clearTimeout(copyNameTimerRef.current)
+    copyNameTimerRef.current = setTimeout(() => setCopiedName(false), 2000)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (copyAddressTimerRef.current) clearTimeout(copyAddressTimerRef.current)
+      if (copyNameTimerRef.current) clearTimeout(copyNameTimerRef.current)
+    }
+  }, [])
 
   const accommodationLightboxImages = images.map((src, i) => ({
     url: src,
@@ -375,18 +404,46 @@ export function DayDetail({ day }: DayDetailProps) {
                   <p className="text-foreground text-sm leading-snug font-semibold">
                     {day.accommodation.name}
                   </p>
-                  <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(day.accommodation.name + ' ' + day.accommodation.address)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pr-1.5 transition-colors"
-                  >
-                    <Navigation className="h-3.5 w-3.5" strokeWidth={1.5} />
-                  </a>
+                  <div className="mt-0.5 flex shrink-0 items-center gap-1 pr-1.5">
+                    <button
+                      type="button"
+                      onClick={handleCopyName}
+                      title="Copier le nom"
+                      className="text-muted-foreground/50 hover:text-primary transition-colors"
+                    >
+                      {copiedName ? (
+                        <Check className="h-3.5 w-3.5 text-green-500" strokeWidth={1.5} />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      )}
+                    </button>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(day.accommodation.name + ' ' + day.accommodation.address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-muted-foreground/50 hover:text-primary transition-colors"
+                    >
+                      <Navigation className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    </a>
+                  </div>
                 </div>
-                <p className="text-muted-foreground text-xs">
-                  {day.accommodation.address}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-muted-foreground text-xs">
+                    {day.accommodation.address}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleCopyAddress}
+                    title="Copier l'adresse"
+                    className="text-muted-foreground/50 hover:text-primary shrink-0 pr-1.5 transition-colors"
+                  >
+                    {copiedAddress ? (
+                      <Check className="h-3.5 w-3.5 text-green-500" strokeWidth={1.5} />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    )}
+                  </button>
+                </div>
                 {day.accommodation.bookingUrl && (
                   <a
                     href={day.accommodation.bookingUrl}
