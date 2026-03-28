@@ -1,9 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useTripData } from '@/hooks/use-trip-data'
+import { useItineraryEditor } from '@/hooks/use-itinerary-editor'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
+import { EditableDayDetail } from '@/components/editable-day-detail'
+import { EditModeBar } from '@/components/edit-mode-bar'
 import { TripMap } from '@/components/trip-map'
 import { ShareDialog } from '@/components/share-dialog'
 import { DataManager } from '@/components/data-manager'
@@ -12,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronLeft, ChevronRight, Map, List, Compass, FolderOpen } from 'lucide-react'
 import { DocumentsView } from '@/components/documents-view'
+import type { DayItinerary } from '@/lib/itinerary-data'
 
 function getTripCountdown(
   tripStartDate: Date,
@@ -59,8 +63,12 @@ export default function HomePage() {
     importData,
     exportData,
     clearData,
+    updateItinerary,
     getCurrentDayIndex,
   } = useTripData()
+
+  const { isEditMode, toggleEditMode, saveField, restoreVersion, getVersionHistory } =
+    useItineraryEditor(itinerary, updateItinerary)
 
   const [selectedDay, setSelectedDay] = useState(0)
   const [activeTab, setActiveTab] = useState<'roadbook' | 'map' | 'documents'>('roadbook')
@@ -70,6 +78,41 @@ export default function HomePage() {
       setSelectedDay(getCurrentDayIndex())
     }
   }, [hasData, getCurrentDayIndex])
+
+  // Compute safeDay for use in callbacks (safe when itinerary is empty: returns -1 clamped to 0)
+  const safeDayIndex = itinerary.length > 0
+    ? Math.min(selectedDay, itinerary.length - 1)
+    : 0
+
+  const handleSaveField = useCallback(
+    async (
+      fieldKey: string,
+      previousValue: unknown,
+      updatedDay: DayItinerary,
+    ) => {
+      await saveField(safeDayIndex, fieldKey, previousValue, updatedDay)
+    },
+    [saveField, safeDayIndex],
+  )
+
+  const handleRestoreVersion = useCallback(
+    async (
+      fieldKey: string,
+      versionIndex: number,
+      currentValue: unknown,
+      applyFn: (d: DayItinerary, v: unknown) => DayItinerary,
+    ) => {
+      await restoreVersion(safeDayIndex, fieldKey, versionIndex, currentValue, applyFn)
+    },
+    [restoreVersion, safeDayIndex],
+  )
+
+  const handleGetVersionHistory = useCallback(
+    (fieldKey: string) => {
+      return getVersionHistory(safeDayIndex, fieldKey)
+    },
+    [getVersionHistory, safeDayIndex],
+  )
 
   if (isLoading) {
     return (
@@ -94,7 +137,7 @@ export default function HomePage() {
   }
 
   const countdown = getTripCountdown(tripStartDate, tripEndDate)
-  const safeDay = Math.min(selectedDay, itinerary.length - 1)
+  const safeDay = safeDayIndex
   const currentDay = itinerary[safeDay]
 
   const handlePrevDay = () => {
@@ -149,6 +192,9 @@ export default function HomePage() {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              {activeTab === 'roadbook' && (
+                <EditModeBar isEditMode={isEditMode} onToggle={toggleEditMode} />
+              )}
               <DataManager
                 onExport={exportData}
                 onImport={importData}
@@ -234,7 +280,18 @@ export default function HomePage() {
 
         {/* Content */}
         {activeTab === 'roadbook' ? (
-          <DayDetail day={currentDay} />
+          isEditMode ? (
+            <EditableDayDetail
+              day={currentDay}
+              dayIndex={safeDay}
+              isEditMode={isEditMode}
+              onSaveField={handleSaveField}
+              getVersionHistory={handleGetVersionHistory}
+              onRestoreVersion={handleRestoreVersion}
+            />
+          ) : (
+            <DayDetail day={currentDay} />
+          )
         ) : activeTab === 'map' ? (
           <div className="flex flex-col gap-4">
             <TripMap itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
