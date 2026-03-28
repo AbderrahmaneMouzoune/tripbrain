@@ -6,6 +6,7 @@ import {
   formatDate,
   getDayStatus,
   type DayItinerary,
+  type Activity,
 } from '@/lib/itinerary-data'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,6 +20,8 @@ import {
 } from '@/components/ui/carousel'
 import { Lightbox } from '@/components/lightbox'
 import { Badge } from '@/components/ui/badge'
+import { EditActivityDialog } from '@/components/edit-activity-dialog'
+import { EditDayDialog } from '@/components/edit-day-dialog'
 import {
   MapPin,
   Hotel,
@@ -39,10 +42,24 @@ import {
   Backpack,
   Lightbulb,
   Tag,
+  Pencil,
+  Trash2,
+  Plus,
+  Copy,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
 
 interface DayDetailProps {
   day: DayItinerary
+  editMode?: boolean
+  onUpdateDay?: (updates: Partial<DayItinerary>) => Promise<void>
+  onAddActivity?: (activity: Activity) => Promise<void>
+  onUpdateActivity?: (actIndex: number, activity: Activity) => Promise<void>
+  onDeleteActivity?: (actIndex: number) => Promise<void>
+  onDuplicateActivity?: (actIndex: number) => Promise<void>
+  onMoveActivityUp?: (actIndex: number) => Promise<void>
+  onMoveActivityDown?: (actIndex: number) => Promise<void>
 }
 
 function getActivityIcon(type: string) {
@@ -75,7 +92,17 @@ function getTransportIcon(type: string) {
   }
 }
 
-export function DayDetail({ day }: DayDetailProps) {
+export function DayDetail({
+  day,
+  editMode = false,
+  onUpdateDay,
+  onAddActivity,
+  onUpdateActivity,
+  onDeleteActivity,
+  onDuplicateActivity,
+  onMoveActivityUp,
+  onMoveActivityDown,
+}: DayDetailProps) {
   const status = getDayStatus(day.date)
   const images = day.accommodation?.images ?? []
   const dayImages = day.images ?? []
@@ -85,6 +112,11 @@ export function DayDetail({ day }: DayDetailProps) {
   const [accommodationLightboxOpen, setAccommodationLightboxOpen] =
     useState(false)
   const [dayLightboxOpen, setDayLightboxOpen] = useState(false)
+  const [editDayOpen, setEditDayOpen] = useState(false)
+  const [editActivityIndex, setEditActivityIndex] = useState<number | null>(
+    null,
+  )
+  const [addActivityOpen, setAddActivityOpen] = useState(false)
 
   const accommodationLightboxImages = images.map((src, i) => ({
     url: src,
@@ -124,6 +156,44 @@ export function DayDetail({ day }: DayDetailProps) {
         isOpen={dayLightboxOpen}
         onClose={() => setDayLightboxOpen(false)}
       />
+      {editMode && onUpdateDay && (
+        <EditDayDialog
+          open={editDayOpen}
+          day={day}
+          onClose={() => setEditDayOpen(false)}
+          onSave={async (updates) => {
+            await onUpdateDay(updates)
+            setEditDayOpen(false)
+          }}
+        />
+      )}
+      {editMode && (
+        <>
+          <EditActivityDialog
+            open={editActivityIndex !== null}
+            activity={
+              editActivityIndex !== null
+                ? day.activities[editActivityIndex]
+                : undefined
+            }
+            onClose={() => setEditActivityIndex(null)}
+            onSave={async (activity) => {
+              if (editActivityIndex !== null && onUpdateActivity) {
+                await onUpdateActivity(editActivityIndex, activity)
+              }
+              setEditActivityIndex(null)
+            }}
+          />
+          <EditActivityDialog
+            open={addActivityOpen}
+            onClose={() => setAddActivityOpen(false)}
+            onSave={async (activity) => {
+              if (onAddActivity) await onAddActivity(activity)
+              setAddActivityOpen(false)
+            }}
+          />
+        </>
+      )}
       <div className="animate-fade-up flex flex-col gap-5">
         {/* Header — editorial style */}
         <div className="border-border/60 flex flex-col gap-1.5 border-b pb-4">
@@ -159,12 +229,27 @@ export function DayDetail({ day }: DayDetailProps) {
               {formatDate(day.date)}
             </span>
           </div>
-          <h2 className="text-foreground font-display text-2xl leading-tight font-bold tracking-[0.03em]">
-            {day.title}
-          </h2>
-          <div className="text-muted-foreground flex items-center gap-1.5">
-            <MapPin className="text-secondary h-3.5 w-3.5" />
-            <span className="text-sm font-medium">{day.city}</span>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-foreground font-display text-2xl leading-tight font-bold tracking-[0.03em]">
+                {day.title}
+              </h2>
+              <div className="text-muted-foreground flex items-center gap-1.5">
+                <MapPin className="text-secondary h-3.5 w-3.5" />
+                <span className="text-sm font-medium">{day.city}</span>
+              </div>
+            </div>
+            {editMode && onUpdateDay && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 shrink-0 mt-1"
+                onClick={() => setEditDayOpen(true)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Modifier
+              </Button>
+            )}
           </div>
         </div>
 
@@ -434,7 +519,7 @@ export function DayDetail({ day }: DayDetailProps) {
                         <p className="text-foreground text-sm leading-snug font-semibold">
                           {activity.name}
                         </p>
-                        {activity.coordinates && (
+                        {!editMode && activity.coordinates && (
                           <a
                             href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}
                             target="_blank"
@@ -459,11 +544,82 @@ export function DayDetail({ day }: DayDetailProps) {
                           <span>{activity.duration}</span>
                         </div>
                       )}
+                      {editMode && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 px-2 text-xs"
+                            onClick={() => setEditActivityIndex(index)}
+                          >
+                            <Pencil className="h-3 w-3" />
+                            Modifier
+                          </Button>
+                          {onDuplicateActivity && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1 px-2 text-xs"
+                              onClick={() => onDuplicateActivity(index)}
+                            >
+                              <Copy className="h-3 w-3" />
+                              Dupliquer
+                            </Button>
+                          )}
+                          {onMoveActivityUp && index > 0 && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() => onMoveActivityUp(index)}
+                              title="Déplacer vers le haut"
+                            >
+                              <ArrowUp className="h-3 w-3" />
+                            </Button>
+                          )}
+                          {onMoveActivityDown &&
+                            index < day.activities.length - 1 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                onClick={() => onMoveActivityDown(index)}
+                                title="Déplacer vers le bas"
+                              >
+                                <ArrowDown className="h-3 w-3" />
+                              </Button>
+                            )}
+                          {onDeleteActivity && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-destructive hover:text-destructive h-7 w-7 p-0"
+                              onClick={() => onDeleteActivity(index)}
+                              title="Supprimer l'activité"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
               })}
             </div>
+            {editMode && onAddActivity && (
+              <div className="border-border/40 mt-3 border-t pt-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2"
+                  onClick={() => setAddActivityOpen(true)}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Ajouter une activité
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 

@@ -9,14 +9,23 @@ import {
 } from '@/lib/itinerary-data'
 
 const DB_NAME = 'tripbrain'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE_NAME = 'tripData'
 const DATA_KEY = 'current'
+const SNAPSHOTS_KEY = 'snapshots'
+const MAX_SNAPSHOTS = 20
 
 export interface TripData {
   itinerary: DayItinerary[]
   tripStartDate: string
   tripEndDate: string
+}
+
+export interface ItinerarySnapshot {
+  id: string
+  timestamp: number
+  label: string
+  itinerary: DayItinerary[]
 }
 
 function openDB(): Promise<IDBDatabase> {
@@ -86,6 +95,82 @@ export function useTripData() {
       tx.onerror = () => reject(tx.error)
     })
   }, [])
+
+  const updateItinerary = useCallback(
+    async (newItinerary: DayItinerary[]) => {
+      const data: TripData = {
+        itinerary: newItinerary,
+        tripStartDate: tripStartDate.toISOString().split('T')[0],
+        tripEndDate: tripEndDate.toISOString().split('T')[0],
+      }
+      await saveData(data)
+      setItinerary(newItinerary)
+    },
+    [tripStartDate, tripEndDate, saveData],
+  )
+
+  const saveSnapshot = useCallback(
+    async (label: string) => {
+      const db = await openDB()
+      const tx = db.transaction(STORE_NAME, 'readwrite')
+      const store = tx.objectStore(STORE_NAME)
+      const getReq = store.get(SNAPSHOTS_KEY)
+
+      return new Promise<void>((resolve) => {
+        getReq.onsuccess = () => {
+          const existing = (getReq.result as ItinerarySnapshot[]) ?? []
+          const now = Date.now()
+          const snapshot: ItinerarySnapshot = {
+            id: now.toString(),
+            timestamp: now,
+            label,
+            itinerary: JSON.parse(JSON.stringify(itinerary)) as DayItinerary[],
+          }
+          const updated = [snapshot, ...existing].slice(0, MAX_SNAPSHOTS)
+          store.put(updated, SNAPSHOTS_KEY)
+          tx.oncomplete = () => resolve()
+          tx.onerror = () => resolve()
+        }
+        getReq.onerror = () => resolve()
+      })
+    },
+    [itinerary],
+  )
+
+  const getSnapshots = useCallback(async (): Promise<ItinerarySnapshot[]> => {
+    try {
+      const db = await openDB()
+      const tx = db.transaction(STORE_NAME, 'readonly')
+      const store = tx.objectStore(STORE_NAME)
+      const request = store.get(SNAPSHOTS_KEY)
+
+      return new Promise((resolve) => {
+        request.onsuccess = () => {
+          resolve((request.result as ItinerarySnapshot[]) ?? [])
+        }
+        request.onerror = () => resolve([])
+      })
+    } catch {
+      return []
+    }
+  }, [])
+
+  const restoreSnapshot = useCallback(
+    async (id: string) => {
+      const snapshots = await getSnapshots()
+      const snapshot = snapshots.find((s) => s.id === id)
+      if (!snapshot) return
+
+      const data: TripData = {
+        itinerary: snapshot.itinerary,
+        tripStartDate: tripStartDate.toISOString().split('T')[0],
+        tripEndDate: tripEndDate.toISOString().split('T')[0],
+      }
+      await saveData(data)
+      setItinerary(snapshot.itinerary)
+    },
+    [getSnapshots, tripStartDate, tripEndDate, saveData],
+  )
 
   const loadMockData = useCallback(async () => {
     const data: TripData = {
@@ -183,5 +268,9 @@ export function useTripData() {
     exportData,
     clearData,
     getCurrentDayIndex,
+    updateItinerary,
+    saveSnapshot,
+    getSnapshots,
+    restoreSnapshot,
   }
 }

@@ -2,15 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import { useTripData } from '@/hooks/use-trip-data'
+import { useItineraryEditor } from '@/hooks/use-itinerary-editor'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
 import { TripMap } from '@/components/trip-map'
 import { ShareDialog } from '@/components/share-dialog'
 import { DataManager } from '@/components/data-manager'
 import { OnboardingScreen } from '@/components/onboarding-screen'
+import { VersionHistoryDialog } from '@/components/version-history-dialog'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ChevronLeft, ChevronRight, Map, List, Compass, FolderOpen } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Map, List, Compass, FolderOpen, Pencil, History } from 'lucide-react'
 import { DocumentsView } from '@/components/documents-view'
 
 function getTripCountdown(
@@ -60,10 +62,22 @@ export default function HomePage() {
     exportData,
     clearData,
     getCurrentDayIndex,
+    updateItinerary,
+    saveSnapshot,
+    getSnapshots,
+    restoreSnapshot,
   } = useTripData()
+
+  const editor = useItineraryEditor({
+    itinerary,
+    updateItinerary,
+    saveSnapshot,
+  })
 
   const [selectedDay, setSelectedDay] = useState(0)
   const [activeTab, setActiveTab] = useState<'roadbook' | 'map' | 'documents'>('roadbook')
+  const [editMode, setEditMode] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   useEffect(() => {
     if (hasData) {
@@ -107,6 +121,12 @@ export default function HomePage() {
 
   return (
     <main className="bg-background relative min-h-screen overflow-x-clip">
+      <VersionHistoryDialog
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        getSnapshots={getSnapshots}
+        onRestore={restoreSnapshot}
+      />
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="animate-sticker-float bg-primary/12 border-primary/30 absolute top-8 -left-8 h-24 w-24 rotate-12 rounded-2xl border-2" />
         <div className="animate-sticker-bounce bg-secondary/16 border-secondary/35 absolute top-16 right-3 h-20 w-20 -rotate-12 rounded-full border-2" />
@@ -149,6 +169,27 @@ export default function HomePage() {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <Button
+                variant={editMode ? 'default' : 'ghost'}
+                size="icon"
+                title={editMode ? 'Quitter le mode édition' : "Modifier l'itinéraire"}
+                onClick={() => {
+                  if (editMode) editor.resetSession()
+                  setEditMode((v) => !v)
+                }}
+              >
+                <Pencil className="h-5 w-5" />
+                <span className="sr-only">{editMode ? 'Quitter le mode édition' : "Modifier l'itinéraire"}</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                title="Historique des versions"
+                onClick={() => setHistoryOpen(true)}
+              >
+                <History className="h-5 w-5" />
+                <span className="sr-only">Historique des versions</span>
+              </Button>
               <DataManager
                 onExport={exportData}
                 onImport={importData}
@@ -159,6 +200,29 @@ export default function HomePage() {
           </div>
         </div>
       </header>
+
+      {/* Edit mode banner */}
+      {editMode && (
+        <div className="bg-primary/10 border-primary/30 border-b px-4 py-2">
+          <div className="mx-auto max-w-4xl flex items-center justify-between gap-3">
+            <p className="text-primary text-xs font-medium flex items-center gap-1.5">
+              <Pencil className="h-3.5 w-3.5" />
+              Mode édition actif — Les modifications sont sauvegardées automatiquement
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs border-primary/40 text-primary hover:bg-primary/10"
+              onClick={() => {
+                editor.resetSession()
+                setEditMode(false)
+              }}
+            >
+              Terminer
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Timeline */}
       <section className="border-border/60 bg-card/55 border-b backdrop-blur-md">
@@ -234,11 +298,51 @@ export default function HomePage() {
 
         {/* Content */}
         {activeTab === 'roadbook' ? (
-          <DayDetail day={currentDay} />
+          <DayDetail
+            day={currentDay}
+            editMode={editMode}
+            onUpdateDay={(updates) => editor.updateDay(safeDay, updates)}
+            onAddActivity={(activity) => editor.addActivity(safeDay, activity)}
+            onUpdateActivity={(actIndex, activity) =>
+              editor.updateActivity(safeDay, actIndex, activity)
+            }
+            onDeleteActivity={(actIndex) =>
+              editor.deleteActivity(safeDay, actIndex)
+            }
+            onDuplicateActivity={(actIndex) =>
+              editor.duplicateActivity(safeDay, actIndex)
+            }
+            onMoveActivityUp={(actIndex) =>
+              editor.moveActivityUp(safeDay, actIndex)
+            }
+            onMoveActivityDown={(actIndex) =>
+              editor.moveActivityDown(safeDay, actIndex)
+            }
+          />
         ) : activeTab === 'map' ? (
           <div className="flex flex-col gap-4">
             <TripMap itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
-            <DayDetail day={currentDay} />
+            <DayDetail
+              day={currentDay}
+              editMode={editMode}
+              onUpdateDay={(updates) => editor.updateDay(safeDay, updates)}
+              onAddActivity={(activity) => editor.addActivity(safeDay, activity)}
+              onUpdateActivity={(actIndex, activity) =>
+                editor.updateActivity(safeDay, actIndex, activity)
+              }
+              onDeleteActivity={(actIndex) =>
+                editor.deleteActivity(safeDay, actIndex)
+              }
+              onDuplicateActivity={(actIndex) =>
+                editor.duplicateActivity(safeDay, actIndex)
+              }
+              onMoveActivityUp={(actIndex) =>
+                editor.moveActivityUp(safeDay, actIndex)
+              }
+              onMoveActivityDown={(actIndex) =>
+                editor.moveActivityDown(safeDay, actIndex)
+              }
+            />
           </div>
         ) : (
           <DocumentsView />
