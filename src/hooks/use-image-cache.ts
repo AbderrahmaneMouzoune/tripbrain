@@ -73,6 +73,8 @@ export interface ImageCacheValue {
   stats: ImageCacheStats
   /** Re-attempt downloading all URLs that are currently in error state */
   retryErrors: () => void
+  /** Re-attempt downloading a single URL that is in error state */
+  retrySingle: (url: string) => void
 }
 
 // ─── IndexedDB helpers ────────────────────────────────────────────────────────
@@ -323,6 +325,57 @@ export function useImageCache(
     setRetryKey((k) => k + 1)
   }, [])
 
+  // ── Single-URL retry ─────────────────────────────────────────────────────────
+  // Allows the UI to re-download one specific image that failed, without
+  // restarting all other errors.
+  const [singleRetryTarget, setSingleRetryTarget] = useState<{
+    url: string
+    nonce: number
+  } | null>(null)
+
+  useEffect(() => {
+    if (!singleRetryTarget) return
+    const { url } = singleRetryTarget
+    let cancelled = false
+    const localObjectUrls: string[] = []
+
+    setStatuses((prev) => ({ ...prev, [url]: 'pending' }))
+
+    async function downloadOne(): Promise<void> {
+      if (cancelled) return
+      setStatuses((prev) => ({ ...prev, [url]: 'downloading' }))
+      try {
+        const res = await fetch(url)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const blob = await res.blob()
+        await saveBlobToDB(url, blob)
+        if (cancelled) return
+        const objectUrl = URL.createObjectURL(blob)
+        localObjectUrls.push(objectUrl)
+        setCachedSrcs((prev) => ({ ...prev, [url]: objectUrl }))
+        setStatuses((prev) => ({ ...prev, [url]: 'cached' }))
+      } catch {
+        if (!cancelled) {
+          setStatuses((prev) => ({ ...prev, [url]: 'error' }))
+        }
+      }
+    }
+
+    downloadOne()
+
+    return () => {
+      cancelled = true
+      for (const objectUrl of localObjectUrls) {
+        URL.revokeObjectURL(objectUrl)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [singleRetryTarget])
+
+  const retrySingle = useCallback((url: string) => {
+    setSingleRetryTarget((prev) => ({ url, nonce: (prev?.nonce ?? 0) + 1 }))
+  }, [])
+
   const stats: ImageCacheStats = {
     total: Object.keys(statuses).length,
     cached: Object.values(statuses).filter((s) => s === 'cached').length,
@@ -332,5 +385,5 @@ export function useImageCache(
     error: Object.values(statuses).filter((s) => s === 'error').length,
   }
 
-  return { statuses, cachedSrcs, stats, retryErrors }
+  return { statuses, cachedSrcs, stats, retryErrors, retrySingle }
 }

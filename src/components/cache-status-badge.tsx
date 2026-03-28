@@ -1,15 +1,83 @@
 'use client'
 
 import { type ReactNode, useState, useEffect } from 'react'
-import { CloudDownload, CheckCircle2, AlertCircle, WifiOff, RefreshCw, X, ChevronDown, ChevronUp } from 'lucide-react'
+import {
+  CloudDownload,
+  CheckCircle2,
+  AlertCircle,
+  WifiOff,
+  RefreshCw,
+  X,
+  ImageOff,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Progress } from '@/components/ui/progress'
 import { useImageCacheContext } from '@/components/image-cache-provider'
+import type { ImageStatus } from '@/hooks/use-image-cache'
+
+/**
+ * Small thumbnail that renders the image's original URL.
+ * Falls back to an icon when the network is unavailable.
+ */
+function ImagePreview({ url }: { url: string }) {
+  const [errored, setErrored] = useState(false)
+  return errored ? (
+    <div className="bg-muted flex h-12 w-12 shrink-0 items-center justify-center rounded">
+      <ImageOff className="text-muted-foreground h-5 w-5" />
+    </div>
+  ) : (
+    <img
+      src={url}
+      alt=""
+      className="h-12 w-12 shrink-0 rounded object-cover"
+      onError={() => setErrored(true)}
+    />
+  )
+}
+
+/**
+ * Per-image status indicator + retry button shown in the error dialog.
+ */
+function ImageRowActions({
+  url,
+  status,
+  onRetry,
+}: {
+  url: string
+  status: ImageStatus
+  onRetry: (url: string) => void
+}) {
+  if (status === 'cached') {
+    return <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" strokeWidth={1.75} />
+  }
+  if (status === 'downloading' || status === 'pending') {
+    return <RefreshCw className="text-muted-foreground h-4 w-4 shrink-0 animate-spin" />
+  }
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="h-7 gap-1 px-2 text-xs"
+      onClick={() => onRetry(url)}
+    >
+      <RefreshCw className="h-3 w-3" />
+      Réessayer
+    </Button>
+  )
+}
 
 /**
  * Compact header badge that reflects the current state of the image cache.
@@ -22,11 +90,11 @@ import { useImageCacheContext } from '@/components/image-cache-provider'
  * | Some errors, rest cached | Alert circle        | amber   |
  */
 export function CacheStatusBadge() {
-  const { stats, statuses, retryErrors } = useImageCacheContext()
+  const { stats, statuses, retryErrors, retrySingle } = useImageCacheContext()
   const [dismissed, setDismissed] = useState(false)
   const [open, setOpen] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
-  const [showUrls, setShowUrls] = useState(false)
 
   const isActive = stats.downloading > 0 || stats.pending > 0
   const allCached = stats.cached === stats.total && stats.error === 0
@@ -39,12 +107,31 @@ export function CacheStatusBadge() {
     if (retrying && isActive) setRetrying(false)
   }, [retrying, isActive])
 
+  // Close the dialog automatically when all errors are resolved
+  useEffect(() => {
+    if (dialogOpen && stats.error === 0 && !isActive) setDialogOpen(false)
+  }, [dialogOpen, stats.error, isActive])
+
   if (stats.total === 0) return null
   if (dismissed && hasErrors) return null
 
   const errorUrls = Object.entries(statuses)
     .filter(([, s]) => s === 'error')
     .map(([url]) => url)
+
+  // URLs that are currently being retried (pending/downloading) but were
+  // previously in error — still shown in the dialog until resolved
+  const retryingUrls = Object.entries(statuses)
+    .filter(([, s]) => s === 'downloading' || s === 'pending')
+    .map(([url]) => url)
+
+  // Full list shown in dialog: errors + currently-retrying + just-resolved (cached)
+  // We keep a stable list by including any URL that was touched by a retry.
+  // The simplest approach: show all non-pending-from-initial-load URLs that are not
+  // in a 'pending' state originating from the initial load.
+  // For simplicity, just show current errorUrls + retryingUrls (dialog stays open
+  // while retry is in progress thanks to the effect above).
+  const dialogUrls = [...new Set([...errorUrls, ...retryingUrls])]
 
   let trigger: ReactNode
   let popoverContent: ReactNode
@@ -137,41 +224,18 @@ export function CacheStatusBadge() {
             </span>
           </p>
         </div>
-        {/* Collapsible URL list */}
-        <button
-          className="text-muted-foreground flex items-center gap-1 text-xs underline-offset-2 hover:underline"
-          onClick={() => setShowUrls((v) => !v)}
-        >
-          {showUrls ? (
-            <ChevronUp className="h-3 w-3" />
-          ) : (
-            <ChevronDown className="h-3 w-3" />
-          )}
-          {showUrls ? 'Masquer les URLs' : 'Voir les URLs en erreur'}
-        </button>
-        {showUrls && (
-          <ul className="bg-muted max-h-32 overflow-y-auto rounded p-2">
-            {errorUrls.map((url) => (
-              <li key={url} className="text-muted-foreground break-all py-0.5 text-[10px]">
-                {url}
-              </li>
-            ))}
-          </ul>
-        )}
         <div className="flex gap-2 pt-1">
           <Button
             size="sm"
             variant="outline"
             className="h-7 flex-1 gap-1.5 text-xs"
-            disabled={retrying}
             onClick={() => {
-              setRetrying(true)
-              retryErrors()
-              // keep popover open so the user sees the transition to downloading
+              setOpen(false)
+              setDialogOpen(true)
             }}
           >
-            <RefreshCw className={`h-3 w-3 ${retrying ? 'animate-spin' : ''}`} />
-            {retrying ? 'Reprise…' : 'Réessayer'}
+            <AlertCircle className="h-3 w-3" />
+            Voir le détail
           </Button>
           <Button
             size="sm"
@@ -193,11 +257,76 @@ export function CacheStatusBadge() {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent align="end" className="w-72 text-sm">
-        {popoverContent}
-      </PopoverContent>
-    </Popover>
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
+        <PopoverContent align="end" className="w-72 text-sm">
+          {popoverContent}
+        </PopoverContent>
+      </Popover>
+
+      {/* Error detail dialog — only rendered in the error state */}
+      {hasErrors || dialogOpen ? (
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-xl">
+            <DialogHeader className="border-b px-6 py-4">
+              <DialogTitle className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" strokeWidth={1.75} />
+                Images non disponibles
+              </DialogTitle>
+              <DialogDescription>
+                {stats.error} image{stats.error > 1 ? 's' : ''} n&apos;ont pas pu être
+                téléchargées. Vérifiez votre connexion, puis réessayez.
+              </DialogDescription>
+            </DialogHeader>
+
+            <ul className="flex-1 overflow-y-auto divide-y px-6">
+              {dialogUrls.map((url) => {
+                const status = statuses[url] ?? 'error'
+                return (
+                  <li key={url} className="flex items-center gap-3 py-3">
+                    <ImagePreview url={url} />
+                    <p className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
+                      {url}
+                    </p>
+                    <ImageRowActions
+                      url={url}
+                      status={status}
+                      onRetry={retrySingle}
+                    />
+                  </li>
+                )
+              })}
+            </ul>
+
+            <DialogFooter className="border-t px-6 py-4">
+              <Button
+                variant="ghost"
+                className="text-muted-foreground gap-1.5 text-sm"
+                onClick={() => {
+                  setDismissed(true)
+                  setDialogOpen(false)
+                }}
+              >
+                <X className="h-4 w-4" />
+                Ignorer
+              </Button>
+              <Button
+                variant="outline"
+                disabled={retrying}
+                className="gap-1.5 text-sm"
+                onClick={() => {
+                  setRetrying(true)
+                  retryErrors()
+                }}
+              >
+                <RefreshCw className={`h-4 w-4 ${retrying ? 'animate-spin' : ''}`} />
+                {retrying ? 'Reprise…' : 'Réessayer tout'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </>
   )
 }
