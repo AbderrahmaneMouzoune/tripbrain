@@ -39,6 +39,8 @@ import {
   Backpack,
   Lightbulb,
   Tag,
+  Copy,
+  Check,
 } from 'lucide-react'
 
 interface DayDetailProps {
@@ -85,6 +87,22 @@ export function DayDetail({ day }: DayDetailProps) {
   const [accommodationLightboxOpen, setAccommodationLightboxOpen] =
     useState(false)
   const [dayLightboxOpen, setDayLightboxOpen] = useState(false)
+  const [copiedName, setCopiedName] = useState(false)
+  const [copiedAddress, setCopiedAddress] = useState(false)
+
+  const handleCopyName = async () => {
+    if (!day.accommodation) return
+    await navigator.clipboard.writeText(day.accommodation.name)
+    setCopiedName(true)
+    setTimeout(() => setCopiedName(false), 2000)
+  }
+
+  const handleCopyAddress = async () => {
+    if (!day.accommodation) return
+    await navigator.clipboard.writeText(day.accommodation.address)
+    setCopiedAddress(true)
+    setTimeout(() => setCopiedAddress(false), 2000)
+  }
 
   const accommodationLightboxImages = images.map((src, i) => ({
     url: src,
@@ -375,18 +393,44 @@ export function DayDetail({ day }: DayDetailProps) {
                   <p className="text-foreground text-sm leading-snug font-semibold">
                     {day.accommodation.name}
                   </p>
-                  <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(day.accommodation.name + ' ' + day.accommodation.address)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pr-1.5 transition-colors"
-                  >
-                    <Navigation className="h-3.5 w-3.5" strokeWidth={1.5} />
-                  </a>
+                  <div className="mt-0.5 flex shrink-0 items-center gap-1 pr-1.5">
+                    <button
+                      onClick={handleCopyName}
+                      className="text-muted-foreground/50 hover:text-primary transition-colors"
+                      title="Copier le nom"
+                    >
+                      {copiedName ? (
+                        <Check className="h-3.5 w-3.5 text-green-500" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      )}
+                    </button>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(day.accommodation.name + ' ' + day.accommodation.address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-muted-foreground/50 hover:text-primary transition-colors"
+                    >
+                      <Navigation className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    </a>
+                  </div>
                 </div>
-                <p className="text-muted-foreground text-xs">
-                  {day.accommodation.address}
-                </p>
+                <div className="flex items-center gap-1">
+                  <p className="text-muted-foreground min-w-0 flex-1 text-xs">
+                    {day.accommodation.address}
+                  </p>
+                  <button
+                    onClick={handleCopyAddress}
+                    className="text-muted-foreground/50 hover:text-primary shrink-0 pr-1.5 transition-colors"
+                    title="Copier l'adresse"
+                  >
+                    {copiedAddress ? (
+                      <Check className="h-3 w-3 text-green-500" />
+                    ) : (
+                      <Copy className="h-3 w-3" strokeWidth={1.5} />
+                    )}
+                  </button>
+                </div>
                 {day.accommodation.bookingUrl && (
                   <a
                     href={day.accommodation.bookingUrl}
