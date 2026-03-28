@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useTripData } from '@/hooks/use-trip-data'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
-import { TripMap } from '@/components/trip-map'
+import { ImmersiveMap } from '@/components/immersive-map'
 import { ShareDialog } from '@/components/share-dialog'
 import { DataManager } from '@/components/data-manager'
 import { OnboardingScreen } from '@/components/onboarding-screen'
@@ -235,19 +235,13 @@ export default function HomePage() {
         {/* Content */}
         {activeTab === 'roadbook' ? (
           <DayDetail day={currentDay} />
-        ) : activeTab === 'map' ? (
-          <div className="flex flex-col gap-4">
-            <TripMap itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
-            <DayDetail day={currentDay} />
-          </div>
-        ) : (
+        ) : activeTab === 'map' ? null : (
           <DocumentsView />
         )}
       </div>
 
       {/* Mobile bottom nav spacer */}
       <div className="h-20 mb-[env(safe-area-inset-bottom)] [@media(display-mode:standalone)]:mb-[calc(env(safe-area-inset-bottom)+1.5rem)] md:hidden" />
-
       {/* Mobile bottom navigation */}
       <nav
         className="bg-card/85 border-border/60 fixed right-0 bottom-0 left-0 z-40 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-xl [@media(display-mode:standalone)]:pb-[calc(env(safe-area-inset-bottom)+1.5rem)] md:hidden"
@@ -311,6 +305,16 @@ export default function HomePage() {
         </div>
       </nav>
       </div>
+
+      {/* Immersive full-screen map (rendered as fixed overlay) */}
+      {activeTab === 'map' && (
+        <ImmersiveMap
+          itinerary={itinerary}
+          selectedDay={selectedDay}
+          onSelectDay={setSelectedDay}
+          onClose={() => setActiveTab('roadbook')}
+        />
+      )}
     </main>
   )
 }
