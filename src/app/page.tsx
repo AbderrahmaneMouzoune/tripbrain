@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useTripData } from '@/hooks/use-trip-data'
+import { useItineraryEditor } from '@/hooks/use-itinerary-editor'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
+import { EditableDayDetail } from '@/components/editable-day-detail'
+import { EditModeBar } from '@/components/edit-mode-bar'
 import { TripMap } from '@/components/trip-map'
 import { ShareDialog } from '@/components/share-dialog'
 import { DataManager } from '@/components/data-manager'
@@ -59,8 +62,11 @@ export default function HomePage() {
     importData,
     exportData,
     clearData,
+    saveItinerary,
     getCurrentDayIndex,
   } = useTripData()
+
+  const editor = useItineraryEditor(itinerary, saveItinerary)
 
   const [selectedDay, setSelectedDay] = useState(0)
   const [activeTab, setActiveTab] = useState<'roadbook' | 'map' | 'documents'>('roadbook')
@@ -93,16 +99,17 @@ export default function HomePage() {
     )
   }
 
+  const displayItinerary = editor.isEditMode ? editor.draftItinerary : itinerary
   const countdown = getTripCountdown(tripStartDate, tripEndDate)
-  const safeDay = Math.min(selectedDay, itinerary.length - 1)
-  const currentDay = itinerary[safeDay]
+  const safeDay = Math.min(selectedDay, displayItinerary.length - 1)
+  const currentDay = displayItinerary[safeDay]
 
   const handlePrevDay = () => {
     setSelectedDay((prev) => Math.max(0, prev - 1))
   }
 
   const handleNextDay = () => {
-    setSelectedDay((prev) => Math.min(itinerary.length - 1, prev + 1))
+    setSelectedDay((prev) => Math.min(displayItinerary.length - 1, prev + 1))
   }
 
   return (
@@ -149,21 +156,42 @@ export default function HomePage() {
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <DataManager
-                onExport={exportData}
-                onImport={importData}
-                onClear={clearData}
+              <EditModeBar
+                isEditMode={editor.isEditMode}
+                isDirty={editor.isDirty}
+                versions={editor.versions}
+                onEnterEdit={editor.enterEditMode}
+                onValidate={editor.validateEdit}
+                onCancel={editor.cancelEdit}
+                onRestoreVersion={editor.restoreVersion}
               />
-              <ShareDialog itinerary={itinerary} selectedDay={selectedDay} />
+              {!editor.isEditMode && (
+                <>
+                  <DataManager
+                    onExport={exportData}
+                    onImport={importData}
+                    onClear={clearData}
+                  />
+                  <ShareDialog itinerary={itinerary} selectedDay={selectedDay} />
+                </>
+              )}
             </div>
           </div>
         </div>
+        {/* Edit mode banner */}
+        {editor.isEditMode && (
+          <div className="border-border/40 bg-amber-500/8 border-t px-4 py-1.5">
+            <p className="text-muted-foreground mx-auto max-w-4xl text-center text-[11px] font-medium tracking-wide">
+              Mode édition — modifiez librement l'itinéraire, puis validez pour sauvegarder
+            </p>
+          </div>
+        )}
       </header>
 
       {/* Timeline */}
       <section className="border-border/60 bg-card/55 border-b backdrop-blur-md">
         <div className="mx-auto max-w-4xl">
-          <Timeline itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
+          <Timeline itinerary={displayItinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
         </div>
       </section>
 
@@ -223,7 +251,7 @@ export default function HomePage() {
               variant="outline"
               size="sm"
               onClick={handleNextDay}
-              disabled={selectedDay === itinerary.length - 1}
+              disabled={selectedDay === displayItinerary.length - 1}
               className="border-border/70 hover:bg-muted/60 gap-1"
             >
               <span className="hidden sm:inline">Suivant</span>
@@ -234,11 +262,53 @@ export default function HomePage() {
 
         {/* Content */}
         {activeTab === 'roadbook' ? (
-          <DayDetail day={currentDay} />
+          editor.isEditMode ? (
+            <EditableDayDetail
+              day={currentDay}
+              isDirty={editor.dirtyDayIndices.has(safeDay)}
+              onUpdateDay={(updates) => editor.updateDay(safeDay, updates)}
+              onUpdateActivity={(actIdx, updates) =>
+                editor.updateActivity(safeDay, actIdx, updates)
+              }
+              onAddActivity={() => editor.addActivity(safeDay)}
+              onRemoveActivity={(actIdx) =>
+                editor.removeActivity(safeDay, actIdx)
+              }
+              onDuplicateActivity={(actIdx) =>
+                editor.duplicateActivity(safeDay, actIdx)
+              }
+              onMoveActivity={(from, to) =>
+                editor.moveActivity(safeDay, from, to)
+              }
+            />
+          ) : (
+            <DayDetail day={currentDay} />
+          )
         ) : activeTab === 'map' ? (
           <div className="flex flex-col gap-4">
-            <TripMap itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
-            <DayDetail day={currentDay} />
+            <TripMap itinerary={displayItinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
+            {editor.isEditMode ? (
+              <EditableDayDetail
+                day={currentDay}
+                isDirty={editor.dirtyDayIndices.has(safeDay)}
+                onUpdateDay={(updates) => editor.updateDay(safeDay, updates)}
+                onUpdateActivity={(actIdx, updates) =>
+                  editor.updateActivity(safeDay, actIdx, updates)
+                }
+                onAddActivity={() => editor.addActivity(safeDay)}
+                onRemoveActivity={(actIdx) =>
+                  editor.removeActivity(safeDay, actIdx)
+                }
+                onDuplicateActivity={(actIdx) =>
+                  editor.duplicateActivity(safeDay, actIdx)
+                }
+                onMoveActivity={(from, to) =>
+                  editor.moveActivity(safeDay, from, to)
+                }
+              />
+            ) : (
+              <DayDetail day={currentDay} />
+            )}
           </div>
         ) : (
           <DocumentsView />
@@ -300,7 +370,7 @@ export default function HomePage() {
             variant="ghost"
             size="sm"
             onClick={handleNextDay}
-            disabled={selectedDay === itinerary.length - 1 || activeTab === 'documents'}
+            disabled={selectedDay === displayItinerary.length - 1 || activeTab === 'documents'}
             className={`h-auto flex-col gap-0.5 py-2 ${activeTab === 'documents' ? 'pointer-events-none opacity-0' : ''}`}
             aria-hidden={activeTab === 'documents'}
             tabIndex={activeTab === 'documents' ? -1 : undefined}
