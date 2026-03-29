@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronLeft, ChevronRight, Map, List, Compass, FolderOpen } from 'lucide-react'
 import { DocumentsView } from '@/components/documents-view'
+import { EditDayDialog } from '@/components/edit-day-dialog'
 
 function getTripCountdown(
   tripStartDate: Date,
@@ -59,6 +60,7 @@ export default function HomePage() {
     importData,
     exportData,
     clearData,
+    updateDay,
     getCurrentDayIndex,
   } = useTripData()
 
@@ -234,7 +236,16 @@ export default function HomePage() {
 
         {/* Content */}
         {activeTab === 'roadbook' ? (
-          <DayDetail day={currentDay} />
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-end">
+              <EditDayDialog
+                day={currentDay}
+                dayIndex={safeDay}
+                onSave={updateDay}
+              />
+            </div>
+            <DayDetail day={currentDay} />
+          </div>
         ) : activeTab === 'map' ? (
           <div className="flex flex-col gap-4">
             <TripMap itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />

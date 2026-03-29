@@ -150,6 +150,22 @@ export function useTripData() {
     setHasData(false)
   }, [])
 
+  const updateDay = useCallback(
+    async (dayIndex: number, updatedDay: DayItinerary) => {
+      const newItinerary = itinerary.map((day, i) =>
+        i === dayIndex ? updatedDay : day,
+      )
+      const data: TripData = {
+        itinerary: newItinerary,
+        tripStartDate: tripStartDate.toISOString().split('T')[0],
+        tripEndDate: tripEndDate.toISOString().split('T')[0],
+      }
+      await saveData(data)
+      setItinerary(newItinerary)
+    },
+    [itinerary, tripStartDate, tripEndDate, saveData],
+  )
+
   const getCurrentDayIndex = useCallback((): number => {
     if (itinerary.length === 0) return 0
 
@@ -182,6 +198,7 @@ export function useTripData() {
     importData,
     exportData,
     clearData,
+    updateDay,
     getCurrentDayIndex,
   }
 }
