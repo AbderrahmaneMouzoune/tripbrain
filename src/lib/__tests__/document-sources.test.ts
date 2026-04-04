@@ -2,8 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   SOURCE_CATEGORIES,
   CATEGORY_COLOR_CLASSES,
-  type SourceCategory,
-  type Source,
 } from '../document-sources'
 
 describe('SOURCE_CATEGORIES', () => {
