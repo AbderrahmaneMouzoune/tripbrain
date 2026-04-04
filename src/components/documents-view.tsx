@@ -67,6 +67,14 @@ type SortField = 'name' | 'size' | 'addedAt'
 type SortOrder = 'asc' | 'desc'
 type ViewMode = 'grid' | 'list'
 
+const VIEW_MODE_STORAGE_KEY = 'tripbrain:documents-view-mode'
+
+function getSavedViewMode(): ViewMode {
+  if (typeof window === 'undefined') return 'grid'
+  const saved = localStorage.getItem(VIEW_MODE_STORAGE_KEY)
+  return saved === 'list' ? 'list' : 'grid'
+}
+
 // ---------------------------------------------------------------------------
 // DocumentSourcesDrawer
 // ---------------------------------------------------------------------------
@@ -523,7 +531,11 @@ export function DocumentsView() {
   const [search, setSearch] = useState('')
   const [sortField, setSortField] = useState<SortField>('addedAt')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
-  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const [viewMode, setViewMode] = useState<ViewMode>(getSavedViewMode)
+  const changeViewMode = (mode: ViewMode) => {
+    setViewMode(mode)
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode)
+  }
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(false)
@@ -898,7 +910,7 @@ export function DocumentsView() {
                   variant={viewMode === 'grid' ? 'default' : 'ghost'}
                   size="icon"
                   className="h-8 w-8 rounded-none"
-                  onClick={() => setViewMode('grid')}
+                  onClick={() => changeViewMode('grid')}
                 >
                   <LayoutGrid className="h-3.5 w-3.5" />
                   <span className="sr-only">Vue grille</span>
@@ -907,7 +919,7 @@ export function DocumentsView() {
                   variant={viewMode === 'list' ? 'default' : 'ghost'}
                   size="icon"
                   className="h-8 w-8 rounded-none border-l"
-                  onClick={() => setViewMode('list')}
+                  onClick={() => changeViewMode('list')}
                 >
                   <LayoutList className="h-3.5 w-3.5" />
                   <span className="sr-only">Vue liste</span>
