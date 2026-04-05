@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import type { ImgHTMLAttributes } from 'react'
 import { ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useImageCacheContext } from '@/components/image-cache-provider'
 
-interface CachedImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
+interface CachedImageProps extends ImgHTMLAttributes<HTMLImageElement> {
   src: string
   alt: string
   /** Optional className applied to the fallback placeholder (defaults to `className`) */
