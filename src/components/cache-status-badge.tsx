@@ -1,6 +1,6 @@
 'use client'
 
-import { type ReactNode, useState, useEffect } from 'react'
+import { type ReactNode, useState, useEffect, useRef } from 'react'
 import {
   CloudDownload,
   CheckCircle2,
@@ -95,6 +95,9 @@ export function CacheStatusBadge() {
   const [open, setOpen] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  // Tracks whether the retry has actually entered the active-download phase so
+  // we don't clear the spinner prematurely (before downloads start).
+  const retryStarted = useRef(false)
 
   const isActive = stats.downloading > 0 || stats.pending > 0
   const allCached = stats.cached === stats.total && stats.error === 0
@@ -102,9 +105,17 @@ export function CacheStatusBadge() {
   const hasErrors = stats.error > 0 && !isActive
   const progress = stats.total > 0 ? Math.round((stats.cached / stats.total) * 100) : 0
 
-  // Clear the retrying flag as soon as the hook transitions into active download
+  // Keep the retrying spinner on until the retry actually finishes.
+  // Phase 1 (isActive=true)  → record that downloads started.
+  // Phase 2 (isActive=false) → clear retrying now that they have finished.
   useEffect(() => {
-    if (retrying && isActive) setRetrying(false)
+    if (retrying && isActive) {
+      retryStarted.current = true
+    }
+    if (retrying && retryStarted.current && !isActive) {
+      setRetrying(false)
+      retryStarted.current = false
+    }
   }, [retrying, isActive])
 
   // Close the dialog automatically when all errors are resolved
