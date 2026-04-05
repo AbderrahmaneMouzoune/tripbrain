@@ -9,6 +9,7 @@ import {
   type DayItinerary,
   type Activity,
   type Accommodation,
+  type Transport,
 } from '../itinerary-data'
 
 // ---------------------------------------------------------------------------
@@ -133,6 +134,8 @@ describe('itinerary data structure', () => {
 
   it('every day has required fields', () => {
     for (const day of itinerary) {
+      expect(typeof day.id).toBe('string')
+      expect(day.id.length).toBeGreaterThan(0)
       expect(typeof day.date).toBe('string')
       expect(typeof day.dayNumber).toBe('number')
       expect(typeof day.city).toBe('string')
@@ -202,12 +205,232 @@ describe('itinerary data structure', () => {
     for (const day of itinerary) {
       if (day.accommodation) {
         const acc: Accommodation = day.accommodation
+        expect(typeof acc.id).toBe('string')
+        expect(acc.id.length).toBeGreaterThan(0)
         expect(typeof acc.name).toBe('string')
         expect(typeof acc.address).toBe('string')
         expect(typeof acc.bookingUrl).toBe('string')
         expect(typeof acc.checkIn).toBe('string')
         expect(typeof acc.checkOut).toBe('string')
       }
+    }
+  })
+
+  it('every activity has a required id field', () => {
+    for (const day of itinerary) {
+      for (const activity of day.activities) {
+        expect(typeof activity.id).toBe('string')
+        expect(activity.id.length).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('transport has a required id field when present', () => {
+    for (const day of itinerary) {
+      if (day.transport) {
+        const tr: Transport = day.transport
+        expect(typeof tr.id).toBe('string')
+        expect(tr.id.length).toBeGreaterThan(0)
+      }
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Enriched entity tests (new fields)
+// ---------------------------------------------------------------------------
+
+describe('enriched Activity with booking and price', () => {
+  const bookedActivity: Activity = {
+    id: 'act-test-1',
+    name: 'Grande Muraille Mutianyu',
+    type: 'visit',
+    duration: '4h',
+    coordinates: [40.4319, 116.5704],
+    bookingUrl: 'https://example.com/great-wall-ticket',
+    reservationRequired: true,
+    price: 40,
+    currency: 'CNY',
+    startTime: '09:00',
+    endTime: '13:00',
+    address: 'Mutianyu, Huairou District, Beijing',
+    rating: 4.8,
+    tags: ['UNESCO', 'outdoor', 'hiking'],
+    crowdLevel: 'high',
+    status: 'planned',
+    tips: 'Arrive early to avoid crowds',
+    source: 'ai',
+    priority: 'must',
+  }
+
+  it('accepts all optional booking and price fields', () => {
+    expect(bookedActivity.id).toBe('act-test-1')
+    expect(bookedActivity.bookingUrl).toBe('https://example.com/great-wall-ticket')
+    expect(bookedActivity.reservationRequired).toBe(true)
+    expect(bookedActivity.price).toBe(40)
+    expect(bookedActivity.currency).toBe('CNY')
+  })
+
+  it('accepts timing fields', () => {
+    expect(bookedActivity.startTime).toBe('09:00')
+    expect(bookedActivity.endTime).toBe('13:00')
+  })
+
+  it('accepts context fields', () => {
+    expect(bookedActivity.rating).toBe(4.8)
+    expect(bookedActivity.tags).toEqual(['UNESCO', 'outdoor', 'hiking'])
+    expect(bookedActivity.crowdLevel).toBe('high')
+  })
+
+  it('accepts valid status values', () => {
+    const statuses: Activity['status'][] = ['planned', 'done', 'skipped']
+    for (const status of statuses) {
+      expect(statuses).toContain(status)
+    }
+    expect(bookedActivity.status).toBe('planned')
+  })
+
+  it('accepts source and priority metadata', () => {
+    expect(bookedActivity.source).toBe('ai')
+    expect(bookedActivity.priority).toBe('must')
+  })
+})
+
+describe('enriched Transport with full booking info', () => {
+  const bookedTransport: Transport = {
+    id: 'tr-test-1',
+    type: 'train',
+    from: 'Shanghai',
+    to: 'Beijing',
+    details: 'G2 High-Speed',
+    departureTime: '08:00',
+    arrivalTime: '12:30',
+    duration: '4h30',
+    provider: 'China Railway',
+    bookingUrl: 'https://www.12306.cn',
+    bookingReference: 'G2-20260511-SH-BJ',
+    price: 553,
+    currency: 'CNY',
+    seat: '5C',
+    gate: 'G12',
+    terminal: 'T1',
+    status: 'booked',
+    notes: 'Business class seat',
+    source: 'import',
+    priority: 'must',
+  }
+
+  it('accepts all required transport fields', () => {
+    expect(bookedTransport.id).toBe('tr-test-1')
+    expect(bookedTransport.type).toBe('train')
+    expect(bookedTransport.from).toBe('Shanghai')
+    expect(bookedTransport.to).toBe('Beijing')
+  })
+
+  it('accepts timing fields', () => {
+    expect(bookedTransport.departureTime).toBe('08:00')
+    expect(bookedTransport.arrivalTime).toBe('12:30')
+    expect(bookedTransport.duration).toBe('4h30')
+  })
+
+  it('accepts full booking info', () => {
+    expect(bookedTransport.provider).toBe('China Railway')
+    expect(bookedTransport.bookingUrl).toBe('https://www.12306.cn')
+    expect(bookedTransport.bookingReference).toBe('G2-20260511-SH-BJ')
+  })
+
+  it('accepts pricing fields', () => {
+    expect(bookedTransport.price).toBe(553)
+    expect(bookedTransport.currency).toBe('CNY')
+  })
+
+  it('accepts travel info fields', () => {
+    expect(bookedTransport.seat).toBe('5C')
+    expect(bookedTransport.gate).toBe('G12')
+    expect(bookedTransport.terminal).toBe('T1')
+  })
+
+  it('accepts valid status values', () => {
+    const statuses: Transport['status'][] = ['planned', 'booked', 'checked-in', 'completed']
+    for (const status of statuses) {
+      expect(statuses).toContain(status)
+    }
+    expect(bookedTransport.status).toBe('booked')
+  })
+
+  it('accepts source and priority metadata', () => {
+    expect(bookedTransport.source).toBe('import')
+    expect(bookedTransport.priority).toBe('must')
+  })
+})
+
+describe('enriched Accommodation with new fields', () => {
+  const bookedAccommodation: Accommodation = {
+    id: 'acc-test-1',
+    name: 'The Peninsula Shanghai',
+    address: '32 The Bund, Shanghai',
+    bookingUrl: 'https://example.com/peninsula',
+    checkIn: '2026-05-10',
+    checkOut: '2026-05-12',
+    price: 1200,
+    currency: 'CNY',
+    bookingReference: 'PEN-SH-20260510',
+    status: 'booked',
+    source: 'user',
+    priority: 'must',
+  }
+
+  it('accepts pricing fields', () => {
+    expect(bookedAccommodation.price).toBe(1200)
+    expect(bookedAccommodation.currency).toBe('CNY')
+  })
+
+  it('accepts booking reference', () => {
+    expect(bookedAccommodation.bookingReference).toBe('PEN-SH-20260510')
+  })
+
+  it('accepts valid status values', () => {
+    const statuses: Accommodation['status'][] = ['planned', 'booked', 'checked-in', 'completed']
+    for (const status of statuses) {
+      expect(statuses).toContain(status)
+    }
+    expect(bookedAccommodation.status).toBe('booked')
+  })
+
+  it('accepts source and priority metadata', () => {
+    expect(bookedAccommodation.source).toBe('user')
+    expect(bookedAccommodation.priority).toBe('must')
+  })
+})
+
+describe('DayItinerary metadata fields', () => {
+  it('accepts source and priority on DayItinerary', () => {
+    const day: DayItinerary = {
+      id: 'day-test-1',
+      date: '2026-05-10',
+      dayNumber: 1,
+      city: 'Shanghai',
+      title: 'Test day',
+      activities: [],
+      coordinates: [31.2304, 121.4737],
+      source: 'ai',
+      priority: 'must',
+    }
+    expect(day.source).toBe('ai')
+    expect(day.priority).toBe('must')
+  })
+
+  it('accepts valid source values', () => {
+    const sources: DayItinerary['source'][] = ['user', 'import', 'ai']
+    for (const source of sources) {
+      expect(sources).toContain(source)
+    }
+  })
+
+  it('accepts valid priority values', () => {
+    const priorities: DayItinerary['priority'][] = ['must', 'nice', 'optional']
+    for (const priority of priorities) {
+      expect(priorities).toContain(priority)
     }
   })
 })

@@ -1,18 +1,64 @@
 export interface Accommodation {
+  id: string
   name: string
   address: string
   bookingUrl: string
   checkIn: string
   checkOut: string
   images?: string[]
+  source?: 'user' | 'import' | 'ai'
+  priority?: 'must' | 'nice' | 'optional'
+  price?: number
+  currency?: string
+  bookingReference?: string
+  status?: 'planned' | 'booked' | 'checked-in' | 'completed'
 }
 
 export interface Activity {
+  id: string
   name: string
   description?: string
   type: 'visit' | 'transport' | 'food' | 'experience' | 'shopping'
   duration?: string
   coordinates?: [number, number]
+  source?: 'user' | 'import' | 'ai'
+  priority?: 'must' | 'nice' | 'optional'
+  startTime?: string
+  endTime?: string
+  address?: string
+  bookingUrl?: string
+  reservationRequired?: boolean
+  price?: number
+  currency?: string
+  rating?: number
+  tags?: string[]
+  crowdLevel?: string
+  status?: 'planned' | 'done' | 'skipped'
+  tips?: string
+  images?: string[]
+}
+
+export interface Transport {
+  id: string
+  type: 'train' | 'car' | 'plane' | 'bus'
+  from?: string
+  to?: string
+  details?: string
+  source?: 'user' | 'import' | 'ai'
+  priority?: 'must' | 'nice' | 'optional'
+  departureTime?: string
+  arrivalTime?: string
+  duration?: string
+  provider?: string
+  bookingUrl?: string
+  bookingReference?: string
+  price?: number
+  currency?: string
+  seat?: string
+  gate?: string
+  terminal?: string
+  status?: 'planned' | 'booked' | 'checked-in' | 'completed'
+  notes?: string
 }
 
 export interface DayImage {
@@ -21,6 +67,7 @@ export interface DayImage {
 }
 
 export interface DayItinerary {
+  id: string
   date: string
   dayNumber: number
   city: string
@@ -34,14 +81,11 @@ export interface DayItinerary {
   tips?: string[]
   accommodation?: Accommodation
   activities: Activity[]
-  transport?: {
-    type: 'train' | 'car' | 'plane' | 'bus'
-    from?: string
-    to?: string
-    details?: string
-  }
+  transport?: Transport
   coordinates: [number, number]
   images?: DayImage[]
+  source?: 'user' | 'import' | 'ai'
+  priority?: 'must' | 'nice' | 'optional'
 }
 
 export const tripStartDate = new Date('2026-05-09')
@@ -49,6 +93,7 @@ export const tripEndDate = new Date('2026-05-28')
 
 export const itinerary: DayItinerary[] = [
   {
+    id: 'day-1',
     date: '2026-05-10',
     dayNumber: 1,
     city: 'Shanghai',
@@ -86,6 +131,7 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
+      id: 'acc-day1',
       name: 'Hebergement reserve (anonymise)',
       address: 'Adresse privee masquee',
       bookingUrl: 'https://example.com/reservation-anonymisee',
@@ -100,24 +146,27 @@ export const itinerary: DayItinerary[] = [
       ],
     },
     activities: [
-      { name: 'Check-in hôtel', type: 'experience', duration: '1h' },
+      { id: 'act-day1-1', name: 'Check-in hôtel', type: 'experience', duration: '1h' },
       {
+        id: 'act-day1-2',
         name: "Temple Jing'an",
         type: 'visit',
         duration: '1h30',
         coordinates: [31.2235, 121.4452],
       },
       {
+        id: 'act-day1-3',
         name: 'Promenade sur le Bund',
         type: 'visit',
         duration: '2h',
         coordinates: [31.24, 121.49],
       },
-      { name: 'Dîner Xiaolongbao', type: 'food', duration: '1h30' },
+      { id: 'act-day1-4', name: 'Dîner Xiaolongbao', type: 'food', duration: '1h30' },
     ],
   },
 
   {
+    id: 'day-2',
     date: '2026-05-11',
     dayNumber: 2,
     city: 'Shanghai',
@@ -156,24 +205,27 @@ export const itinerary: DayItinerary[] = [
     ],
     activities: [
       {
+        id: 'act-day2-1',
         name: 'Yu Garden',
         type: 'visit',
         duration: '2h',
         coordinates: [31.227, 121.4923],
       },
-      { name: 'Bazar Yuyuan', type: 'shopping', duration: '1h30' },
-      { name: 'Nanxiang Dumpling House', type: 'food', duration: '1h' },
+      { id: 'act-day2-2', name: 'Bazar Yuyuan', type: 'shopping', duration: '1h30' },
+      { id: 'act-day2-3', name: 'Nanxiang Dumpling House', type: 'food', duration: '1h' },
       {
+        id: 'act-day2-4',
         name: 'Balade concession française',
         type: 'visit',
         duration: '2h',
         coordinates: [31.2139, 121.4701],
       },
     ],
-    transport: { type: 'train', from: 'Shanghai', to: 'Qingdao' },
+    transport: { id: 'tr-day2', type: 'train', from: 'Shanghai', to: 'Qingdao' },
   },
 
   {
+    id: 'day-3',
     date: '2026-05-12',
     dayNumber: 3,
     city: 'Qingdao',
@@ -207,6 +259,7 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
+      id: 'acc-day3',
       name: 'Hebergement reserve (anonymise)',
       address: 'Adresse privee masquee',
       bookingUrl: 'https://example.com/reservation-anonymisee',
@@ -215,29 +268,33 @@ export const itinerary: DayItinerary[] = [
     },
     activities: [
       {
+        id: 'act-day3-1',
         name: 'Jetée Zhanqiao',
         type: 'visit',
         duration: '1h',
         coordinates: [36.0605, 120.3203],
       },
       {
+        id: 'act-day3-2',
         name: 'Cathédrale Saint-Michel',
         type: 'visit',
         duration: '45m',
         coordinates: [36.064, 120.327],
       },
       {
+        id: 'act-day3-3',
         name: 'Musée bière Tsingtao',
         type: 'visit',
         duration: '1h30',
         coordinates: [36.0775, 120.32],
       },
-      { name: 'Dîner fruits de mer', type: 'food', duration: '1h30' },
+      { id: 'act-day3-4', name: 'Dîner fruits de mer', type: 'food', duration: '1h30' },
     ],
-    transport: { type: 'train', from: 'Qingdao', to: 'Beijing' },
+    transport: { id: 'tr-day3', type: 'train', from: 'Qingdao', to: 'Beijing' },
   },
 
   {
+    id: 'day-4',
     date: '2026-05-13',
     dayNumber: 4,
     city: 'Beijing',
@@ -274,6 +331,7 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
+      id: 'acc-day4',
       name: 'Hebergement reserve (anonymise)',
       address: 'Adresse privee masquee',
       bookingUrl: 'https://example.com/reservation-anonymisee',
@@ -281,18 +339,20 @@ export const itinerary: DayItinerary[] = [
       checkOut: '2026-05-16',
     },
     activities: [
-      { name: 'Installation hôtel', type: 'experience', duration: '1h' },
+      { id: 'act-day4-1', name: 'Installation hôtel', type: 'experience', duration: '1h' },
       {
+        id: 'act-day4-2',
         name: 'Balade Wangfujing',
         type: 'visit',
         duration: '1h30',
         coordinates: [39.9153, 116.404],
       },
-      { name: 'Marché street food', type: 'food', duration: '1h30' },
+      { id: 'act-day4-3', name: 'Marché street food', type: 'food', duration: '1h30' },
     ],
   },
 
   {
+    id: 'day-5',
     date: '2026-05-14',
     dayNumber: 5,
     city: 'Beijing',
@@ -327,23 +387,26 @@ export const itinerary: DayItinerary[] = [
     ],
     activities: [
       {
+        id: 'act-day5-1',
         name: 'Place Tiananmen',
         type: 'visit',
         duration: '45m',
         coordinates: [39.9056, 116.3976],
       },
       {
+        id: 'act-day5-2',
         name: 'Cité interdite',
         type: 'visit',
         duration: '3h',
         coordinates: [39.9163, 116.3972],
       },
-      { name: 'Parc Jingshan', type: 'visit', duration: '1h' },
-      { name: 'Dîner canard laqué', type: 'food', duration: '1h30' },
+      { id: 'act-day5-3', name: 'Parc Jingshan', type: 'visit', duration: '1h' },
+      { id: 'act-day5-4', name: 'Dîner canard laqué', type: 'food', duration: '1h30' },
     ],
   },
 
   {
+    id: 'day-6',
     date: '2026-05-15',
     dayNumber: 6,
     city: 'Beijing',
@@ -385,18 +448,20 @@ export const itinerary: DayItinerary[] = [
     ],
     activities: [
       {
+        id: 'act-day6-1',
         name: 'Grande Muraille Mutianyu',
         type: 'visit',
         duration: '4h',
         coordinates: [40.4319, 116.5704],
       },
-      { name: 'Téléphérique', type: 'experience', duration: '20m' },
-      { name: 'Descente luge', type: 'experience', duration: '10m' },
+      { id: 'act-day6-2', name: 'Téléphérique', type: 'experience', duration: '20m' },
+      { id: 'act-day6-3', name: 'Descente luge', type: 'experience', duration: '10m' },
     ],
-    transport: { type: 'plane', from: 'Beijing', to: "Xi'an" },
+    transport: { id: 'tr-day6', type: 'plane', from: 'Beijing', to: "Xi'an" },
   },
 
   {
+    id: 'day-7',
     date: '2026-05-16',
     dayNumber: 7,
     city: "Xi'an",
@@ -430,6 +495,7 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
+      id: 'acc-day7',
       name: 'Hebergement reserve (anonymise)',
       address: 'Adresse privee masquee',
       bookingUrl: 'https://example.com/reservation-anonymisee',
@@ -437,13 +503,14 @@ export const itinerary: DayItinerary[] = [
       checkOut: '2026-05-18',
     },
     activities: [
-      { name: 'Quartier musulman', type: 'visit', duration: '2h' },
-      { name: 'Grande mosquée', type: 'visit', duration: '1h' },
-      { name: 'Street food noodles', type: 'food', duration: '1h' },
+      { id: 'act-day7-1', name: 'Quartier musulman', type: 'visit', duration: '2h' },
+      { id: 'act-day7-2', name: 'Grande mosquée', type: 'visit', duration: '1h' },
+      { id: 'act-day7-3', name: 'Street food noodles', type: 'food', duration: '1h' },
     ],
   },
 
   {
+    id: 'day-8',
     date: '2026-05-17',
     dayNumber: 8,
     city: "Xi'an",
@@ -482,18 +549,20 @@ export const itinerary: DayItinerary[] = [
     ],
     activities: [
       {
+        id: 'act-day8-1',
         name: 'Terracotta Army Museum',
         type: 'visit',
         duration: '3h',
         coordinates: [34.3849, 109.2786],
       },
-      { name: "Remparts Xi'an vélo", type: 'experience', duration: '2h' },
-      { name: "Pagode de l'oie sauvage", type: 'visit', duration: '1h' },
+      { id: 'act-day8-2', name: "Remparts Xi'an vélo", type: 'experience', duration: '2h' },
+      { id: 'act-day8-3', name: "Pagode de l'oie sauvage", type: 'visit', duration: '1h' },
     ],
-    transport: { type: 'train', from: "Xi'an", to: 'Chongqing' },
+    transport: { id: 'tr-day8', type: 'train', from: "Xi'an", to: 'Chongqing' },
   },
 
   {
+    id: 'day-9',
     date: '2026-05-18',
     dayNumber: 9,
     city: 'Chongqing',
@@ -530,6 +599,7 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
+      id: 'acc-day9',
       name: 'Hebergement reserve (anonymise)',
       address: 'Adresse privee masquee',
       bookingUrl: 'https://example.com/reservation-anonymisee',
@@ -537,13 +607,14 @@ export const itinerary: DayItinerary[] = [
       checkOut: '2026-05-20',
     },
     activities: [
-      { name: 'Hongyadong', type: 'visit', duration: '2h' },
-      { name: 'Promenade Yangtze', type: 'visit', duration: '1h30' },
-      { name: 'Rooftop photo spot', type: 'experience', duration: '1h' },
+      { id: 'act-day9-1', name: 'Hongyadong', type: 'visit', duration: '2h' },
+      { id: 'act-day9-2', name: 'Promenade Yangtze', type: 'visit', duration: '1h30' },
+      { id: 'act-day9-3', name: 'Rooftop photo spot', type: 'experience', duration: '1h' },
     ],
   },
 
   {
+    id: 'day-10',
     date: '2026-05-19',
     dayNumber: 10,
     city: 'Chongqing',
@@ -581,14 +652,15 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Station Liziba', type: 'visit', duration: '30m' },
-      { name: 'Ciqikou Ancient Town', type: 'visit', duration: '2h' },
-      { name: 'Hot pot traditionnel', type: 'food', duration: '2h' },
+      { id: 'act-day10-1', name: 'Station Liziba', type: 'visit', duration: '30m' },
+      { id: 'act-day10-2', name: 'Ciqikou Ancient Town', type: 'visit', duration: '2h' },
+      { id: 'act-day10-3', name: 'Hot pot traditionnel', type: 'food', duration: '2h' },
     ],
-    transport: { type: 'plane', from: 'Chongqing', to: 'Zhangjiajie' },
+    transport: { id: 'tr-day10', type: 'plane', from: 'Chongqing', to: 'Zhangjiajie' },
   },
 
   {
+    id: 'day-11',
     date: '2026-05-20',
     dayNumber: 11,
     city: 'Zhangjiajie',
@@ -622,6 +694,7 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
+      id: 'acc-day11',
       name: 'Hebergement reserve (anonymise)',
       address: 'Adresse privee masquee',
       bookingUrl: 'https://example.com/reservation-anonymisee',
@@ -629,13 +702,14 @@ export const itinerary: DayItinerary[] = [
       checkOut: '2026-05-23',
     },
     activities: [
-      { name: 'Parc national Zhangjiajie', type: 'visit', duration: '4h' },
-      { name: 'Bailong Elevator', type: 'experience', duration: '30m' },
-      { name: 'Points de vue Avatar', type: 'visit', duration: '2h' },
+      { id: 'act-day11-1', name: 'Parc national Zhangjiajie', type: 'visit', duration: '4h' },
+      { id: 'act-day11-2', name: 'Bailong Elevator', type: 'experience', duration: '30m' },
+      { id: 'act-day11-3', name: 'Points de vue Avatar', type: 'visit', duration: '2h' },
     ],
   },
 
   {
+    id: 'day-12',
     date: '2026-05-21',
     dayNumber: 12,
     city: 'Zhangjiajie',
@@ -669,13 +743,14 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Tianzi Mountain', type: 'visit', duration: '3h' },
-      { name: 'Téléphérique', type: 'experience', duration: '30m' },
-      { name: 'Randonnée vallée', type: 'experience', duration: '2h' },
+      { id: 'act-day12-1', name: 'Tianzi Mountain', type: 'visit', duration: '3h' },
+      { id: 'act-day12-2', name: 'Téléphérique', type: 'experience', duration: '30m' },
+      { id: 'act-day12-3', name: 'Randonnée vallée', type: 'experience', duration: '2h' },
     ],
   },
 
   {
+    id: 'day-13',
     date: '2026-05-22',
     dayNumber: 13,
     city: 'Zhangjiajie',
@@ -709,14 +784,15 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Téléphérique Tianmen', type: 'experience', duration: '30m' },
-      { name: 'Glass skywalk', type: 'experience', duration: '1h' },
-      { name: "Heaven's Gate stairs", type: 'visit', duration: '1h' },
+      { id: 'act-day13-1', name: 'Téléphérique Tianmen', type: 'experience', duration: '30m' },
+      { id: 'act-day13-2', name: 'Glass skywalk', type: 'experience', duration: '1h' },
+      { id: 'act-day13-3', name: "Heaven's Gate stairs", type: 'visit', duration: '1h' },
     ],
-    transport: { type: 'plane', from: 'Zhangjiajie', to: 'Shanghai' },
+    transport: { id: 'tr-day13', type: 'plane', from: 'Zhangjiajie', to: 'Shanghai' },
   },
 
   {
+    id: 'day-14',
     date: '2026-05-23',
     dayNumber: 14,
     city: 'Shanghai',
@@ -750,6 +826,7 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
+      id: 'acc-day14',
       name: 'Hebergement reserve (anonymise)',
       address: 'Adresse privee masquee',
       bookingUrl: 'https://example.com/reservation-anonymisee',
@@ -757,12 +834,13 @@ export const itinerary: DayItinerary[] = [
       checkOut: '2026-05-25',
     },
     activities: [
-      { name: 'Nanjing Road', type: 'shopping', duration: '2h' },
-      { name: 'Skyline night photos', type: 'experience', duration: '1h' },
+      { id: 'act-day14-1', name: 'Nanjing Road', type: 'shopping', duration: '2h' },
+      { id: 'act-day14-2', name: 'Skyline night photos', type: 'experience', duration: '1h' },
     ],
   },
 
   {
+    id: 'day-15',
     date: '2026-05-24',
     dayNumber: 15,
     city: 'Shanghai',
@@ -802,14 +880,15 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Shanghai Tower observatory', type: 'visit', duration: '2h' },
-      { name: 'Lujiazui district walk', type: 'visit', duration: '1h30' },
-      { name: 'Aquarium Shanghai', type: 'visit', duration: '1h' },
+      { id: 'act-day15-1', name: 'Shanghai Tower observatory', type: 'visit', duration: '2h' },
+      { id: 'act-day15-2', name: 'Lujiazui district walk', type: 'visit', duration: '1h30' },
+      { id: 'act-day15-3', name: 'Aquarium Shanghai', type: 'visit', duration: '1h' },
     ],
-    transport: { type: 'plane', from: 'Shanghai', to: 'Taipei' },
+    transport: { id: 'tr-day15', type: 'plane', from: 'Shanghai', to: 'Taipei' },
   },
 
   {
+    id: 'day-16',
     date: '2026-05-25',
     dayNumber: 16,
     city: 'Taipei',
@@ -846,10 +925,11 @@ export const itinerary: DayItinerary[] = [
         caption: 'Ambiance nocturne de Taiwan',
       },
     ],
-    activities: [{ name: 'Shilin Night Market', type: 'food', duration: '2h' }],
+    activities: [{ id: 'act-day16-1', name: 'Shilin Night Market', type: 'food', duration: '2h' }],
   },
 
   {
+    id: 'day-17',
     date: '2026-05-26',
     dayNumber: 17,
     city: 'Taipei',
@@ -883,12 +963,13 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Taipei 101 observatory', type: 'visit', duration: '2h' },
-      { name: 'Elephant Mountain hike', type: 'experience', duration: '1h' },
+      { id: 'act-day17-1', name: 'Taipei 101 observatory', type: 'visit', duration: '2h' },
+      { id: 'act-day17-2', name: 'Elephant Mountain hike', type: 'experience', duration: '1h' },
     ],
   },
 
   {
+    id: 'day-18',
     date: '2026-05-27',
     dayNumber: 18,
     city: 'Taipei',
@@ -924,14 +1005,15 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Temple Longshan', type: 'visit', duration: '1h' },
-      { name: 'Dihua Street', type: 'visit', duration: '1h' },
-      { name: 'Tea house traditionnel', type: 'food', duration: '1h' },
+      { id: 'act-day18-1', name: 'Temple Longshan', type: 'visit', duration: '1h' },
+      { id: 'act-day18-2', name: 'Dihua Street', type: 'visit', duration: '1h' },
+      { id: 'act-day18-3', name: 'Tea house traditionnel', type: 'food', duration: '1h' },
     ],
-    transport: { type: 'plane', from: 'Taipei', to: 'Shanghai' },
+    transport: { id: 'tr-day18', type: 'plane', from: 'Taipei', to: 'Shanghai' },
   },
 
   {
+    id: 'day-19',
     date: '2026-05-28',
     dayNumber: 19,
     city: 'Shanghai',
@@ -969,6 +1051,7 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
+      id: 'acc-day19',
       name: 'Hebergement reserve (anonymise)',
       address: 'Adresse privee masquee',
       bookingUrl: 'https://example.com/reservation-anonymisee',
@@ -976,9 +1059,9 @@ export const itinerary: DayItinerary[] = [
       checkOut: '2026-05-29',
     },
     activities: [
-      { name: 'Brunch', type: 'food', duration: '1h' },
-      { name: 'Derniers achats', type: 'shopping', duration: '1h' },
-      { name: 'Aéroport', type: 'transport', duration: '2h' },
+      { id: 'act-day19-1', name: 'Brunch', type: 'food', duration: '1h' },
+      { id: 'act-day19-2', name: 'Derniers achats', type: 'shopping', duration: '1h' },
+      { id: 'act-day19-3', name: 'Aéroport', type: 'transport', duration: '2h' },
     ],
   },
 ]

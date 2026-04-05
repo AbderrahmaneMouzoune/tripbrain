@@ -15,6 +15,7 @@ function unfoldICS(ics: string): string {
 // ---------------------------------------------------------------------------
 
 const minimalDay: DayItinerary = {
+  id: 'day-1',
   date: '2026-05-10',
   dayNumber: 1,
   city: 'Tachkent',
@@ -24,17 +25,25 @@ const minimalDay: DayItinerary = {
 }
 
 const fullDay: DayItinerary = {
+  id: 'day-2',
   date: '2026-05-11',
   dayNumber: 2,
   city: 'Samarcande',
   title: 'Régistan & Bibi-Khanym',
   activities: [
-    { name: 'Régistan', type: 'visit', duration: '2h' },
-    { name: 'Bibi-Khanym', type: 'visit', duration: '1h' },
-    { name: 'Trajet bus', type: 'transport', duration: '30min' },
+    { id: 'act-day2-1', name: 'Régistan', type: 'visit', duration: '2h' },
+    { id: 'act-day2-2', name: 'Bibi-Khanym', type: 'visit', duration: '1h' },
+    { id: 'act-day2-3', name: 'Trajet bus', type: 'transport', duration: '30min' },
   ],
-  transport: { type: 'train', from: 'Tachkent', to: 'Samarcande', details: 'Afrosiyob' },
+  transport: {
+    id: 'tr-day2',
+    type: 'train',
+    from: 'Tachkent',
+    to: 'Samarcande',
+    details: 'Afrosiyob',
+  },
   accommodation: {
+    id: 'acc-day2',
     name: 'Hôtel Registan Plaza',
     address: '1 Place du Régistan',
     bookingUrl: 'https://example.com',
@@ -47,11 +56,12 @@ const fullDay: DayItinerary = {
 }
 
 const specialCharsDay: DayItinerary = {
+  id: 'day-3',
   date: '2026-05-12',
   dayNumber: 3,
   city: 'Boukhara, Ouzbékistan',
   title: 'Visite; avec, virgules & backslash\\',
-  activities: [{ name: 'Arc de Boukhara', type: 'visit' }],
+  activities: [{ id: 'act-day3-1', name: 'Arc de Boukhara', type: 'visit' }],
   coordinates: [39.7747, 64.4286],
 }
 
