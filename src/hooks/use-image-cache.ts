@@ -194,20 +194,47 @@ export function useImageCache(
     const localObjectUrls: string[] = []
 
     async function run() {
+      async function getBlobFromOpenDB(db: IDBDatabase, url: string): Promise<Blob | undefined> {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(IMAGE_STORE_NAME, 'readonly')
+          const store = tx.objectStore(IMAGE_STORE_NAME)
+          const req = store.get(url)
+
+          req.onsuccess = () => resolve(req.result as Blob | undefined)
+          req.onerror = () => reject(req.error)
+        })
+      }
+
+      async function processReadQueue(db: IDBDatabase, queue: string[]): Promise<void> {
+        if (cancelled || queue.length === 0) return
+
+        const batch = queue.splice(0, CONCURRENCY)
+        await Promise.all(
+          batch.map(async (url) => {
+            const blob = await getBlobFromOpenDB(db, url)
+            if (blob) {
+              const objectUrl = URL.createObjectURL(blob)
+              localObjectUrls.push(objectUrl)
+              initStatuses[url] = 'cached'
+              initSrcs[url] = objectUrl
+            } else {
+              initStatuses[url] = 'pending'
+            }
+          })
+        )
+
+        return processReadQueue(db, queue)
+      }
+
       // ── Phase 1: check IndexedDB for already-cached blobs ──────────────────
       const initStatuses: Record<string, ImageStatus> = {}
       const initSrcs: Record<string, string> = {}
+      const db = await openImageDB()
 
-      for (const url of urls) {
-        const blob = await getBlobFromDB(url)
-        if (blob) {
-          const objectUrl = URL.createObjectURL(blob)
-          localObjectUrls.push(objectUrl)
-          initStatuses[url] = 'cached'
-          initSrcs[url] = objectUrl
-        } else {
-          initStatuses[url] = 'pending'
-        }
+      try {
+        await processReadQueue(db, [...urls])
+      } finally {
+        db.close()
       }
 
       if (cancelled) return
