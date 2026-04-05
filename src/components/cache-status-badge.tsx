@@ -123,18 +123,14 @@ export function CacheStatusBadge() {
     .filter(([, s]) => s === 'error')
     .map(([url]) => url)
 
-  // URLs that are currently being retried (pending/downloading) but were
-  // previously in error — still shown in the dialog until resolved
+  // URLs that are currently in progress (pending/downloading). These are
+  // included alongside errors so in-flight work remains visible in the dialog.
   const retryingUrls = Object.entries(statuses)
     .filter(([, s]) => s === 'downloading' || s === 'pending')
     .map(([url]) => url)
 
-  // Full list shown in dialog: errors + currently-retrying + just-resolved (cached)
-  // We keep a stable list by including any URL that was touched by a retry.
-  // The simplest approach: show all non-pending-from-initial-load URLs that are not
-  // in a 'pending' state originating from the initial load.
-  // For simplicity, just show current errorUrls + retryingUrls (dialog stays open
-  // while retry is in progress thanks to the effect above).
+  // Full list shown in dialog: current errors + URLs currently in progress.
+  // This reflects the current statuses only; retry history is not tracked here.
   const dialogUrls = [...new Set([...errorUrls, ...retryingUrls])]
 
   let trigger: ReactNode
