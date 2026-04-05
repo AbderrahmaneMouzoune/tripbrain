@@ -283,11 +283,12 @@ describe('enriched Activity with booking and price', () => {
   })
 
   it('accepts valid status values', () => {
-    const statuses: Activity['status'][] = ['planned', 'done', 'skipped']
-    for (const status of statuses) {
-      expect(statuses).toContain(status)
-    }
-    expect(bookedActivity.status).toBe('planned')
+    const planned: Activity = { ...bookedActivity, status: 'planned' }
+    const done: Activity = { ...bookedActivity, status: 'done' }
+    const skipped: Activity = { ...bookedActivity, status: 'skipped' }
+    expect(planned.status).toBe('planned')
+    expect(done.status).toBe('done')
+    expect(skipped.status).toBe('skipped')
   })
 
   it('accepts source and priority metadata', () => {
@@ -351,11 +352,14 @@ describe('enriched Transport with full booking info', () => {
   })
 
   it('accepts valid status values', () => {
-    const statuses: Transport['status'][] = ['planned', 'booked', 'checked-in', 'completed']
-    for (const status of statuses) {
-      expect(statuses).toContain(status)
-    }
-    expect(bookedTransport.status).toBe('booked')
+    const planned: Transport = { ...bookedTransport, status: 'planned' }
+    const booked: Transport = { ...bookedTransport, status: 'booked' }
+    const checkedIn: Transport = { ...bookedTransport, status: 'checked-in' }
+    const completed: Transport = { ...bookedTransport, status: 'completed' }
+    expect(planned.status).toBe('planned')
+    expect(booked.status).toBe('booked')
+    expect(checkedIn.status).toBe('checked-in')
+    expect(completed.status).toBe('completed')
   })
 
   it('accepts source and priority metadata', () => {
@@ -390,11 +394,14 @@ describe('enriched Accommodation with new fields', () => {
   })
 
   it('accepts valid status values', () => {
-    const statuses: Accommodation['status'][] = ['planned', 'booked', 'checked-in', 'completed']
-    for (const status of statuses) {
-      expect(statuses).toContain(status)
-    }
-    expect(bookedAccommodation.status).toBe('booked')
+    const planned: Accommodation = { ...bookedAccommodation, status: 'planned' }
+    const booked: Accommodation = { ...bookedAccommodation, status: 'booked' }
+    const checkedIn: Accommodation = { ...bookedAccommodation, status: 'checked-in' }
+    const completed: Accommodation = { ...bookedAccommodation, status: 'completed' }
+    expect(planned.status).toBe('planned')
+    expect(booked.status).toBe('booked')
+    expect(checkedIn.status).toBe('checked-in')
+    expect(completed.status).toBe('completed')
   })
 
   it('accepts source and priority metadata', () => {
@@ -420,17 +427,33 @@ describe('DayItinerary metadata fields', () => {
     expect(day.priority).toBe('must')
   })
 
-  it('accepts valid source values', () => {
-    const sources: DayItinerary['source'][] = ['user', 'import', 'ai']
-    for (const source of sources) {
-      expect(sources).toContain(source)
+  it('accepts all valid source values', () => {
+    const base: DayItinerary = {
+      id: 'day-test-1',
+      date: '2026-05-10',
+      dayNumber: 1,
+      city: 'Shanghai',
+      title: 'Test day',
+      activities: [],
+      coordinates: [31.2304, 121.4737],
     }
+    expect(({ ...base, source: 'user' as const }).source).toBe('user')
+    expect(({ ...base, source: 'import' as const }).source).toBe('import')
+    expect(({ ...base, source: 'ai' as const }).source).toBe('ai')
   })
 
-  it('accepts valid priority values', () => {
-    const priorities: DayItinerary['priority'][] = ['must', 'nice', 'optional']
-    for (const priority of priorities) {
-      expect(priorities).toContain(priority)
+  it('accepts all valid priority values', () => {
+    const base: DayItinerary = {
+      id: 'day-test-1',
+      date: '2026-05-10',
+      dayNumber: 1,
+      city: 'Shanghai',
+      title: 'Test day',
+      activities: [],
+      coordinates: [31.2304, 121.4737],
     }
+    expect(({ ...base, priority: 'must' as const }).priority).toBe('must')
+    expect(({ ...base, priority: 'nice' as const }).priority).toBe('nice')
+    expect(({ ...base, priority: 'optional' as const }).priority).toBe('optional')
   })
 })
