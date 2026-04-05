@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { generateICSContent, getGoogleCalendarUrl } from '../calendar-export'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { generateICSContent, getGoogleCalendarUrl, downloadICS } from '../calendar-export'
 import { type DayItinerary } from '../itinerary-data'
 
 /**
@@ -256,5 +256,74 @@ describe('getGoogleCalendarUrl', () => {
 
   it('does not throw for a minimal day without optional fields', () => {
     expect(() => getGoogleCalendarUrl(minimalDay)).not.toThrow()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// downloadICS
+// ---------------------------------------------------------------------------
+
+describe('downloadICS', () => {
+  let clickMock: ReturnType<typeof vi.fn>
+  let createObjectURLMock: ReturnType<typeof vi.fn>
+  let revokeObjectURLMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    clickMock = vi.fn()
+    createObjectURLMock = vi.fn().mockReturnValue('blob:test-url')
+    revokeObjectURLMock = vi.fn()
+
+    vi.stubGlobal('URL', {
+      createObjectURL: createObjectURLMock,
+      revokeObjectURL: revokeObjectURLMock,
+    })
+
+    const mockLink = { href: '', download: '', click: clickMock }
+    vi.stubGlobal('document', {
+      createElement: vi.fn().mockReturnValue(mockLink),
+    })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('creates a Blob with the text/calendar MIME type', () => {
+    const BlobSpy = vi.spyOn(globalThis, 'Blob')
+    downloadICS([minimalDay], 'trip.ics')
+    expect(BlobSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: 'text/calendar;charset=utf-8' }),
+    )
+    BlobSpy.mockRestore()
+  })
+
+  it('sets the anchor download attribute to the provided filename', () => {
+    const mockLink = { href: '', download: '', click: clickMock }
+    vi.stubGlobal('document', {
+      createElement: vi.fn().mockReturnValue(mockLink),
+    })
+    downloadICS([minimalDay], 'my-trip.ics')
+    expect(mockLink.download).toBe('my-trip.ics')
+  })
+
+  it('calls click() on the anchor element', () => {
+    downloadICS([minimalDay], 'trip.ics')
+    expect(clickMock).toHaveBeenCalledOnce()
+  })
+
+  it('revokes the object URL after triggering the download', () => {
+    downloadICS([minimalDay], 'trip.ics')
+    expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:test-url')
+  })
+
+  it('works with multiple days', () => {
+    expect(() => downloadICS([minimalDay, fullDay], 'multi.ics')).not.toThrow()
+    expect(clickMock).toHaveBeenCalledOnce()
+  })
+
+  it('works with an empty days array', () => {
+    expect(() => downloadICS([], 'empty.ics')).not.toThrow()
+    expect(clickMock).toHaveBeenCalledOnce()
   })
 })
