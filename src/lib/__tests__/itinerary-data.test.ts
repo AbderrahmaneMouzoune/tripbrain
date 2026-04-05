@@ -437,9 +437,12 @@ describe('DayItinerary metadata fields', () => {
       activities: [],
       coordinates: [31.2304, 121.4737],
     }
-    expect(({ ...base, source: 'user' as const }).source).toBe('user')
-    expect(({ ...base, source: 'import' as const }).source).toBe('import')
-    expect(({ ...base, source: 'ai' as const }).source).toBe('ai')
+    const userDay: DayItinerary = { ...base, source: 'user' }
+    const importDay: DayItinerary = { ...base, source: 'import' }
+    const aiDay: DayItinerary = { ...base, source: 'ai' }
+    expect(userDay.source).toBe('user')
+    expect(importDay.source).toBe('import')
+    expect(aiDay.source).toBe('ai')
   })
 
   it('accepts all valid priority values', () => {
@@ -452,8 +455,11 @@ describe('DayItinerary metadata fields', () => {
       activities: [],
       coordinates: [31.2304, 121.4737],
     }
-    expect(({ ...base, priority: 'must' as const }).priority).toBe('must')
-    expect(({ ...base, priority: 'nice' as const }).priority).toBe('nice')
-    expect(({ ...base, priority: 'optional' as const }).priority).toBe('optional')
+    const mustDay: DayItinerary = { ...base, priority: 'must' }
+    const niceDay: DayItinerary = { ...base, priority: 'nice' }
+    const optionalDay: DayItinerary = { ...base, priority: 'optional' }
+    expect(mustDay.priority).toBe('must')
+    expect(niceDay.priority).toBe('nice')
+    expect(optionalDay.priority).toBe('optional')
   })
 })
