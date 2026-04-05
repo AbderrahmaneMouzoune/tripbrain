@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { ImgHTMLAttributes } from 'react'
 import { ImageIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -38,6 +38,13 @@ export function CachedImage({
   // Use the cached blob URL when available; otherwise fall back to the
   // original URL so the image still loads while caching is in progress.
   const displaySrc = cachedSrcs[src] ?? src
+
+  // Reset the error state whenever the resolved URL changes (e.g. the cache
+  // finishes downloading the image and a blob URL becomes available), so the
+  // component can recover from a previous load failure automatically.
+  useEffect(() => {
+    setImgError(false)
+  }, [displaySrc])
 
   if (imgError) {
     return (
