@@ -43,6 +43,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react'
+import { CachedImage } from '@/components/cached-image'
 
 interface DayDetailProps {
   day: DayItinerary
@@ -212,10 +213,11 @@ export function DayDetail({ day }: DayDetailProps) {
                           className="relative aspect-video w-full cursor-zoom-in overflow-hidden"
                           onClick={() => setDayLightboxOpen(true)}
                         >
-                          <img
+                          <CachedImage
                             src={img.url}
                             alt={img.caption}
                             className="h-full w-full object-cover"
+                            fallbackClassName="h-full w-full aspect-video"
                           />
                           <div className="bg-primary/70 absolute inset-x-0 bottom-0 px-4 py-3">
                             <p className="text-primary-foreground text-xs leading-snug font-medium drop-shadow">
@@ -344,10 +346,11 @@ export function DayDetail({ day }: DayDetailProps) {
                             className="h-full w-full cursor-zoom-in overflow-hidden"
                             onClick={() => setAccommodationLightboxOpen(true)}
                           >
-                            <img
+                            <CachedImage
                               src={src}
                               alt={`${day.accommodation!.name} – photo ${i + 1}`}
                               className="h-full w-full object-cover"
+                              fallbackClassName="h-full w-full"
                             />
                           </div>
                         </CarouselItem>

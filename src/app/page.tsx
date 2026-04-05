@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronLeft, ChevronRight, Map, List, Compass, FolderOpen } from 'lucide-react'
 import { DocumentsView } from '@/components/documents-view'
+import { ImageCacheProvider } from '@/components/image-cache-provider'
+import { CacheStatusBadge } from '@/components/cache-status-badge'
 
 function getTripCountdown(
   tripStartDate: Date,
@@ -106,6 +108,7 @@ export default function HomePage() {
   }
 
   return (
+    <ImageCacheProvider itinerary={itinerary} currentDayIndex={safeDay}>
     <main className="bg-background relative min-h-screen overflow-x-clip">
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="animate-sticker-float bg-primary/12 border-primary/30 absolute top-8 -left-8 h-24 w-24 rotate-12 rounded-2xl border-2" />
@@ -149,6 +152,7 @@ export default function HomePage() {
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <CacheStatusBadge />
               <DataManager
                 onExport={exportData}
                 onImport={importData}
@@ -312,5 +316,6 @@ export default function HomePage() {
       </nav>
       </div>
     </main>
+    </ImageCacheProvider>
   )
 }
