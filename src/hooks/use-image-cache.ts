@@ -265,13 +265,13 @@ export function useImageCache(
       }
 
       async function processQueue(queue: string[]): Promise<void> {
-        if (cancelled || queue.length === 0) return
-        const batch = queue.splice(0, CONCURRENCY)
-        await Promise.all(batch.map(downloadOne))
-        return processQueue(queue)
+        while (!cancelled && queue.length > 0) {
+          const batch = queue.splice(0, CONCURRENCY)
+          await Promise.all(batch.map(downloadOne))
+        }
       }
 
-      processQueue([...pending])
+      await processQueue([...pending])
     }
 
     run()
