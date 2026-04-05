@@ -112,6 +112,10 @@ export function CacheStatusBadge() {
     if (dialogOpen && stats.error === 0 && !isActive) setDialogOpen(false)
   }, [dialogOpen, stats.error, isActive])
 
+  // Re-show future error states after the current errors have been cleared
+  useEffect(() => {
+    if (stats.error === 0 && dismissed) setDismissed(false)
+  }, [stats.error, dismissed])
   if (stats.total === 0) return null
   if (dismissed && hasErrors) return null
 
