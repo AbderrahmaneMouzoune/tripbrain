@@ -10,6 +10,7 @@ import {
   type Activity,
   type Accommodation,
   type Transport,
+  type EntityMetadata,
 } from '../itinerary-data'
 
 // ---------------------------------------------------------------------------
@@ -256,7 +257,6 @@ describe('enriched Activity with booking and price', () => {
     address: 'Mutianyu, Huairou District, Beijing',
     rating: 4.8,
     tags: ['UNESCO', 'outdoor', 'hiking'],
-    crowdLevel: 'high',
     status: 'planned',
     tips: 'Arrive early to avoid crowds',
     source: 'ai',
@@ -279,7 +279,6 @@ describe('enriched Activity with booking and price', () => {
   it('accepts context fields', () => {
     expect(bookedActivity.rating).toBe(4.8)
     expect(bookedActivity.tags).toEqual(['UNESCO', 'outdoor', 'hiking'])
-    expect(bookedActivity.crowdLevel).toBe('high')
   })
 
   it('accepts valid status values', () => {
@@ -461,5 +460,44 @@ describe('DayItinerary metadata fields', () => {
     expect(mustDay.priority).toBe('must')
     expect(niceDay.priority).toBe('nice')
     expect(optionalDay.priority).toBe('optional')
+  })
+})
+
+describe('EntityMetadata shared base interface', () => {
+  it('source and priority are the same type across all entities', () => {
+    // Verify that all entities accept EntityMetadata fields via structural subtyping
+    const meta: EntityMetadata = { source: 'ai', priority: 'must' }
+
+    const activity: Activity = {
+      id: 'act-meta-test',
+      name: 'Test',
+      type: 'visit',
+      ...meta,
+    }
+    const transport: Transport = { id: 'tr-meta-test', type: 'train', ...meta }
+    const accommodation: Accommodation = {
+      id: 'acc-meta-test',
+      name: 'Test Hotel',
+      address: '1 Test Street',
+      bookingUrl: 'https://example.com',
+      checkIn: '2026-05-10',
+      checkOut: '2026-05-11',
+      ...meta,
+    }
+    const day: DayItinerary = {
+      id: 'day-meta-test',
+      date: '2026-05-10',
+      dayNumber: 1,
+      city: 'Test',
+      title: 'Test',
+      activities: [],
+      coordinates: [0, 0],
+      ...meta,
+    }
+
+    expect(activity.source).toBe('ai')
+    expect(transport.priority).toBe('must')
+    expect(accommodation.source).toBe('ai')
+    expect(day.priority).toBe('must')
   })
 })
