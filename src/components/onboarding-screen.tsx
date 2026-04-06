@@ -70,21 +70,27 @@ export function OnboardingScreen({
   }
 
   return (
-    <div className="bg-background flex min-h-screen flex-col items-center justify-center px-4 py-12">
+    <div className="bg-background flex min-h-dvh flex-col items-center justify-center px-4 py-6 sm:py-8">
       {/* Background decoration */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 overflow-hidden"
+      >
         <div className="animate-sticker-float bg-primary/12 border-primary/30 absolute top-8 -left-8 h-24 w-24 rotate-12 rounded-2xl border-2" />
         <div className="animate-sticker-bounce bg-secondary/16 border-secondary/35 absolute top-16 right-3 h-20 w-20 -rotate-12 rounded-full border-2" />
-        <div className="animate-sticker-float [animation-delay:180ms] bg-accent/14 border-accent/35 absolute top-72 right-10 h-16 w-16 rotate-6 rounded-xl border-2" />
+        <div className="animate-sticker-float bg-accent/14 border-accent/35 absolute top-72 right-10 h-16 w-16 rotate-6 rounded-xl border-2 [animation-delay:180ms]" />
       </div>
 
-      <div className="relative z-10 w-full max-w-md space-y-8">
+      <div className="relative z-10 w-full max-w-3xl space-y-5">
         {/* Logo / brand */}
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-2">
           <div className="relative h-16 w-16 shrink-0">
             <div className="bg-primary absolute inset-0 rotate-6 rounded-2xl opacity-20" />
             <div className="bg-primary relative flex h-16 w-16 items-center justify-center rounded-2xl shadow-sm">
-              <Compass className="text-primary-foreground h-8 w-8" strokeWidth={1.5} />
+              <Compass
+                className="text-primary-foreground h-8 w-8"
+                strokeWidth={1.5}
+              />
             </div>
           </div>
           <div className="text-center">
@@ -98,9 +104,10 @@ export function OnboardingScreen({
         </div>
 
         {/* Intro text */}
-        <p className="text-muted-foreground text-center text-sm leading-relaxed">
-          Bienvenue ! Pour commencer, importez votre fichier de données de voyage
-          ou utilisez les données de démonstration pour explorer l&apos;application.
+        <p className="text-muted-foreground mx-auto max-w-xl text-center text-sm leading-relaxed">
+          Bienvenue ! Pour commencer, importez votre fichier de données de
+          voyage ou utilisez les données de démonstration pour explorer
+          l&apos;application.
         </p>
 
         {/* Error */}
@@ -112,86 +119,69 @@ export function OnboardingScreen({
         )}
 
         {/* Options */}
-        <div className="space-y-4">
-          {/* Import file */}
-          <Card
-            className={`cursor-pointer transition-all ${isDragging ? 'border-primary ring-primary/30 ring-2' : 'hover:border-primary/50'}`}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <CardContent className="flex flex-col items-center gap-4 py-8">
-              <div className="bg-primary/10 flex h-12 w-12 items-center justify-center rounded-xl">
-                <Upload className="text-primary h-6 w-6" />
+        <Card className="overflow-hidden">
+          <CardContent className="space-y-4 p-4 sm:p-5">
+            <div
+              className={`rounded-xl border border-dashed p-4 text-center transition-all sm:p-5 ${isDragging ? 'border-primary bg-primary/5 ring-primary/30 ring-2' : 'hover:border-primary/50'}`}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+            >
+              <div className="bg-primary/10 mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl">
+                <Upload className="text-primary h-5 w-5" />
               </div>
-              <div className="text-center">
-                <p className="text-foreground font-semibold">
-                  Importer mes données
-                </p>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  Glissez-déposez ou cliquez pour sélectionner un fichier
-                  JSON exporté depuis TripBrain
-                </p>
-              </div>
+              <p className="text-foreground text-sm font-semibold">
+                Importer mes données
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                Dépose ton fichier JSON ici, ou choisis-le manuellement.
+              </p>
+              <p className="text-muted-foreground mt-2 text-[11px] leading-relaxed">
+                Le fichier doit provenir d&apos;un export TripBrain. Après
+                import, ton itinéraire et tes infos sont disponibles
+                immédiatement.
+              </p>
               <Button
                 variant="outline"
                 size="sm"
-                className="pointer-events-none"
+                className="mt-4"
+                onClick={() => fileInputRef.current?.click()}
                 disabled={loadingImport}
               >
                 {loadingImport ? 'Chargement…' : 'Choisir un fichier .json'}
               </Button>
-            </CardContent>
-          </Card>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json,application/json"
-            className="sr-only"
-            onChange={handleFileChange}
-          />
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="border-border w-full border-t" />
             </div>
-            <div className="relative flex justify-center">
-              <span className="bg-background text-muted-foreground px-3 text-xs uppercase tracking-wider">
-                ou
-              </span>
-            </div>
-          </div>
 
-          {/* Mock data */}
-          <Card
-            className="cursor-pointer transition-all hover:border-primary/50"
-            onClick={handleMockData}
-          >
-            <CardContent className="flex flex-col items-center gap-4 py-8">
-              <div className="bg-secondary/20 flex h-12 w-12 items-center justify-center rounded-xl">
-                <PlayCircle className="text-secondary-foreground h-6 w-6" />
-              </div>
-              <div className="text-center">
-                <p className="text-foreground font-semibold">
-                  Utiliser les données de démo
+            <div className="bg-secondary/10 flex flex-col items-center justify-between gap-3 rounded-xl p-3">
+              <div className="min-w-0">
+                <p className="text-foreground text-sm font-medium">
+                  Essayer avec les données de démo
                 </p>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  Explorez l&apos;application avec un exemple de voyage
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  Parfait pour découvrir l&apos;app en 30 secondes.
                 </p>
               </div>
               <Button
                 variant="secondary"
                 size="sm"
-                className="pointer-events-none"
+                onClick={handleMockData}
                 disabled={loadingMock}
+                className="shrink-0"
               >
-                {loadingMock ? 'Chargement…' : 'Démarrer la démo'}
+                <PlayCircle className="mr-2 h-4 w-4" />
+                {loadingMock ? 'Chargement…' : 'Lancer la démo'}
               </Button>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="sr-only"
+          onChange={handleFileChange}
+        />
       </div>
     </div>
   )
