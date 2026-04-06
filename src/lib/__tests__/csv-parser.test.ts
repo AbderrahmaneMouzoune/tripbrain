@@ -72,7 +72,9 @@ describe('parseCsv – basic parsing', () => {
   })
 
   it('normalises Windows (CRLF) line endings', () => {
-    const csv = 'tripStartDate,tripEndDate,date,dayNumber,city,title\r\n2025-06-01,2025-06-19,2025-06-01,1,Paris,Arrivée\r\n'
+    const csv = buildCsv()
+      .split('\n')
+      .join('\r\n')
     const result = parseCsv(csv)
     expect(result.itinerary).toHaveLength(1)
   })

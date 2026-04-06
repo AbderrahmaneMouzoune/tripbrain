@@ -20,10 +20,10 @@ function splitCsvLine(line: string): string[] {
 
     if (inQuotes) {
       if (ch === '"') {
-        // Peek ahead: "" → escaped quote inside quoted field
+        // Peek ahead: "" inside a quoted field is an escaped double-quote
         if (i + 1 < line.length && line[i + 1] === '"') {
           current += '"'
-          i++
+          i++ // skip the second quote of the "" pair
         } else {
           // Closing quote
           inQuotes = false
@@ -294,6 +294,9 @@ export function parseCsv(csvText: string): TripData {
     }
 
     const dayNumber = dayNumberRaw ? parseInt(dayNumberRaw, 10) : rowIdx
+    // rowIdx is 1-based here (header is row 0), so it naturally gives
+    // dayNumber 1, 2, 3… when the column is absent. This fallback is
+    // intentional and documented in the JSDoc above.
     if (isNaN(dayNumber)) {
       throw new CsvParseError(
         `Ligne ${rowIdx + 1} : "dayNumber" doit être un entier.`,
@@ -301,6 +304,9 @@ export function parseCsv(csvText: string): TripData {
     }
 
     const coordRaw = row['coordinates']?.trim() ?? ''
+    // DayItinerary.coordinates is non-optional in the type definition, so we
+    // must always supply a value. [0, 0] is the conventional "unknown" sentinel
+    // and matches the fallback used by other parts of the app.
     const coordinates = parseCoordinates(coordRaw) ?? [0, 0]
 
     const day: DayItinerary = {
