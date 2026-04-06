@@ -13,6 +13,7 @@ import {
   CarouselPrevious,
 } from '@/components/ui/carousel'
 import { Lightbox } from '@/components/lightbox'
+import { CachedImage } from '@/components/cached-image'
 import { useClipboard } from '@/hooks/use-clipboard'
 import {
   Hotel,
@@ -108,10 +109,11 @@ export function AccommodationCard({ accommodation }: AccommodationCardProps) {
                         className="h-full w-full cursor-zoom-in overflow-hidden"
                         onClick={() => setLightboxOpen(true)}
                       >
-                        <img
+                        <CachedImage
                           src={src}
                           alt={`${accommodation.name} – photo ${i + 1}`}
                           className="h-full w-full object-cover"
+                          fallbackClassName="h-full w-full"
                         />
                       </div>
                     </CarouselItem>

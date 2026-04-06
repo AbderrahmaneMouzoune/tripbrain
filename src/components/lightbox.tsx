@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { X } from 'lucide-react'
+import { CachedImage } from '@/components/cached-image'
 
 export interface LightboxItem {
   url: string
@@ -37,11 +38,12 @@ export function Lightbox({ images, isOpen, onClose }: LightboxProps) {
       >
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
           {images.map((img, i) => (
-            <img
+            <CachedImage
               key={i}
               src={img.url}
               alt={img.alt}
               className="w-full rounded-xl object-contain"
+              fallbackClassName="w-full rounded-xl min-h-40"
             />
           ))}
         </div>
