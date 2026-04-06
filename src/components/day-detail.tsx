@@ -368,6 +368,11 @@ export function DayDetail({ day }: DayDetailProps) {
               const transport = day.transport!
               const Icon = getTransportIcon(transport.type)
               const hasRoute = Boolean(transport.from && transport.to)
+              const transportPickupUrl = transport.from
+                ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    transport.from,
+                  )}`
+                : null
 
               return (
                 <div className="flex items-start gap-3">
@@ -375,8 +380,8 @@ export function DayDetail({ day }: DayDetailProps) {
                     <Icon className="text-primary h-4 w-4" strokeWidth={1.75} />
                   </div>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                  <div className="min-w-0 flex-1 flex-col gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <p className="text-muted-foreground text-[10px] font-semibold tracking-[0.14em] uppercase">
                         Transport
                       </p>
@@ -392,112 +397,106 @@ export function DayDetail({ day }: DayDetailProps) {
                       )}
                     </div>
 
-                    <p className="text-foreground text-sm leading-snug font-semibold">
-                      {hasRoute
-                        ? `${transport.from} → ${transport.to}`
-                        : transport.details}
-                    </p>
-
-                    {transport.details && hasRoute && (
-                      <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-                        {transport.details}
-                      </p>
-                    )}
-
-                    {/* Timing row */}
-                    {(transport.departureTime ||
-                      transport.arrivalTime ||
-                      transport.duration) && (
-                      <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
-                        <Clock className="h-3 w-3 shrink-0" strokeWidth={1.75} />
-                        {transport.departureTime && transport.arrivalTime ? (
-                          <span>
-                            {transport.departureTime} → {transport.arrivalTime}
-                          </span>
-                        ) : (
-                          <span>
-                            {transport.departureTime ?? transport.arrivalTime}
-                          </span>
-                        )}
-                        {transport.duration && (
-                          <span className="text-muted-foreground/60">
-                            ({transport.duration})
-                          </span>
+                    <div className="mt-1 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-foreground text-sm leading-snug font-semibold">
+                          {hasRoute
+                            ? `${transport.from} → ${transport.to}`
+                            : transport.details}
+                        </p>
+                        {transport.details && hasRoute && (
+                          <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                            {transport.details}
+                          </p>
                         )}
                       </div>
-                    )}
 
-                    {/* Provider */}
-                    {transport.provider && (
-                      <p className="text-muted-foreground/70 mt-1 text-[11px]">
-                        {transport.provider}
-                      </p>
-                    )}
+                      {transportPickupUrl && (
+                        <Button
+                          asChild
+                          size="sm"
+                          className="h-7 shrink-0 rounded-full px-2.5 text-[11px]"
+                        >
+                          <a
+                            href={transportPickupUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Navigation className="h-3 w-3" strokeWidth={1.5} />
+                            Point de départ
+                          </a>
+                        </Button>
+                      )}
+                    </div>
 
-                    {/* Seat / Gate / Terminal chips */}
-                    {(transport.seat ||
-                      transport.gate ||
-                      transport.terminal) && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {transport.seat && (
-                          <span className="border-border/60 text-muted-foreground inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]">
-                            <Armchair className="h-2.5 w-2.5" strokeWidth={1.5} />
-                            {transport.seat}
-                          </span>
-                        )}
-                        {transport.gate && (
-                          <span className="border-border/60 text-muted-foreground inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]">
-                            Gate {transport.gate}
-                          </span>
-                        )}
-                        {transport.terminal && (
-                          <span className="border-border/60 text-muted-foreground inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]">
-                            Terminal {transport.terminal}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Booking reference */}
-                    {transport.bookingReference && (
-                      <div className="text-muted-foreground/70 mt-1.5 flex items-center gap-1 text-[11px]">
-                        <Hash className="h-3 w-3 shrink-0" strokeWidth={1.5} />
-                        <span className="font-mono">
-                          {transport.bookingReference}
+                    <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                      {(transport.departureTime ||
+                        transport.arrivalTime ||
+                        transport.duration) && (
+                        <span className="inline-flex items-center gap-1">
+                          <Clock className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                          {transport.departureTime && transport.arrivalTime ? (
+                            <>
+                              {transport.departureTime} → {transport.arrivalTime}
+                            </>
+                          ) : (
+                            <>{transport.departureTime ?? transport.arrivalTime}</>
+                          )}
+                          {transport.duration && (
+                            <span className="text-muted-foreground/70">
+                              ({transport.duration})
+                            </span>
+                          )}
                         </span>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Price */}
-                    {transport.price !== undefined && (
-                      <div className="text-muted-foreground/70 mt-1 flex items-center gap-1 text-[11px]">
-                        <Banknote className="h-3 w-3 shrink-0" strokeWidth={1.5} />
-                        <span>
-                          {transport.price}{' '}
-                          {transport.currency ?? ''}
+                      {transport.provider && <span>{transport.provider}</span>}
+
+                      {transport.seat && (
+                        <span className="inline-flex items-center gap-1">
+                          <Armchair className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                          {transport.seat}
                         </span>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Notes */}
+                      {transport.gate && <span>Gate {transport.gate}</span>}
+
+                      {transport.terminal && <span>Terminal {transport.terminal}</span>}
+
+                      {transport.bookingReference && (
+                        <span className="inline-flex items-center gap-1 min-w-0">
+                          <Hash className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                          <span className="font-mono truncate">
+                            {transport.bookingReference}
+                          </span>
+                        </span>
+                      )}
+
+                      {transport.price !== undefined && (
+                        <span className="inline-flex items-center gap-1">
+                          <Banknote className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                          {formatPrice(transport.price, transport.currency)}
+                        </span>
+                      )}
+
+                      {transport.bookingUrl && (
+                        <a
+                          href={transport.bookingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:text-primary/80 inline-flex items-center gap-1 font-medium transition-colors hover:underline"
+                        >
+                          <Ticket className="h-3 w-3" strokeWidth={1.5} />
+                          Billet
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+
                     {transport.notes && (
                       <p className="text-muted-foreground/70 mt-1 text-[11px] leading-relaxed italic">
                         {transport.notes}
                       </p>
-                    )}
-
-                    {/* Booking link */}
-                    {transport.bookingUrl && (
-                      <a
-                        href={transport.bookingUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:text-primary/80 mt-1.5 inline-flex items-center gap-1 text-xs font-medium transition-colors hover:underline"
-                      >
-                        <Ticket className="h-3 w-3" strokeWidth={1.5} />
-                        Voir le billet
-                        <ExternalLink className="h-2.5 w-2.5" />
-                      </a>
                     )}
                   </div>
                 </div>
