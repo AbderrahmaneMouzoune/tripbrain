@@ -152,6 +152,8 @@ export function DayDetail({ day }: DayDetailProps) {
   const [dayLightboxOpen, setDayLightboxOpen] = useState(false)
   const { copied: copiedName, copy: copyName } = useClipboard()
   const { copied: copiedAddress, copy: copyAddress } = useClipboard()
+  const { copied: copiedActivity, copy: copyActivity } = useClipboard()
+  const [copiedActivityId, setCopiedActivityId] = useState<string | null>(null)
 
   const accommodationLightboxImages = images.map((src, i) => ({
     url: src,
@@ -738,6 +740,7 @@ export function DayDetail({ day }: DayDetailProps) {
             >
               {day.activities.map((activity, index) => {
                 const Icon = getActivityIcon(activity.type)
+                const activityItemId = activity.id ?? `activity-${index}`
                 const hasDetails = Boolean(
                   activity.description ||
                   activity.address ||
@@ -750,8 +753,8 @@ export function DayDetail({ day }: DayDetailProps) {
 
                 return (
                   <AccordionItem
-                    key={activity.id ?? index}
-                    value={activity.id ?? `activity-${index}`}
+                    key={activityItemId}
+                    value={activityItemId}
                     className="border-b-0 py-3 first:pt-0 last:pb-0"
                   >
                     <div className="flex gap-3">
@@ -832,6 +835,32 @@ export function DayDetail({ day }: DayDetailProps) {
                               />
                             </a>
                           )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void copyActivity(activity.name)
+                              setCopiedActivityId(activityItemId)
+                            }}
+                            title={
+                              activity.address
+                                ? "Copier l'adresse"
+                                : "Copier le nom de l'activité"
+                            }
+                            aria-label={
+                              activity.address
+                                ? `Copier l'adresse de ${activity.name}`
+                                : `Copier le nom de ${activity.name}`
+                            }
+                            className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
+                          >
+                            {copiedActivity &&
+                            copiedActivityId === activityItemId ? (
+                              <Check className="h-3.5 w-3.5 text-green-500" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                            )}
+                          </button>
                         </div>
 
                         {hasDetails && (
