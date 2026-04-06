@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Separator } from '@/components/ui/separator'
 import { Download, Upload, Trash2, Database, AlertCircle } from 'lucide-react'
+import { CsvFormatGuide } from '@/components/csv-format-guide'
 
 interface DataManagerProps {
   onExport: () => void
@@ -39,8 +40,8 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (!file.name.endsWith('.json')) {
-      setError('Veuillez sélectionner un fichier JSON.')
+    if (!file.name.endsWith('.json') && !file.name.endsWith('.csv')) {
+      setError('Veuillez sélectionner un fichier JSON ou CSV.')
       return
     }
     setError(null)
@@ -110,30 +111,33 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
           </Button>
 
           {/* Import */}
-          <Button
-            variant="outline"
-            className="h-auto w-full justify-start gap-3 py-3"
-            onClick={() => {
-              setError(null)
-              fileInputRef.current?.click()
-            }}
-            disabled={loadingImport}
-          >
-            <Upload className="h-4 w-4 shrink-0" />
-            <div className="text-left">
-              <p className="text-sm font-medium">
-                {loadingImport ? 'Chargement…' : 'Importer des données'}
-              </p>
-              <p className="text-muted-foreground text-xs">
-                Remplacer avec un fichier JSON TripBrain
-              </p>
-            </div>
-          </Button>
+          <div className="flex items-stretch gap-2">
+            <Button
+              variant="outline"
+              className="h-auto flex-1 justify-start gap-3 py-3"
+              onClick={() => {
+                setError(null)
+                fileInputRef.current?.click()
+              }}
+              disabled={loadingImport}
+            >
+              <Upload className="h-4 w-4 shrink-0" />
+              <div className="text-left">
+                <p className="text-sm font-medium">
+                  {loadingImport ? 'Chargement…' : 'Importer des données'}
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  Remplacer avec un fichier JSON ou CSV TripBrain
+                </p>
+              </div>
+            </Button>
+            <CsvFormatGuide />
+          </div>
 
           <input
             ref={fileInputRef}
             type="file"
-            accept=".json,application/json"
+            accept=".json,application/json,.csv,text/csv"
             className="sr-only"
             onChange={handleFileChange}
           />

@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { Compass, Upload, PlayCircle, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { CsvFormatGuide } from '@/components/csv-format-guide'
 
 interface OnboardingScreenProps {
   onImportFile: (file: File) => Promise<void>
@@ -21,8 +22,8 @@ export function OnboardingScreen({
   const [loadingImport, setLoadingImport] = useState(false)
 
   const handleFile = async (file: File) => {
-    if (!file.name.endsWith('.json')) {
-      setError('Veuillez sélectionner un fichier JSON.')
+    if (!file.name.endsWith('.json') && !file.name.endsWith('.csv')) {
+      setError('Veuillez sélectionner un fichier JSON ou CSV.')
       return
     }
     setError(null)
@@ -134,22 +135,24 @@ export function OnboardingScreen({
                 Importer mes données
               </p>
               <p className="text-muted-foreground mt-1 text-xs">
-                Dépose ton fichier JSON ici, ou choisis-le manuellement.
+                Dépose ton fichier JSON ou CSV ici, ou choisis-le manuellement.
               </p>
               <p className="text-muted-foreground mt-2 text-[11px] leading-relaxed">
-                Le fichier doit provenir d&apos;un export TripBrain. Après
-                import, ton itinéraire et tes infos sont disponibles
-                immédiatement.
+                Le fichier doit provenir d&apos;un export TripBrain (JSON) ou
+                respecter le format CSV TripBrain. Après import, ton itinéraire
+                et tes infos sont disponibles immédiatement.
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={loadingImport}
-              >
-                {loadingImport ? 'Chargement…' : 'Choisir un fichier .json'}
-              </Button>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={loadingImport}
+                >
+                  {loadingImport ? 'Chargement…' : 'Choisir un fichier'}
+                </Button>
+                <CsvFormatGuide />
+              </div>
             </div>
 
             <div className="bg-secondary/10 flex flex-col items-center justify-between gap-3 rounded-xl p-3">
@@ -178,7 +181,7 @@ export function OnboardingScreen({
         <input
           ref={fileInputRef}
           type="file"
-          accept=".json,application/json"
+          accept=".json,application/json,.csv,text/csv"
           className="sr-only"
           onChange={handleFileChange}
         />
@@ -186,3 +189,4 @@ export function OnboardingScreen({
     </div>
   )
 }
+

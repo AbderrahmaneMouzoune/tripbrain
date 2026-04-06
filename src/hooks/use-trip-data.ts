@@ -7,6 +7,7 @@ import {
   tripStartDate as mockStartDate,
   tripEndDate as mockEndDate,
 } from '@/lib/itinerary-data'
+import { parseCsv } from '@/lib/csv-parser'
 
 const DB_NAME = 'tripbrain'
 const DB_VERSION = 1
@@ -103,13 +104,21 @@ export function useTripData() {
   const importData = useCallback(
     async (file: File) => {
       const text = await file.text()
-      const parsed = JSON.parse(text) as TripData
-      if (!parsed.itinerary || !Array.isArray(parsed.itinerary)) {
-        throw new Error('Format invalide : tableau itinerary manquant')
+
+      let parsed: TripData
+
+      if (file.name.endsWith('.csv') || file.type === 'text/csv') {
+        parsed = parseCsv(text)
+      } else {
+        parsed = JSON.parse(text) as TripData
+        if (!parsed.itinerary || !Array.isArray(parsed.itinerary)) {
+          throw new Error('Format invalide : tableau itinerary manquant')
+        }
+        if (!parsed.tripStartDate || !parsed.tripEndDate) {
+          throw new Error('Format invalide : dates du voyage manquantes')
+        }
       }
-      if (!parsed.tripStartDate || !parsed.tripEndDate) {
-        throw new Error('Format invalide : dates du voyage manquantes')
-      }
+
       await saveData(parsed)
       setItinerary(parsed.itinerary)
       setTripStartDate(new Date(parsed.tripStartDate))
