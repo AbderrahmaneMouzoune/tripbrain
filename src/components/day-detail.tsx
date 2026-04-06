@@ -48,6 +48,7 @@ import {
   Armchair,
   Ticket,
   BookCheck,
+  CalendarDays,
 } from 'lucide-react'
 
 interface DayDetailProps {
@@ -108,8 +109,33 @@ function getStatusBadgeClass(
   }
 }
 
+function getNightCount(checkIn: string, checkOut: string) {
+  const start = new Date(checkIn)
+  const end = new Date(checkOut)
+  const millisecondsPerDay = 1000 * 60 * 60 * 24
+  const difference = end.getTime() - start.getTime()
+
+  if (Number.isNaN(difference) || difference <= 0) return null
+
+  return Math.round(difference / millisecondsPerDay)
+}
+
+function formatCompactDate(dateString: string, locale: string = 'fr-FR') {
+  const date = new Date(dateString)
+
+  return date.toLocaleDateString(locale, {
+    day: 'numeric',
+    month: 'short',
+  })
+}
+
+function formatPrice(value: number, currency?: string) {
+  return [value.toLocaleString('fr-FR'), currency].filter(Boolean).join(' ')
+}
+
 export function DayDetail({ day }: DayDetailProps) {
   const status = getDayStatus(day.date)
+  const accommodation = day.accommodation
   const images = day.accommodation?.images ?? []
   const dayImages = day.images ?? []
 
@@ -130,6 +156,20 @@ export function DayDetail({ day }: DayDetailProps) {
     url: img.url,
     alt: img.caption,
   }))
+
+  const accommodationMapUrl = accommodation
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        `${accommodation.name} ${accommodation.address}`,
+      )}`
+    : ''
+  const accommodationDirectionsUrl = accommodation
+    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+        `${accommodation.name} ${accommodation.address}`,
+      )}`
+    : ''
+  const accommodationNightCount = accommodation
+    ? getNightCount(accommodation.checkIn, accommodation.checkOut)
+    : null
 
   useEffect(() => {
     if (!carouselApi) return
@@ -467,11 +507,11 @@ export function DayDetail({ day }: DayDetailProps) {
         )}
 
         {/* Accommodation */}
-        {day.accommodation && (
+        {accommodation && (
           <Card className="border-border/60 bg-card/80 overflow-hidden shadow-none">
-            <div className="flex items-stretch gap-3 px-3">
+            <div className="flex gap-3 p-3">
               {images.length > 0 && (
-                <div className="aspect-square w-28 shrink-0 overflow-hidden rounded-xl">
+                <div className="hidden aspect-square w-24 shrink-0 overflow-hidden rounded-xl sm:block">
                   <Carousel opts={{ loop: true }} className="h-full w-full">
                     <CarouselContent className="h-full">
                       {images.map((src, i) => (
@@ -482,7 +522,7 @@ export function DayDetail({ day }: DayDetailProps) {
                           >
                             <img
                               src={src}
-                              alt={`${day.accommodation!.name} – photo ${i + 1}`}
+                              alt={`${accommodation.name} – photo ${i + 1}`}
                               className="h-full w-full object-cover"
                             />
                           </div>
@@ -504,25 +544,38 @@ export function DayDetail({ day }: DayDetailProps) {
                   </Carousel>
                 </div>
               )}
-              <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 py-3 leading-none">
-                <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
-                  <Hotel
-                    className="text-secondary h-3 w-3"
-                    strokeWidth={1.75}
-                  />
-                  Hébergement
-                </p>
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-foreground text-sm leading-snug font-semibold">
-                    {day.accommodation.name}
-                  </p>
-                  <div className="mt-0.5 flex shrink-0 items-center gap-1 pr-1.5">
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase">
+                      <Hotel
+                        className="text-secondary h-3 w-3"
+                        strokeWidth={1.75}
+                      />
+                      Hébergement
+                    </p>
+                    {accommodation.status && (
+                      <span
+                        className={cn(
+                          'w-fit rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
+                          getStatusBadgeClass(accommodation.status),
+                        )}
+                      >
+                        {accommodation.status}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-foreground min-w-0 text-sm leading-snug font-semibold">
+                      {accommodation.name}
+                    </p>
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => copyName(day.accommodation!.name)}
+                      onClick={() => copyName(accommodation.name)}
                       title="Copier le nom"
-                      className="text-muted-foreground/50 hover:text-primary h-6 w-6"
+                      className="text-muted-foreground/60 hover:text-primary h-7 w-7 shrink-0 rounded-full"
                     >
                       {copiedName ? (
                         <Check className="h-3.5 w-3.5 text-green-500" />
@@ -530,75 +583,103 @@ export function DayDetail({ day }: DayDetailProps) {
                         <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
                       )}
                     </Button>
+                  </div>
+                </div>
+
+                <div className="bg-muted/35 border-border/50 rounded-xl border px-3 py-2.5">
+                  <div className="flex items-start gap-2">
+                    <MapPin
+                      className="text-secondary mt-0.5 h-3.5 w-3.5 shrink-0"
+                      strokeWidth={1.5}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-foreground text-sm leading-snug font-medium">
+                        {accommodation.address}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => copyAddress(accommodation.address)}
+                          className="h-7 rounded-full px-2.5 text-[11px]"
+                        >
+                          {copiedAddress ? (
+                            <Check className="h-3 w-3 text-green-500" />
+                          ) : (
+                            <Copy className="h-3 w-3" strokeWidth={1.5} />
+                          )}
+                          Copier l'adresse
+                        </Button>
+                        <Button
+                          asChild
+                          size="sm"
+                          className="h-7 rounded-full px-2.5 text-[11px]"
+                        >
+                          <a
+                            href={accommodationDirectionsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <Navigation className="h-3 w-3" strokeWidth={1.5} />
+                            Itinéraire
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                  <span className="inline-flex items-center gap-1">
+                    <CalendarDays className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                    {formatCompactDate(accommodation.checkIn)} →{' '}
+                    {formatCompactDate(accommodation.checkOut)}
+                  </span>
+
+                  {accommodationNightCount && (
+                    <span>{accommodationNightCount} nuit{accommodationNightCount > 1 ? 's' : ''}</span>
+                  )}
+
+                  {accommodation.price !== undefined && (
+                    <span className="inline-flex items-center gap-1">
+                      <Banknote className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                      {formatPrice(accommodation.price, accommodation.currency)}
+                    </span>
+                  )}
+
+                  {accommodation.bookingReference && (
+                    <span className="inline-flex items-center gap-1 min-w-0">
+                      <BookCheck className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                      <span className="font-mono truncate">
+                        {accommodation.bookingReference}
+                      </span>
+                    </span>
+                  )}
+
+                  {accommodation.bookingUrl && (
                     <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(day.accommodation.name + ' ' + day.accommodation.address)}`}
+                      href={accommodation.bookingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-muted-foreground/50 hover:text-primary transition-colors"
+                      className="text-primary hover:text-primary/80 inline-flex items-center gap-1 font-medium transition-colors hover:underline"
                     >
-                      <Navigation className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      Réservation
+                      <ExternalLink className="h-3 w-3" />
                     </a>
-                  </div>
+                  )}
+
+                  {!accommodation.bookingUrl && accommodationMapUrl && (
+                    <a
+                      href={accommodationMapUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:text-primary/80 inline-flex items-center gap-1 font-medium transition-colors hover:underline"
+                    >
+                      Voir sur la carte
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
                 </div>
-                <div className="flex items-center gap-1">
-                  <p className="text-muted-foreground min-w-0 flex-1 text-xs">
-                    {day.accommodation.address}
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => copyAddress(day.accommodation!.address)}
-                    title="Copier l'adresse"
-                    className="text-muted-foreground/50 hover:text-primary h-6 w-6 shrink-0"
-                  >
-                    {copiedAddress ? (
-                      <Check className="h-3 w-3 text-green-500" />
-                    ) : (
-                      <Copy className="h-3 w-3" strokeWidth={1.5} />
-                    )}
-                  </Button>
-                </div>
-                {day.accommodation.bookingUrl && (
-                  <a
-                    href={day.accommodation.bookingUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:text-primary/80 mt-0.5 inline-flex items-center gap-1 text-xs font-medium transition-colors hover:underline"
-                  >
-                    Voir la réservation
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
-                {/* Status badge */}
-                {day.accommodation.status && (
-                  <span
-                    className={cn(
-                      'mt-0.5 w-fit rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
-                      getStatusBadgeClass(day.accommodation.status),
-                    )}
-                  >
-                    {day.accommodation.status}
-                  </span>
-                )}
-                {/* Price */}
-                {day.accommodation.price !== undefined && (
-                  <div className="text-muted-foreground/70 mt-0.5 flex items-center gap-1 text-[11px]">
-                    <Banknote className="h-3 w-3 shrink-0" strokeWidth={1.5} />
-                    <span>
-                      {day.accommodation.price}{' '}
-                      {day.accommodation.currency ?? ''} / nuit
-                    </span>
-                  </div>
-                )}
-                {/* Booking reference */}
-                {day.accommodation.bookingReference && (
-                  <div className="text-muted-foreground/70 flex items-center gap-1 text-[11px]">
-                    <BookCheck className="h-3 w-3 shrink-0" strokeWidth={1.5} />
-                    <span className="font-mono">
-                      {day.accommodation.bookingReference}
-                    </span>
-                  </div>
-                )}
               </div>
             </div>
           </Card>
