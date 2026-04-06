@@ -161,10 +161,10 @@ export function AccommodationCard({ accommodation }: AccommodationCardProps) {
                   size="icon"
                   onClick={() => copyName(accommodation.name)}
                   title="Copier le nom"
-                  className="text-muted-foreground/60 hover:text-primary h-7 w-7 shrink-0 rounded-full"
+                  className="h-7 w-7 shrink-0 rounded-full"
                 >
                   {copiedName ? (
-                    <Check className="h-3.5 w-3.5 text-green-500" />
+                    <Check className="h-3.5 w-3.5" />
                   ) : (
                     <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
                   )}
@@ -190,7 +190,7 @@ export function AccommodationCard({ accommodation }: AccommodationCardProps) {
                       className="h-7 rounded-full px-2.5 text-[11px]"
                     >
                       {copiedAddress ? (
-                        <Check className="h-3 w-3 text-green-500" />
+                        <Check className="h-3 w-3" />
                       ) : (
                         <Copy className="h-3 w-3" strokeWidth={1.5} />
                       )}
