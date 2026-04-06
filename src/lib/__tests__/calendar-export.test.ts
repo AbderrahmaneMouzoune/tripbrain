@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { generateICSContent, getGoogleCalendarUrl, downloadICS } from '../calendar-export'
+import {
+  generateICSContent,
+  getGoogleCalendarUrl,
+  downloadICS,
+} from '../calendar-export'
 import { type DayItinerary } from '../itinerary-data'
 
 /**
@@ -33,7 +37,12 @@ const fullDay: DayItinerary = {
   activities: [
     { id: 'act-day2-1', name: 'Régistan', type: 'visit', duration: '2h' },
     { id: 'act-day2-2', name: 'Bibi-Khanym', type: 'visit', duration: '1h' },
-    { id: 'act-day2-3', name: 'Trajet bus', type: 'transport', duration: '30min' },
+    {
+      id: 'act-day2-3',
+      name: 'Trajet bus',
+      type: 'transport',
+      duration: '30min',
+    },
   ],
   transport: {
     id: 'tr-day2',
@@ -277,41 +286,75 @@ describe('downloadICS', () => {
   let clickMock: ReturnType<typeof vi.fn>
   let createObjectURLMock: ReturnType<typeof vi.fn>
   let revokeObjectURLMock: ReturnType<typeof vi.fn>
+  let originalURL: typeof globalThis.URL | undefined
+  let originalDocument: Document | undefined
 
   beforeEach(() => {
     clickMock = vi.fn()
     createObjectURLMock = vi.fn().mockReturnValue('blob:test-url')
     revokeObjectURLMock = vi.fn()
 
-    vi.stubGlobal('URL', {
-      createObjectURL: createObjectURLMock,
-      revokeObjectURL: revokeObjectURLMock,
+    originalURL = globalThis.URL
+    originalDocument = globalThis.document
+
+    Object.defineProperty(globalThis, 'URL', {
+      configurable: true,
+      writable: true,
+      value: {
+        createObjectURL: createObjectURLMock,
+        revokeObjectURL: revokeObjectURLMock,
+      },
     })
 
     const mockLink = { href: '', download: '', click: clickMock }
-    vi.stubGlobal('document', {
-      createElement: vi.fn().mockReturnValue(mockLink),
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      writable: true,
+      value: {
+        createElement: vi.fn().mockReturnValue(mockLink),
+      },
     })
   })
 
   afterEach(() => {
-    vi.unstubAllGlobals()
+    if (originalURL === undefined) {
+      delete (globalThis as { URL?: unknown }).URL
+    } else {
+      Object.defineProperty(globalThis, 'URL', {
+        configurable: true,
+        writable: true,
+        value: originalURL,
+      })
+    }
+
+    if (originalDocument === undefined) {
+      delete (globalThis as { document?: unknown }).document
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        configurable: true,
+        writable: true,
+        value: originalDocument,
+      })
+    }
+
+    vi.clearAllMocks()
   })
 
   it('creates a Blob with the text/calendar MIME type', () => {
-    const BlobSpy = vi.spyOn(globalThis, 'Blob')
     downloadICS([minimalDay], 'trip.ics')
-    expect(BlobSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ type: 'text/calendar;charset=utf-8' }),
-    )
-    BlobSpy.mockRestore()
+    const blobArg = createObjectURLMock.mock.calls[0]?.[0]
+    expect(blobArg).toBeInstanceOf(Blob)
+    expect((blobArg as Blob).type).toBe('text/calendar;charset=utf-8')
   })
 
   it('sets the anchor download attribute to the provided filename', () => {
     const mockLink = { href: '', download: '', click: clickMock }
-    vi.stubGlobal('document', {
-      createElement: vi.fn().mockReturnValue(mockLink),
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      writable: true,
+      value: {
+        createElement: vi.fn().mockReturnValue(mockLink),
+      },
     })
     downloadICS([minimalDay], 'my-trip.ics')
     expect(mockLink.download).toBe('my-trip.ics')

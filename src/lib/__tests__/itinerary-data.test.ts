@@ -13,6 +13,19 @@ import {
   type EntityMetadata,
 } from '../itinerary-data'
 
+function toIsoDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function addDays(base: Date, days: number): Date {
+  const next = new Date(base)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
 // ---------------------------------------------------------------------------
 // formatDate
 // ---------------------------------------------------------------------------
@@ -43,26 +56,22 @@ describe('formatDate', () => {
 // ---------------------------------------------------------------------------
 
 describe('getDayStatus', () => {
-  beforeEach(() => {
-    // Fix "today" to 2026-05-15 so tests are deterministic
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-05-15T12:00:00Z'))
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
   it('returns "past" for a date before today', () => {
-    expect(getDayStatus('2026-05-10')).toBe('past')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    expect(getDayStatus(toIsoDate(addDays(today, -1)))).toBe('past')
   })
 
   it('returns "current" for today\'s date', () => {
-    expect(getDayStatus('2026-05-15')).toBe('current')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    expect(getDayStatus(toIsoDate(today))).toBe('current')
   })
 
   it('returns "future" for a date after today', () => {
-    expect(getDayStatus('2026-05-20')).toBe('future')
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    expect(getDayStatus(toIsoDate(addDays(today, 1)))).toBe('future')
   })
 })
 
@@ -71,34 +80,55 @@ describe('getDayStatus', () => {
 // ---------------------------------------------------------------------------
 
 describe('getCurrentDayIndex', () => {
+  const originalDates = itinerary.map((day) => day.date)
+  const originalTripStart = tripStartDate.getTime()
+  const originalTripEnd = tripEndDate.getTime()
+
+  function setItineraryDatesFrom(start: Date): void {
+    for (let i = 0; i < itinerary.length; i++) {
+      itinerary[i].date = toIsoDate(addDays(start, i))
+    }
+
+    tripStartDate.setTime(new Date(itinerary[0].date).getTime())
+    tripEndDate.setTime(
+      new Date(itinerary[itinerary.length - 1].date).getTime(),
+    )
+  }
+
   afterEach(() => {
-    vi.useRealTimers()
+    for (let i = 0; i < itinerary.length; i++) {
+      itinerary[i].date = originalDates[i]
+    }
+    tripStartDate.setTime(originalTripStart)
+    tripEndDate.setTime(originalTripEnd)
   })
 
   it('returns 0 when today is before the trip', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2025-01-01T00:00:00Z'))
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    setItineraryDatesFrom(addDays(today, 1))
     expect(getCurrentDayIndex()).toBe(0)
   })
 
   it('returns last index when today is after the trip', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2027-01-01T00:00:00Z'))
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    setItineraryDatesFrom(addDays(today, -itinerary.length - 2))
     expect(getCurrentDayIndex()).toBe(itinerary.length - 1)
   })
 
   it('returns the correct index when today matches a trip day', () => {
-    const firstDay = itinerary[0]
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date(`${firstDay.date}T12:00:00Z`))
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    setItineraryDatesFrom(today)
     expect(getCurrentDayIndex()).toBe(0)
   })
 
   it('returns the correct index for a mid-trip day', () => {
     const midIndex = Math.floor(itinerary.length / 2)
-    const midDay = itinerary[midIndex]
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date(`${midDay.date}T12:00:00Z`))
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    setItineraryDatesFrom(addDays(today, -midIndex))
     expect(getCurrentDayIndex()).toBe(midIndex)
   })
 })
@@ -264,7 +294,9 @@ describe('enriched Activity with booking and price', () => {
 
   it('accepts all optional booking and price fields', () => {
     expect(bookedActivity.id).toBe('act-test-1')
-    expect(bookedActivity.bookingUrl).toBe('https://example.com/great-wall-ticket')
+    expect(bookedActivity.bookingUrl).toBe(
+      'https://example.com/great-wall-ticket',
+    )
     expect(bookedActivity.reservationRequired).toBe(true)
     expect(bookedActivity.price).toBe(40)
     expect(bookedActivity.currency).toBe('CNY')
@@ -400,8 +432,14 @@ describe('enriched Accommodation with new fields', () => {
   it('accepts valid status values', () => {
     const planned: Accommodation = { ...bookedAccommodation, status: 'planned' }
     const booked: Accommodation = { ...bookedAccommodation, status: 'booked' }
-    const checkedIn: Accommodation = { ...bookedAccommodation, status: 'checked-in' }
-    const completed: Accommodation = { ...bookedAccommodation, status: 'completed' }
+    const checkedIn: Accommodation = {
+      ...bookedAccommodation,
+      status: 'checked-in',
+    }
+    const completed: Accommodation = {
+      ...bookedAccommodation,
+      status: 'completed',
+    }
     expect(planned.status).toBe('planned')
     expect(booked.status).toBe('booked')
     expect(checkedIn.status).toBe('checked-in')
