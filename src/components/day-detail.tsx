@@ -26,13 +26,12 @@ import {
 import { Lightbox } from '@/components/lightbox'
 import { Badge } from '@/components/ui/badge'
 import { useClipboard } from '@/hooks/use-clipboard'
+import { TransportCard } from '@/components/transport-card'
+import { AccommodationCard } from '@/components/accommodation-card'
+import { TipsCard } from '@/components/tips-card'
 import {
   MapPin,
-  Hotel,
   Train,
-  Car,
-  Plane,
-  Bus,
   Camera,
   Utensils,
   ShoppingBag,
@@ -45,16 +44,10 @@ import {
   Footprints,
   StickyNote,
   Backpack,
-  Lightbulb,
   Tag,
   Copy,
   Check,
   Banknote,
-  Hash,
-  Armchair,
-  Ticket,
-  BookCheck,
-  CalendarDays,
 } from 'lucide-react'
 
 interface DayDetailProps {
@@ -78,61 +71,17 @@ function getActivityIcon(type: string) {
   }
 }
 
-function getTransportIcon(type: string) {
-  switch (type) {
-    case 'train':
-      return Train
-    case 'car':
-      return Car
-    case 'plane':
-      return Plane
-    case 'bus':
-      return Bus
-    default:
-      return Train
-  }
-}
-
-type TransportStatus = 'planned' | 'booked' | 'checked-in' | 'completed'
 type ActivityStatus = 'planned' | 'done' | 'skipped'
-type AccommodationStatus = 'planned' | 'booked' | 'checked-in' | 'completed'
 
-function getStatusBadgeClass(
-  status: TransportStatus | ActivityStatus | AccommodationStatus,
-) {
+function getActivityStatusClass(status: ActivityStatus) {
   switch (status) {
-    case 'booked':
-      return 'border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800 dark:text-blue-400'
-    case 'checked-in':
     case 'done':
       return 'border-green-200 bg-green-500/10 text-green-600 dark:border-green-800 dark:text-green-400'
-    case 'completed':
-      return 'bg-muted text-muted-foreground border-border/60'
     case 'skipped':
       return 'border-red-200 bg-red-500/10 text-red-500 dark:border-red-800 dark:text-red-400'
     default:
       return 'bg-muted/60 text-muted-foreground border-border/40'
   }
-}
-
-function getNightCount(checkIn: string, checkOut: string) {
-  const start = new Date(checkIn)
-  const end = new Date(checkOut)
-  const millisecondsPerDay = 1000 * 60 * 60 * 24
-  const difference = end.getTime() - start.getTime()
-
-  if (Number.isNaN(difference) || difference <= 0) return null
-
-  return Math.round(difference / millisecondsPerDay)
-}
-
-function formatCompactDate(dateString: string, locale: string = 'fr-FR') {
-  const date = new Date(dateString)
-
-  return date.toLocaleDateString(locale, {
-    day: 'numeric',
-    month: 'short',
-  })
 }
 
 function formatPrice(value: number, currency?: string) {
@@ -141,43 +90,18 @@ function formatPrice(value: number, currency?: string) {
 
 export function DayDetail({ day }: DayDetailProps) {
   const status = getDayStatus(day.date)
-  const accommodation = day.accommodation
-  const images = day.accommodation?.images ?? []
   const dayImages = day.images ?? []
 
   const [carouselApi, setCarouselApi] = useState<CarouselApi>()
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [accommodationLightboxOpen, setAccommodationLightboxOpen] =
-    useState(false)
   const [dayLightboxOpen, setDayLightboxOpen] = useState(false)
-  const { copied: copiedName, copy: copyName } = useClipboard()
-  const { copied: copiedAddress, copy: copyAddress } = useClipboard()
   const { copied: copiedActivity, copy: copyActivity } = useClipboard()
   const [copiedActivityId, setCopiedActivityId] = useState<string | null>(null)
-
-  const accommodationLightboxImages = images.map((src, i) => ({
-    url: src,
-    alt: `${day.accommodation?.name ?? ''} – photo ${i + 1}`,
-  }))
 
   const dayLightboxImages = dayImages.map((img) => ({
     url: img.url,
     alt: img.caption,
   }))
-
-  const accommodationMapUrl = accommodation
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-        `${accommodation.name} ${accommodation.address}`,
-      )}`
-    : ''
-  const accommodationDirectionsUrl = accommodation
-    ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-        `${accommodation.name} ${accommodation.address}`,
-      )}`
-    : ''
-  const accommodationNightCount = accommodation
-    ? getNightCount(accommodation.checkIn, accommodation.checkOut)
-    : null
 
   useEffect(() => {
     if (!carouselApi) return
@@ -197,11 +121,6 @@ export function DayDetail({ day }: DayDetailProps) {
 
   return (
     <>
-      <Lightbox
-        images={accommodationLightboxImages}
-        isOpen={accommodationLightboxOpen}
-        onClose={() => setAccommodationLightboxOpen(false)}
-      />
       <Lightbox
         images={dayLightboxImages}
         isOpen={dayLightboxOpen}
@@ -370,355 +289,11 @@ export function DayDetail({ day }: DayDetailProps) {
         )}
 
         {/* Transport info */}
-        {day.transport && (
-          <div className="border-border/60 bg-card/80 rounded-xl border px-4 py-3">
-            {(() => {
-              const transport = day.transport!
-              const Icon = getTransportIcon(transport.type)
-              const hasRoute = Boolean(transport.from && transport.to)
-              const transportPickupUrl = transport.from
-                ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                    transport.from,
-                  )}`
-                : null
-
-              return (
-                <div className="flex items-start gap-3">
-                  <div className="bg-primary/10 mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-                    <Icon className="text-primary h-4 w-4" strokeWidth={1.75} />
-                  </div>
-
-                  <div className="min-w-0 flex-1 flex-col gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-muted-foreground text-[10px] font-semibold tracking-[0.14em] uppercase">
-                        Transport
-                      </p>
-                      {transport.status && (
-                        <span
-                          className={cn(
-                            'rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
-                            getStatusBadgeClass(transport.status),
-                          )}
-                        >
-                          {transport.status}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mt-1 flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-foreground text-sm leading-snug font-semibold">
-                          {hasRoute
-                            ? `${transport.from} → ${transport.to}`
-                            : transport.details}
-                        </p>
-                        {transport.details && hasRoute && (
-                          <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-                            {transport.details}
-                          </p>
-                        )}
-                      </div>
-
-                      {transportPickupUrl && (
-                        <Button
-                          asChild
-                          size="sm"
-                          className="h-7 shrink-0 rounded-full px-2.5 text-[11px]"
-                        >
-                          <a
-                            href={transportPickupUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <Navigation className="h-3 w-3" strokeWidth={1.5} />
-                            Point de départ
-                          </a>
-                        </Button>
-                      )}
-                    </div>
-
-                    <div className="text-muted-foreground mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-                      {(transport.departureTime ||
-                        transport.arrivalTime ||
-                        transport.duration) && (
-                        <span className="inline-flex items-center gap-1">
-                          <Clock
-                            className="h-3 w-3 shrink-0"
-                            strokeWidth={1.75}
-                          />
-                          {transport.departureTime && transport.arrivalTime ? (
-                            <>
-                              {transport.departureTime} →{' '}
-                              {transport.arrivalTime}
-                            </>
-                          ) : (
-                            <>
-                              {transport.departureTime ?? transport.arrivalTime}
-                            </>
-                          )}
-                          {transport.duration && (
-                            <span className="text-muted-foreground/70">
-                              ({transport.duration})
-                            </span>
-                          )}
-                        </span>
-                      )}
-
-                      {transport.provider && <span>{transport.provider}</span>}
-
-                      {transport.seat && (
-                        <span className="inline-flex items-center gap-1">
-                          <Armchair
-                            className="h-3 w-3 shrink-0"
-                            strokeWidth={1.5}
-                          />
-                          {transport.seat}
-                        </span>
-                      )}
-
-                      {transport.gate && <span>Gate {transport.gate}</span>}
-
-                      {transport.terminal && (
-                        <span>Terminal {transport.terminal}</span>
-                      )}
-
-                      {transport.bookingReference && (
-                        <span className="inline-flex min-w-0 items-center gap-1">
-                          <Hash
-                            className="h-3 w-3 shrink-0"
-                            strokeWidth={1.5}
-                          />
-                          <span className="truncate font-mono">
-                            {transport.bookingReference}
-                          </span>
-                        </span>
-                      )}
-
-                      {transport.price !== undefined && (
-                        <span className="inline-flex items-center gap-1">
-                          <Banknote
-                            className="h-3 w-3 shrink-0"
-                            strokeWidth={1.5}
-                          />
-                          {formatPrice(transport.price, transport.currency)}
-                        </span>
-                      )}
-
-                      {transport.bookingUrl && (
-                        <a
-                          href={transport.bookingUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:text-primary/80 inline-flex items-center gap-1 font-medium transition-colors hover:underline"
-                        >
-                          <Ticket className="h-3 w-3" strokeWidth={1.5} />
-                          Billet
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      )}
-                    </div>
-
-                    {transport.notes && (
-                      <p className="text-muted-foreground/70 mt-1 text-[11px] leading-relaxed italic">
-                        {transport.notes}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )
-            })()}
-          </div>
-        )}
+        {day.transport && <TransportCard transport={day.transport} />}
 
         {/* Accommodation */}
-        {accommodation && (
-          <Card className="border-border/60 bg-card/80 overflow-hidden shadow-none">
-            <div className="flex gap-3 p-3">
-              {images.length > 0 && (
-                <div className="hidden aspect-square w-24 shrink-0 overflow-hidden rounded-xl sm:block">
-                  <Carousel opts={{ loop: true }} className="h-full w-full">
-                    <CarouselContent className="h-full">
-                      {images.map((src, i) => (
-                        <CarouselItem key={i} className="aspect-square h-full">
-                          <div
-                            className="h-full w-full cursor-zoom-in overflow-hidden"
-                            onClick={() => setAccommodationLightboxOpen(true)}
-                          >
-                            <img
-                              src={src}
-                              alt={`${accommodation.name} – photo ${i + 1}`}
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                        </CarouselItem>
-                      ))}
-                    </CarouselContent>
-                    {images.length > 1 && (
-                      <>
-                        <CarouselPrevious
-                          className="left-1 h-5 w-5"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <CarouselNext
-                          className="right-1 h-5 w-5"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </>
-                    )}
-                  </Carousel>
-                </div>
-              )}
-              <div className="flex min-w-0 flex-1 flex-col gap-2">
-                <div className="min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase">
-                      <Hotel
-                        className="text-secondary h-3 w-3"
-                        strokeWidth={1.75}
-                      />
-                      Hébergement
-                    </p>
-                    {accommodation.status && (
-                      <span
-                        className={cn(
-                          'w-fit rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
-                          getStatusBadgeClass(accommodation.status),
-                        )}
-                      >
-                        {accommodation.status}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-foreground min-w-0 text-sm leading-snug font-semibold">
-                      {accommodation.name}
-                    </p>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => copyName(accommodation.name)}
-                      title="Copier le nom"
-                      className="text-muted-foreground/60 hover:text-primary h-7 w-7 shrink-0 rounded-full"
-                    >
-                      {copiedName ? (
-                        <Check className="h-3.5 w-3.5 text-green-500" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="bg-muted/35 border-border/50 rounded-xl border px-3 py-2.5">
-                  <div className="flex items-start gap-2">
-                    <MapPin
-                      className="text-secondary mt-0.5 h-3.5 w-3.5 shrink-0"
-                      strokeWidth={1.5}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-foreground text-sm leading-snug font-medium">
-                        {accommodation.address}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => copyAddress(accommodation.address)}
-                          className="h-7 rounded-full px-2.5 text-[11px]"
-                        >
-                          {copiedAddress ? (
-                            <Check className="h-3 w-3 text-green-500" />
-                          ) : (
-                            <Copy className="h-3 w-3" strokeWidth={1.5} />
-                          )}
-                          Copier l'adresse
-                        </Button>
-                        <Button
-                          asChild
-                          size="sm"
-                          className="h-7 rounded-full px-2.5 text-[11px]"
-                        >
-                          <a
-                            href={accommodationDirectionsUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <Navigation className="h-3 w-3" strokeWidth={1.5} />
-                            Itinéraire
-                          </a>
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-                  <span className="inline-flex items-center gap-1">
-                    <CalendarDays
-                      className="h-3 w-3 shrink-0"
-                      strokeWidth={1.5}
-                    />
-                    {formatCompactDate(accommodation.checkIn)} →{' '}
-                    {formatCompactDate(accommodation.checkOut)}
-                  </span>
-
-                  {accommodationNightCount && (
-                    <span>
-                      {accommodationNightCount} nuit
-                      {accommodationNightCount > 1 ? 's' : ''}
-                    </span>
-                  )}
-
-                  {accommodation.price !== undefined && (
-                    <span className="inline-flex items-center gap-1">
-                      <Banknote
-                        className="h-3 w-3 shrink-0"
-                        strokeWidth={1.5}
-                      />
-                      {formatPrice(accommodation.price, accommodation.currency)}
-                    </span>
-                  )}
-
-                  {accommodation.bookingReference && (
-                    <span className="inline-flex min-w-0 items-center gap-1">
-                      <BookCheck
-                        className="h-3 w-3 shrink-0"
-                        strokeWidth={1.5}
-                      />
-                      <span className="truncate font-mono">
-                        {accommodation.bookingReference}
-                      </span>
-                    </span>
-                  )}
-
-                  {accommodation.bookingUrl && (
-                    <a
-                      href={accommodation.bookingUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:text-primary/80 inline-flex items-center gap-1 font-medium transition-colors hover:underline"
-                    >
-                      Réservation
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
-
-                  {!accommodation.bookingUrl && accommodationMapUrl && (
-                    <a
-                      href={accommodationMapUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:text-primary/80 inline-flex items-center gap-1 font-medium transition-colors hover:underline"
-                    >
-                      Voir sur la carte
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Card>
+        {day.accommodation && (
+          <AccommodationCard accommodation={day.accommodation} />
         )}
 
         {/* Activities */}
@@ -783,7 +358,7 @@ export function DayDetail({ day }: DayDetailProps) {
                                   <span
                                     className={cn(
                                       'rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
-                                      getStatusBadgeClass(activity.status),
+                                      getActivityStatusClass(activity.status),
                                     )}
                                   >
                                     {activity.status}
@@ -791,21 +366,17 @@ export function DayDetail({ day }: DayDetailProps) {
                                 )}
                               </div>
 
-                              {(activity.duration ||
-                                activity.startTime ||
-                                activity.endTime) && (
+                              {(activity.duration || activity.openAt) && (
                                 <div className="text-muted-foreground/70 flex flex-wrap items-center gap-1.5 text-[11px]">
                                   <Clock
                                     className="h-3 w-3 shrink-0"
                                     strokeWidth={1.75}
                                   />
-                                  {activity.startTime || activity.endTime ? (
+                                  {activity.openAt ? (
                                     <span>
-                                      {[activity.startTime, activity.endTime]
-                                        .filter(Boolean)
-                                        .join(' – ')}
+                                      {activity.openAt}
                                       {activity.duration &&
-                                        ` (${activity.duration})`}
+                                        ` · ${activity.duration}`}
                                     </span>
                                   ) : (
                                     <span>{activity.duration}</span>
@@ -909,7 +480,10 @@ export function DayDetail({ day }: DayDetailProps) {
                                   strokeWidth={1.5}
                                 />
                                 <span>
-                                  {activity.price} {activity.currency ?? ''}
+                                  {formatPrice(
+                                    activity.price,
+                                    activity.currency,
+                                  )}
                                 </span>
                                 {activity.reservationRequired && (
                                   <span className="text-muted-foreground/50">
@@ -1001,27 +575,7 @@ export function DayDetail({ day }: DayDetailProps) {
 
         {/* Tips */}
         {day.tips && day.tips.length > 0 && (
-          <Card className="border-border/60 bg-card/80 shadow-none">
-            <CardHeader className="px-4 py-2">
-              <CardTitle className="text-muted-foreground flex items-center gap-2 text-sm font-semibold tracking-wide uppercase">
-                <Lightbulb
-                  className="text-secondary h-3.5 w-3.5"
-                  strokeWidth={1.75}
-                />
-                Conseils pratiques
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pt-0 pb-4">
-              <ul className="flex flex-col gap-2">
-                {day.tips.map((tip, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <span className="text-secondary mt-0.5 shrink-0">→</span>
-                    <span className="text-foreground leading-snug">{tip}</span>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
+          <TipsCard tips={day.tips} />
         )}
       </div>
     </>

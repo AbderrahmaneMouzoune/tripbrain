@@ -24,8 +24,8 @@ export interface Activity extends EntityMetadata {
   type: 'visit' | 'transport' | 'food' | 'experience' | 'shopping'
   duration?: string
   coordinates?: [number, number]
-  startTime?: string
-  endTime?: string
+  /** Opening hours / schedule — free-form string, e.g. "09:00–17:00" or "09:00–12:00, 14:00–17:00" */
+  openAt?: string
   address?: string
   bookingUrl?: string
   reservationRequired?: boolean
@@ -44,6 +44,8 @@ export interface Transport extends EntityMetadata {
   from?: string
   to?: string
   details?: string
+  /** Human-readable address of the departure point (station, airport terminal, etc.) */
+  departureAddress?: string
   departureTime?: string
   arrivalTime?: string
   duration?: string
@@ -209,8 +211,7 @@ export const itinerary: DayItinerary[] = [
         type: 'visit',
         duration: '2h',
         coordinates: [31.227, 121.4923],
-        startTime: '09:00',
-        endTime: '11:00',
+        openAt: '09:00–17:00',
         address: '218 Anren Street, Huangpu District, Shanghai',
         bookingUrl: 'https://www.yugarden.com.cn',
         reservationRequired: false,
@@ -236,6 +237,7 @@ export const itinerary: DayItinerary[] = [
       from: 'Shanghai',
       to: 'Qingdao',
       details: 'Train G195',
+      departureAddress: 'Shanghai Hongqiao Railway Station, 200 Hanzhong Road, Changning District',
       departureTime: '07:53',
       arrivalTime: '14:12',
       duration: '6h19',
@@ -321,6 +323,7 @@ export const itinerary: DayItinerary[] = [
       from: 'Qingdao',
       to: 'Beijing',
       details: 'Train G206',
+      departureAddress: 'Qingdao North Railway Station, 2 Qingnianbei Road, Licang District',
       departureTime: '09:06',
       arrivalTime: '13:35',
       duration: '4h29',
@@ -440,8 +443,7 @@ export const itinerary: DayItinerary[] = [
         type: 'visit',
         duration: '3h',
         coordinates: [39.9163, 116.3972],
-        startTime: '09:00',
-        endTime: '12:00',
+        openAt: '08:30–17:00',
         address: '4 Jingshan Front Street, Dongcheng District, Beijing',
         bookingUrl: 'https://www.dpm.org.cn/visit/buyTicket.html',
         reservationRequired: true,
@@ -504,8 +506,7 @@ export const itinerary: DayItinerary[] = [
         type: 'visit',
         duration: '4h',
         coordinates: [40.4319, 116.5704],
-        startTime: '08:30',
-        endTime: '12:30',
+        openAt: '07:30–18:00',
         address: 'Mutianyu Village, Huairou District, Beijing',
         bookingUrl: 'https://www.mutianyugreatwall.com',
         reservationRequired: true,
@@ -524,6 +525,7 @@ export const itinerary: DayItinerary[] = [
       from: 'Beijing',
       to: "Xi'an",
       details: 'Air China CA1205',
+      departureAddress: 'Beijing Capital International Airport, Terminal 3, Chaoyang District',
       departureTime: '10:30',
       arrivalTime: '12:45',
       duration: '2h15',
@@ -632,8 +634,7 @@ export const itinerary: DayItinerary[] = [
         type: 'visit',
         duration: '3h',
         coordinates: [34.3849, 109.2786],
-        startTime: '09:00',
-        endTime: '12:00',
+        openAt: '08:30–17:00',
         address: "Lintong District, Xi'an, Shaanxi",
         bookingUrl: 'https://www.bmy.com.cn/ticket',
         reservationRequired: true,
@@ -652,6 +653,7 @@ export const itinerary: DayItinerary[] = [
       from: "Xi'an",
       to: 'Chongqing',
       details: 'Train G2197',
+      departureAddress: "Xi'an North Railway Station, Weiyang District, Xi'an",
       departureTime: '11:16',
       arrivalTime: '15:04',
       duration: '3h48',
@@ -766,6 +768,7 @@ export const itinerary: DayItinerary[] = [
       from: 'Chongqing',
       to: 'Zhangjiajie',
       details: 'China Southern CZ6485',
+      departureAddress: 'Chongqing Jiangbei International Airport, Terminal 3, Yubei District',
       departureTime: '08:15',
       arrivalTime: '09:40',
       duration: '1h25',
@@ -928,6 +931,7 @@ export const itinerary: DayItinerary[] = [
       from: 'Zhangjiajie',
       to: 'Shanghai',
       details: 'Xiamen Air MF8401',
+      departureAddress: 'Zhangjiajie Hehua International Airport, Sangzhi County, Hunan',
       departureTime: '15:30',
       arrivalTime: '17:55',
       duration: '2h25',
@@ -1040,6 +1044,7 @@ export const itinerary: DayItinerary[] = [
       from: 'Shanghai',
       to: 'Taipei',
       details: 'China Eastern MU501',
+      departureAddress: 'Shanghai Pudong International Airport, Terminal 1, Pudong New Area',
       departureTime: '19:00',
       arrivalTime: '21:10',
       duration: '2h10',
@@ -1192,6 +1197,7 @@ export const itinerary: DayItinerary[] = [
       from: 'Taipei',
       to: 'Shanghai',
       details: 'EVA Air BR712',
+      departureAddress: 'Taiwan Taoyuan International Airport, Terminal 2, Dayuan District',
       departureTime: '14:30',
       arrivalTime: '16:35',
       duration: '2h05',

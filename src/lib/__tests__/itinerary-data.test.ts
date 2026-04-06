@@ -252,8 +252,7 @@ describe('enriched Activity with booking and price', () => {
     reservationRequired: true,
     price: 40,
     currency: 'CNY',
-    startTime: '09:00',
-    endTime: '13:00',
+    openAt: '07:30–18:00',
     address: 'Mutianyu, Huairou District, Beijing',
     rating: 4.8,
     tags: ['UNESCO', 'outdoor', 'hiking'],
@@ -271,9 +270,8 @@ describe('enriched Activity with booking and price', () => {
     expect(bookedActivity.currency).toBe('CNY')
   })
 
-  it('accepts timing fields', () => {
-    expect(bookedActivity.startTime).toBe('09:00')
-    expect(bookedActivity.endTime).toBe('13:00')
+  it('accepts openAt schedule field', () => {
+    expect(bookedActivity.openAt).toBe('07:30–18:00')
   })
 
   it('accepts context fields', () => {
@@ -303,6 +301,7 @@ describe('enriched Transport with full booking info', () => {
     from: 'Shanghai',
     to: 'Beijing',
     details: 'G2 High-Speed',
+    departureAddress: 'Shanghai Hongqiao Railway Station, 200 Hanzhong Road',
     departureTime: '08:00',
     arrivalTime: '12:30',
     duration: '4h30',
@@ -325,6 +324,12 @@ describe('enriched Transport with full booking info', () => {
     expect(bookedTransport.type).toBe('train')
     expect(bookedTransport.from).toBe('Shanghai')
     expect(bookedTransport.to).toBe('Beijing')
+  })
+
+  it('accepts departure address field', () => {
+    expect(bookedTransport.departureAddress).toBe(
+      'Shanghai Hongqiao Railway Station, 200 Hanzhong Road',
+    )
   })
 
   it('accepts timing fields', () => {
