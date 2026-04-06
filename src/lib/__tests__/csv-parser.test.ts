@@ -27,7 +27,7 @@ function buildCsv(
 }
 
 /** Encode a JSON activities value safely for use in a CSV field. */
-function jsonActivities(activities: Record<string, unknown>[]): string {
+function encodeCsvActivityCell(activities: Record<string, unknown>[]): string {
   // Wrap in double-quotes, escaping inner double-quotes as ""
   return `"${JSON.stringify(activities).replace(/"/g, '""')}"`
 }
@@ -236,7 +236,7 @@ describe('parseCsv – activities (JSON format)', () => {
   it('parses a single activity from a JSON array', () => {
     const csv = [
       'date,city,title,activities',
-      `2025-06-01,Paris,Arrivée,${jsonActivities([{ name: 'Tour Eiffel', type: 'visit', duration: '2h' }])}`,
+      `2025-06-01,Paris,Arrivée,${encodeCsvActivityCell([{ name: 'Tour Eiffel', type: 'visit', duration: '2h' }])}`,
     ].join('\n')
     const activities = parseCsv(csv).itinerary[0].activities
     expect(activities).toHaveLength(1)
@@ -248,7 +248,7 @@ describe('parseCsv – activities (JSON format)', () => {
   it('parses multiple activities from a JSON array', () => {
     const csv = [
       'date,city,title,activities',
-      `2025-06-01,Paris,Arrivée,${jsonActivities([
+      `2025-06-01,Paris,Arrivée,${encodeCsvActivityCell([
         { name: 'Tour Eiffel', type: 'visit', duration: '2h' },
         { name: 'Déjeuner', type: 'food', duration: '1h' },
       ])}`,
@@ -261,7 +261,7 @@ describe('parseCsv – activities (JSON format)', () => {
   it('defaults to "visit" for unknown activity types', () => {
     const csv = [
       'date,city,title,activities',
-      `2025-06-01,Paris,Arrivée,${jsonActivities([{ name: 'Musée', type: 'unknown' }])}`,
+      `2025-06-01,Paris,Arrivée,${encodeCsvActivityCell([{ name: 'Musée', type: 'unknown' }])}`,
     ].join('\n')
     expect(parseCsv(csv).itinerary[0].activities[0].type).toBe('visit')
   })
@@ -271,7 +271,7 @@ describe('parseCsv – activities (JSON format)', () => {
     for (const type of types) {
       const csv = [
         'date,city,title,activities',
-        `2025-06-01,Paris,Arrivée,${jsonActivities([{ name: 'Act', type }])}`,
+        `2025-06-01,Paris,Arrivée,${encodeCsvActivityCell([{ name: 'Act', type }])}`,
       ].join('\n')
       expect(parseCsv(csv).itinerary[0].activities[0].type).toBe(type)
     }
@@ -294,7 +294,7 @@ describe('parseCsv – activities (JSON format)', () => {
     }
     const csv = [
       'date,city,title,activities',
-      `2025-06-01,Paris,Arrivée,${jsonActivities([actObj])}`,
+      `2025-06-01,Paris,Arrivée,${encodeCsvActivityCell([actObj])}`,
     ].join('\n')
     const a = parseCsv(csv).itinerary[0].activities[0]
     expect(a.description).toBe('Musée')
@@ -311,7 +311,7 @@ describe('parseCsv – activities (JSON format)', () => {
   it('ignores unknown status values', () => {
     const csv = [
       'date,city,title,activities',
-      `2025-06-01,Paris,Arrivée,${jsonActivities([{ name: 'Act', type: 'visit', status: 'bad' }])}`,
+      `2025-06-01,Paris,Arrivée,${encodeCsvActivityCell([{ name: 'Act', type: 'visit', status: 'bad' }])}`,
     ].join('\n')
     expect(parseCsv(csv).itinerary[0].activities[0].status).toBeUndefined()
   })
@@ -319,7 +319,7 @@ describe('parseCsv – activities (JSON format)', () => {
   it('assigns source "import" to each activity', () => {
     const csv = [
       'date,city,title,activities',
-      `2025-06-01,Paris,Arrivée,${jsonActivities([{ name: 'Tour Eiffel', type: 'visit' }])}`,
+      `2025-06-01,Paris,Arrivée,${encodeCsvActivityCell([{ name: 'Tour Eiffel', type: 'visit' }])}`,
     ].join('\n')
     expect(parseCsv(csv).itinerary[0].activities[0].source).toBe('import')
   })
@@ -337,7 +337,7 @@ describe('parseCsv – activities (JSON format)', () => {
   it('returns an empty array for an empty JSON array', () => {
     const csv = [
       'date,city,title,activities',
-      `2025-06-01,Paris,Arrivée,${jsonActivities([])}`,
+      `2025-06-01,Paris,Arrivée,${encodeCsvActivityCell([])}`,
     ].join('\n')
     expect(parseCsv(csv).itinerary[0].activities).toEqual([])
   })
@@ -654,8 +654,8 @@ describe('parseCsv – integration', () => {
   it('parses a rich two-day itinerary correctly', () => {
     const csv = [
       'date,city,title,coordinates,notes,highlights,activities,accommodationName,transportType,transportFrom,transportTo',
-      `2025-06-01,Paris,Arrivée à Paris,48.8566|2.3522,Première journée,Tour Eiffel|Champs-Élysées,${jsonActivities([{ name: 'Tour Eiffel', type: 'visit', duration: '2h' }, { name: 'Dîner', type: 'food', duration: '1h' }])},Hôtel Lumière,train,CDG,Paris Gare du Nord`,
-      `2025-06-02,Paris,Journée musées,48.8566|2.3522,,Louvre|Orsay,${jsonActivities([{ name: 'Louvre', type: 'visit', duration: '4h' }, { name: 'Orsay', type: 'visit', duration: '2h' }])},Hôtel Lumière,,`,
+      `2025-06-01,Paris,Arrivée à Paris,48.8566|2.3522,Première journée,Tour Eiffel|Champs-Élysées,${encodeCsvActivityCell([{ name: 'Tour Eiffel', type: 'visit', duration: '2h' }, { name: 'Dîner', type: 'food', duration: '1h' }])},Hôtel Lumière,train,CDG,Paris Gare du Nord`,
+      `2025-06-02,Paris,Journée musées,48.8566|2.3522,,Louvre|Orsay,${encodeCsvActivityCell([{ name: 'Louvre', type: 'visit', duration: '4h' }, { name: 'Orsay', type: 'visit', duration: '2h' }])},Hôtel Lumière,,`,
     ].join('\n')
 
     const result: TripData = parseCsv(csv)
