@@ -7,7 +7,7 @@ import {
   tripStartDate as mockStartDate,
   tripEndDate as mockEndDate,
 } from '@/lib/itinerary-data'
-import { parseCsv } from '@/lib/csv-parser'
+import { parseCsv, exportCsv } from '@/lib/csv-parser'
 
 const DB_NAME = 'tripbrain'
 const DB_VERSION = 1
@@ -144,6 +144,22 @@ export function useTripData() {
     URL.revokeObjectURL(url)
   }, [itinerary, tripStartDate, tripEndDate])
 
+  const exportCsvData = useCallback(() => {
+    const data: TripData = {
+      itinerary,
+      tripStartDate: tripStartDate.toISOString().split('T')[0],
+      tripEndDate: tripEndDate.toISOString().split('T')[0],
+    }
+    const csv = exportCsv(data)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'tripbrain-data.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [itinerary, tripStartDate, tripEndDate])
+
   const clearData = useCallback(async () => {
     const db = await openDB()
     const tx = db.transaction(STORE_NAME, 'readwrite')
@@ -190,6 +206,7 @@ export function useTripData() {
     loadMockData,
     importData,
     exportData,
+    exportCsvData,
     clearData,
     getCurrentDayIndex,
   }

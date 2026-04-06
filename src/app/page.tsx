@@ -60,6 +60,7 @@ export default function HomePage() {
     loadMockData,
     importData,
     exportData,
+    exportCsvData,
     clearData,
     getCurrentDayIndex,
   } = useTripData()
@@ -155,6 +156,7 @@ export default function HomePage() {
               <CacheStatusBadge />
               <DataManager
                 onExport={exportData}
+                onExportCsv={exportCsvData}
                 onImport={importData}
                 onClear={clearData}
               />

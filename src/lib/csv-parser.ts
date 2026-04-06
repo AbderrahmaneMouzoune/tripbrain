@@ -76,10 +76,24 @@ function generateId(prefix: string, index: number): string {
   return `${prefix}-${index + 1}`
 }
 
+/**
+ * Wraps a CSV field value in double-quotes when necessary (RFC 4180).
+ * Characters that trigger quoting: comma, double-quote, newline.
+ */
+function csvEscape(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`
+  }
+  return value
+}
+
 // ---------------------------------------------------------------------------
 // Activity parsing
-// Each activity token: "name|type|duration"
-// Multiple activities separated by ";"
+//
+// Each activity token encodes up to 12 pipe-separated fields:
+//   name|type|duration|description|address|bookingUrl|price|currency|rating|status|openAt|tips
+//
+// Multiple activities are separated by ";".
 // ---------------------------------------------------------------------------
 
 const VALID_ACTIVITY_TYPES = new Set([
@@ -89,6 +103,8 @@ const VALID_ACTIVITY_TYPES = new Set([
   'experience',
   'shopping',
 ])
+
+const VALID_ACTIVITY_STATUSES = new Set(['planned', 'done', 'skipped'])
 
 function parseActivities(value: string, dayIndex: number): Activity[] {
   if (!value.trim()) return []
@@ -104,7 +120,6 @@ function parseActivities(value: string, dayIndex: number): Activity[] {
       const type = VALID_ACTIVITY_TYPES.has(rawType)
         ? (rawType as Activity['type'])
         : 'visit'
-      const duration = parts[2] || undefined
 
       const activity: Activity = {
         id: `day-${dayIndex + 1}-activity-${i + 1}`,
@@ -112,10 +127,67 @@ function parseActivities(value: string, dayIndex: number): Activity[] {
         type,
         source: 'import',
       }
+
+      // positional optional fields
+      const duration = parts[2]
       if (duration) activity.duration = duration
+
+      const description = parts[3]
+      if (description) activity.description = description
+
+      const address = parts[4]
+      if (address) activity.address = address
+
+      const bookingUrl = parts[5]
+      if (bookingUrl) activity.bookingUrl = bookingUrl
+
+      const price = parseOptionalNumber(parts[6] ?? '')
+      if (price !== undefined) activity.price = price
+
+      const currency = parts[7]
+      if (currency) activity.currency = currency
+
+      const rating = parseOptionalNumber(parts[8] ?? '')
+      if (rating !== undefined) activity.rating = rating
+
+      const rawStatus = (parts[9] ?? '').toLowerCase()
+      if (VALID_ACTIVITY_STATUSES.has(rawStatus)) {
+        activity.status = rawStatus as Activity['status']
+      }
+
+      const openAt = parts[10]
+      if (openAt) activity.openAt = openAt
+
+      const tips = parts[11]
+      if (tips) activity.tips = tips
+
       return activity
     })
     .filter((a): a is Activity => a !== null)
+}
+
+/**
+ * Serialises a single activity to its pipe-separated token.
+ * Trailing empty fields are omitted to keep the output compact.
+ */
+function serializeActivity(a: Activity): string {
+  const parts = [
+    a.name,
+    a.type,
+    a.duration ?? '',
+    a.description ?? '',
+    a.address ?? '',
+    a.bookingUrl ?? '',
+    a.price !== undefined ? String(a.price) : '',
+    a.currency ?? '',
+    a.rating !== undefined ? String(a.rating) : '',
+    a.status ?? '',
+    a.openAt ?? '',
+    a.tips ?? '',
+  ]
+  // trim trailing empty fields
+  while (parts.length > 2 && parts[parts.length - 1] === '') parts.pop()
+  return parts.join('|')
 }
 
 // ---------------------------------------------------------------------------
@@ -194,15 +266,13 @@ export class CsvParseError extends Error {
  * The first row must be a header row. Every subsequent row represents one day
  * of the itinerary. The following columns are recognised:
  *
- * **Trip-level** (only needed on the first data row):
- * - `tripStartDate` — ISO date `YYYY-MM-DD`
- * - `tripEndDate`   — ISO date `YYYY-MM-DD`
- *
  * **Day-level** (required):
  * - `date`      — ISO date `YYYY-MM-DD`
  * - `dayNumber` — integer (1, 2, 3, …)
  * - `city`      — city name
  * - `title`     — short title for the day
+ *
+ * Trip start/end dates are automatically derived from the first and last day.
  *
  * **Day-level** (optional):
  * - `coordinates`        — `lat|lon` (e.g. `48.8566|2.3522`)
@@ -215,9 +285,11 @@ export class CsvParseError extends Error {
  * - `tips`               — `|`-separated list
  *
  * **Activities** (optional, one `activities` column):
- * - Format: `name|type|duration` entries separated by `;`
+ * - Format: up to 12 `|`-separated fields per activity, entries separated by `;`
+ * - Field order: `name|type|duration|description|address|bookingUrl|price|currency|rating|status|openAt|tips`
  * - `type` must be one of: `visit`, `transport`, `food`, `experience`, `shopping`
- * - Example: `Louvre|visit|3h;Déjeuner|food|1h30`
+ * - `status` must be one of: `planned`, `done`, `skipped`
+ * - Example: `Louvre|visit|3h|Musée du Louvre|Rue de Rivoli;Déjeuner|food|1h30`
  *
  * **Accommodation** (optional):
  * - `accommodationName`
@@ -242,7 +314,7 @@ export function parseCsv(csvText: string): TripData {
   const nonEmpty = lines.filter((l) => l.trim() !== '')
   if (nonEmpty.length < 2) {
     throw new CsvParseError(
-      'Le fichier CSV doit contenir une ligne d\'en-tête et au moins une ligne de données.',
+      "Le fichier CSV doit contenir une ligne d'en-tête et au moins une ligne de données.",
     )
   }
 
@@ -252,8 +324,6 @@ export function parseCsv(csvText: string): TripData {
     throw new CsvParseError('Impossible de lire les colonnes du fichier CSV.')
   }
 
-  let tripStartDate = ''
-  let tripEndDate = ''
   const itinerary: DayItinerary[] = []
 
   for (let rowIdx = 1; rowIdx < nonEmpty.length; rowIdx++) {
@@ -262,14 +332,6 @@ export function parseCsv(csvText: string): TripData {
     headers.forEach((header, i) => {
       row[header] = values[i] ?? ''
     })
-
-    // Trip-level dates — pick from first row that has them
-    if (!tripStartDate && row['tripStartDate']?.trim()) {
-      tripStartDate = row['tripStartDate'].trim()
-    }
-    if (!tripEndDate && row['tripEndDate']?.trim()) {
-      tripEndDate = row['tripEndDate'].trim()
-    }
 
     // Validate required day fields
     const date = row['date']?.trim()
@@ -351,25 +413,90 @@ export function parseCsv(csvText: string): TripData {
     throw new CsvParseError('Le fichier CSV ne contient aucune journée.')
   }
 
-  // Fall back to first/last day dates if trip-level dates are absent
-  if (!tripStartDate) tripStartDate = itinerary[0].date
-  if (!tripEndDate) tripEndDate = itinerary[itinerary.length - 1].date
-
-  // Validate ISO date format
-  const isoDateRegex = /^\d{4}-\d{2}-\d{2}$/
-  if (!isoDateRegex.test(tripStartDate)) {
-    throw new CsvParseError(
-      `"tripStartDate" doit être au format YYYY-MM-DD (reçu : "${tripStartDate}").`,
-    )
-  }
-  if (!isoDateRegex.test(tripEndDate)) {
-    throw new CsvParseError(
-      `"tripEndDate" doit être au format YYYY-MM-DD (reçu : "${tripEndDate}").`,
-    )
-  }
+  // Trip dates are always derived from the first and last day
+  const tripStartDate = itinerary[0].date
+  const tripEndDate = itinerary[itinerary.length - 1].date
 
   return { itinerary, tripStartDate, tripEndDate }
 }
 
-// Re-export for consumers that only need the helper
-export { parseOptionalNumber, splitPipe }
+// ---------------------------------------------------------------------------
+// CSV export
+// ---------------------------------------------------------------------------
+
+/** Column header order used for both import and export. */
+const CSV_HEADERS = [
+  'date',
+  'dayNumber',
+  'city',
+  'title',
+  'coordinates',
+  'notes',
+  'walkingDistance',
+  'dayType',
+  'highlights',
+  'foodRecommendations',
+  'packingTips',
+  'tips',
+  'activities',
+  'accommodationName',
+  'accommodationAddress',
+  'accommodationCheckIn',
+  'accommodationCheckOut',
+  'accommodationBookingUrl',
+  'transportType',
+  'transportFrom',
+  'transportTo',
+  'transportDetails',
+  'transportDepartureTime',
+  'transportArrivalTime',
+]
+
+/**
+ * Serialises a {@link TripData} object to a TripBrain CSV string.
+ *
+ * The trip start/end dates are not included as columns because they are
+ * automatically derived from the first and last day on import.
+ */
+export function exportCsv(data: TripData): string {
+  const rows = data.itinerary.map((day) => {
+    const activityStr = (day.activities ?? [])
+      .map(serializeActivity)
+      .join(';')
+
+    const row = [
+      day.date,
+      String(day.dayNumber),
+      day.city,
+      day.title,
+      day.coordinates ? `${day.coordinates[0]}|${day.coordinates[1]}` : '',
+      day.notes ?? '',
+      day.walkingDistance ?? '',
+      day.dayType ?? '',
+      (day.highlights ?? []).join('|'),
+      (day.foodRecommendations ?? []).join('|'),
+      (day.packingTips ?? []).join('|'),
+      (day.tips ?? []).join('|'),
+      activityStr,
+      day.accommodation?.name ?? '',
+      day.accommodation?.address ?? '',
+      day.accommodation?.checkIn ?? '',
+      day.accommodation?.checkOut ?? '',
+      day.accommodation?.bookingUrl ?? '',
+      day.transport?.type ?? '',
+      day.transport?.from ?? '',
+      day.transport?.to ?? '',
+      day.transport?.details ?? '',
+      day.transport?.departureTime ?? '',
+      day.transport?.arrivalTime ?? '',
+    ]
+
+    return row.map(csvEscape).join(',')
+  })
+
+  return [CSV_HEADERS.join(','), ...rows].join('\n')
+}
+
+// Re-export for consumers that only need the helpers
+export { parseOptionalNumber, splitPipe, csvEscape, CSV_HEADERS }
+

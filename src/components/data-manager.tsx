@@ -27,11 +27,12 @@ import { CsvFormatGuide } from '@/components/csv-format-guide'
 
 interface DataManagerProps {
   onExport: () => void
+  onExportCsv: () => void
   onImport: (file: File) => Promise<void>
   onClear: () => Promise<void>
 }
 
-export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
+export function DataManager({ onExport, onExportCsv, onImport, onClear }: DataManagerProps) {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadingImport, setLoadingImport] = useState(false)
@@ -92,7 +93,7 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
         )}
 
         <div className="flex flex-col gap-3">
-          {/* Export */}
+          {/* Export JSON */}
           <Button
             variant="outline"
             className="h-auto w-full justify-start gap-3 py-3"
@@ -103,9 +104,27 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
           >
             <Download className="h-4 w-4 shrink-0" />
             <div className="text-left">
-              <p className="text-sm font-medium">Exporter mes données</p>
+              <p className="text-sm font-medium">Exporter en JSON</p>
               <p className="text-muted-foreground text-xs">
                 Télécharger un fichier JSON de sauvegarde
+              </p>
+            </div>
+          </Button>
+
+          {/* Export CSV */}
+          <Button
+            variant="outline"
+            className="h-auto w-full justify-start gap-3 py-3"
+            onClick={() => {
+              onExportCsv()
+              setOpen(false)
+            }}
+          >
+            <Download className="h-4 w-4 shrink-0" />
+            <div className="text-left">
+              <p className="text-sm font-medium">Exporter en CSV</p>
+              <p className="text-muted-foreground text-xs">
+                Télécharger un fichier CSV (tableur)
               </p>
             </div>
           </Button>
