@@ -197,7 +197,7 @@ export function CsvFormatGuide() {
                 />
               ))}
             </div>
-            <div className="bg-muted break-all rounded-lg p-3 font-mono text-xs">
+            <div className="bg-muted break-all rounded-lg p-3 font-mono text-xs overflow-x-auto">
               Tour Eiffel|visit|2h|Monument emblématique|Champ de Mars||29.90|EUR|4.5|planned|09:00–18:00|Arriver tôt;Déjeuner|food|1h30
             </div>
           </section>
