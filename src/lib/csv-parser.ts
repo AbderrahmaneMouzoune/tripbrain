@@ -90,10 +90,11 @@ function csvEscape(value: string): string {
 // ---------------------------------------------------------------------------
 // Activity parsing
 //
-// Each activity token encodes up to 12 pipe-separated fields:
-//   name|type|duration|description|address|bookingUrl|price|currency|rating|status|openAt|tips
+// Primary format (JSON array in the CSV cell):
+//   [{"name":"Tour Eiffel","type":"visit","duration":"2h"},{"name":"Dîner","type":"food"}]
 //
-// Multiple activities are separated by ";".
+// Legacy fallback (pipe-positional, supported for backward compatibility):
+//   name|type|duration|...(12 fields)...; next activity; ...
 // ---------------------------------------------------------------------------
 
 const VALID_ACTIVITY_TYPES = new Set([
@@ -106,88 +107,114 @@ const VALID_ACTIVITY_TYPES = new Set([
 
 const VALID_ACTIVITY_STATUSES = new Set(['planned', 'done', 'skipped'])
 
-function parseActivities(value: string, dayIndex: number): Activity[] {
-  if (!value.trim()) return []
+function buildActivityFromObject(
+  obj: Record<string, unknown>,
+  id: string,
+): Activity | null {
+  const name = String(obj.name ?? '').trim()
+  if (!name) return null
 
+  const rawType = String(obj.type ?? 'visit').toLowerCase()
+  const type = VALID_ACTIVITY_TYPES.has(rawType)
+    ? (rawType as Activity['type'])
+    : 'visit'
+
+  const activity: Activity = { id, name, type, source: 'import' }
+
+  if (obj.duration) activity.duration = String(obj.duration)
+  if (obj.description) activity.description = String(obj.description)
+  if (obj.address) activity.address = String(obj.address)
+  if (obj.bookingUrl) activity.bookingUrl = String(obj.bookingUrl)
+  const price = parseOptionalNumber(String(obj.price ?? ''))
+  if (price !== undefined) activity.price = price
+  if (obj.currency) activity.currency = String(obj.currency)
+  const rating = parseOptionalNumber(String(obj.rating ?? ''))
+  if (rating !== undefined) activity.rating = rating
+  const rawStatus = String(obj.status ?? '').toLowerCase()
+  if (VALID_ACTIVITY_STATUSES.has(rawStatus))
+    activity.status = rawStatus as Activity['status']
+  if (obj.openAt) activity.openAt = String(obj.openAt)
+  if (obj.tips) activity.tips = String(obj.tips)
+
+  return activity
+}
+
+/** Parse activities from a JSON array cell value (primary format). */
+function parseActivitiesJson(value: string, dayIndex: number): Activity[] {
+  const parsed = JSON.parse(value) as unknown
+  if (!Array.isArray(parsed)) return []
+  return parsed
+    .map((item, i) => {
+      if (typeof item !== 'object' || item === null) return null
+      return buildActivityFromObject(
+        item as Record<string, unknown>,
+        `day-${dayIndex + 1}-activity-${i + 1}`,
+      )
+    })
+    .filter((a): a is Activity => a !== null)
+}
+
+/** Parse activities from the legacy pipe-positional format (backward compat). */
+function parseActivitiesLegacy(value: string, dayIndex: number): Activity[] {
   return value
     .split(';')
     .map((token, i) => {
       const parts = token.split('|').map((s) => s.trim())
       const name = parts[0] || ''
       if (!name) return null
-
-      const rawType = (parts[1] || 'visit').toLowerCase()
-      const type = VALID_ACTIVITY_TYPES.has(rawType)
-        ? (rawType as Activity['type'])
-        : 'visit'
-
-      const activity: Activity = {
-        id: `day-${dayIndex + 1}-activity-${i + 1}`,
+      const obj: Record<string, unknown> = {
         name,
-        type,
-        source: 'import',
+        type: parts[1] ?? 'visit',
+        duration: parts[2] ?? '',
+        description: parts[3] ?? '',
+        address: parts[4] ?? '',
+        bookingUrl: parts[5] ?? '',
+        price: parts[6] ?? '',
+        currency: parts[7] ?? '',
+        rating: parts[8] ?? '',
+        status: parts[9] ?? '',
+        openAt: parts[10] ?? '',
+        tips: parts[11] ?? '',
       }
-
-      // positional optional fields
-      const duration = parts[2]
-      if (duration) activity.duration = duration
-
-      const description = parts[3]
-      if (description) activity.description = description
-
-      const address = parts[4]
-      if (address) activity.address = address
-
-      const bookingUrl = parts[5]
-      if (bookingUrl) activity.bookingUrl = bookingUrl
-
-      const price = parseOptionalNumber(parts[6] ?? '')
-      if (price !== undefined) activity.price = price
-
-      const currency = parts[7]
-      if (currency) activity.currency = currency
-
-      const rating = parseOptionalNumber(parts[8] ?? '')
-      if (rating !== undefined) activity.rating = rating
-
-      const rawStatus = (parts[9] ?? '').toLowerCase()
-      if (VALID_ACTIVITY_STATUSES.has(rawStatus)) {
-        activity.status = rawStatus as Activity['status']
-      }
-
-      const openAt = parts[10]
-      if (openAt) activity.openAt = openAt
-
-      const tips = parts[11]
-      if (tips) activity.tips = tips
-
-      return activity
+      return buildActivityFromObject(obj, `day-${dayIndex + 1}-activity-${i + 1}`)
     })
     .filter((a): a is Activity => a !== null)
 }
 
+function parseActivities(value: string, dayIndex: number): Activity[] {
+  const trimmed = value.trim()
+  if (!trimmed) return []
+
+  // Primary format: JSON array
+  if (trimmed.startsWith('[')) {
+    try {
+      return parseActivitiesJson(trimmed, dayIndex)
+    } catch {
+      // fall through to legacy
+    }
+  }
+
+  // Legacy fallback: pipe-separated positional fields
+  return parseActivitiesLegacy(trimmed, dayIndex)
+}
+
 /**
- * Serialises a single activity to its pipe-separated token.
- * Trailing empty fields are omitted to keep the output compact.
+ * Serialises a single activity to a plain JSON-serialisable object.
+ * Only non-empty/non-default fields are included.
  */
-function serializeActivity(a: Activity): string {
-  const parts = [
-    a.name,
-    a.type,
-    a.duration ?? '',
-    a.description ?? '',
-    a.address ?? '',
-    a.bookingUrl ?? '',
-    a.price !== undefined ? String(a.price) : '',
-    a.currency ?? '',
-    a.rating !== undefined ? String(a.rating) : '',
-    a.status ?? '',
-    a.openAt ?? '',
-    a.tips ?? '',
-  ]
-  // trim trailing empty fields
-  while (parts.length > 2 && parts[parts.length - 1] === '') parts.pop()
-  return parts.join('|')
+function serializeActivityToObject(a: Activity): Record<string, unknown> {
+  const obj: Record<string, unknown> = { name: a.name, type: a.type }
+  if (a.duration) obj.duration = a.duration
+  if (a.description) obj.description = a.description
+  if (a.address) obj.address = a.address
+  if (a.bookingUrl) obj.bookingUrl = a.bookingUrl
+  if (a.price !== undefined) obj.price = a.price
+  if (a.currency) obj.currency = a.currency
+  if (a.rating !== undefined) obj.rating = a.rating
+  if (a.status) obj.status = a.status
+  if (a.openAt) obj.openAt = a.openAt
+  if (a.tips) obj.tips = a.tips
+  return obj
 }
 
 // ---------------------------------------------------------------------------
@@ -268,13 +295,13 @@ export class CsvParseError extends Error {
  *
  * **Day-level** (required):
  * - `date`      — ISO date `YYYY-MM-DD`
- * - `dayNumber` — integer (1, 2, 3, …)
  * - `city`      — city name
  * - `title`     — short title for the day
  *
- * Trip start/end dates are automatically derived from the first and last day.
+ * Trip start/end dates and day numbers are automatically derived.
  *
  * **Day-level** (optional):
+ * - `dayNumber`           — integer (auto-derived from row position if absent)
  * - `coordinates`        — `lat|lon` (e.g. `48.8566|2.3522`)
  * - `notes`              — free-form text
  * - `walkingDistance`    — e.g. `8 km`
@@ -285,11 +312,11 @@ export class CsvParseError extends Error {
  * - `tips`               — `|`-separated list
  *
  * **Activities** (optional, one `activities` column):
- * - Format: up to 12 `|`-separated fields per activity, entries separated by `;`
- * - Field order: `name|type|duration|description|address|bookingUrl|price|currency|rating|status|openAt|tips`
- * - `type` must be one of: `visit`, `transport`, `food`, `experience`, `shopping`
- * - `status` must be one of: `planned`, `done`, `skipped`
- * - Example: `Louvre|visit|3h|Musée du Louvre|Rue de Rivoli;Déjeuner|food|1h30`
+ * - Primary format: JSON array of activity objects
+ *   `[{"name":"Louvre","type":"visit","duration":"3h"},{"name":"Dîner","type":"food"}]`
+ * - Supported keys: `name` (required), `type`, `duration`, `description`,
+ *   `address`, `bookingUrl`, `price`, `currency`, `rating`, `status`, `openAt`, `tips`
+ * - Legacy format (backward compat): pipe-positional `name|type|duration|...` separated by `;`
  *
  * **Accommodation** (optional):
  * - `accommodationName`
@@ -337,7 +364,6 @@ export function parseCsv(csvText: string): TripData {
     const date = row['date']?.trim()
     const city = row['city']?.trim()
     const title = row['title']?.trim()
-    const dayNumberRaw = row['dayNumber']?.trim()
 
     if (!date) {
       throw new CsvParseError(
@@ -355,10 +381,10 @@ export function parseCsv(csvText: string): TripData {
       )
     }
 
+    // dayNumber is optional — fall back to row position (1-based).
+    // If explicitly provided, it must be a valid integer.
+    const dayNumberRaw = row['dayNumber']?.trim()
     const dayNumber = dayNumberRaw ? parseInt(dayNumberRaw, 10) : rowIdx
-    // rowIdx is 1-based here (header is row 0), so it naturally gives
-    // dayNumber 1, 2, 3… when the column is absent. This fallback is
-    // intentional and documented in the JSDoc above.
     if (isNaN(dayNumber)) {
       throw new CsvParseError(
         `Ligne ${rowIdx + 1} : "dayNumber" doit être un entier.`,
@@ -427,7 +453,6 @@ export function parseCsv(csvText: string): TripData {
 /** Column header order used for both import and export. */
 const CSV_HEADERS = [
   'date',
-  'dayNumber',
   'city',
   'title',
   'coordinates',
@@ -455,18 +480,23 @@ const CSV_HEADERS = [
 /**
  * Serialises a {@link TripData} object to a TripBrain CSV string.
  *
- * The trip start/end dates are not included as columns because they are
- * automatically derived from the first and last day on import.
+ * Activities are encoded as a JSON array in the `activities` column so that
+ * field names are explicit and the format is human-readable.
+ * `dayNumber` is omitted from the export because it is always derived from
+ * the row position on import.
+ * The trip start/end dates are also omitted because they are derived from
+ * the first and last day.
  */
 export function exportCsv(data: TripData): string {
   const rows = data.itinerary.map((day) => {
-    const activityStr = (day.activities ?? [])
-      .map(serializeActivity)
-      .join(';')
+    const activities = day.activities ?? []
+    const activityStr =
+      activities.length > 0
+        ? JSON.stringify(activities.map(serializeActivityToObject))
+        : ''
 
     const row = [
       day.date,
-      String(day.dayNumber),
       day.city,
       day.title,
       day.coordinates ? `${day.coordinates[0]}|${day.coordinates[1]}` : '',

@@ -9,20 +9,27 @@ import type { DayItinerary } from '../itinerary-data'
 
 /**
  * Build a minimal valid CSV with one day row.
- * tripStartDate / tripEndDate are no longer CSV columns — they are always
- * derived from the first and last day's `date` field.
+ * - dayNumber is optional — auto-derived from row position
+ * - tripStartDate / tripEndDate are auto-derived from the day dates
+ * - activities are encoded as a JSON array
  */
 function buildCsv(
   extraHeaders: string[] = [],
   extraValues: string[] = [],
 ): string {
-  const baseHeaders = ['date', 'dayNumber', 'city', 'title']
-  const baseValues = ['2025-06-01', '1', 'Paris', 'Arrivée à Paris']
+  const baseHeaders = ['date', 'city', 'title']
+  const baseValues = ['2025-06-01', 'Paris', 'Arrivée à Paris']
 
   const headers = [...baseHeaders, ...extraHeaders]
   const values = [...baseValues, ...extraValues]
 
   return [headers.join(','), values.join(',')].join('\n')
+}
+
+/** Encode a JSON activities value safely for use in a CSV field. */
+function jsonActivities(activities: Record<string, unknown>[]): string {
+  // Wrap in double-quotes, escaping inner double-quotes as ""
+  return `"${JSON.stringify(activities).replace(/"/g, '""')}"`
 }
 
 // ---------------------------------------------------------------------------
@@ -41,7 +48,6 @@ describe('parseCsv – basic parsing', () => {
 
     const day = result.itinerary[0]
     expect(day.date).toBe('2025-06-01')
-    expect(day.dayNumber).toBe(1)
     expect(day.city).toBe('Paris')
     expect(day.title).toBe('Arrivée à Paris')
     expect(day.activities).toEqual([])
@@ -49,14 +55,34 @@ describe('parseCsv – basic parsing', () => {
 
   it('derives start/end from first and last day when multiple days are present', () => {
     const csv = [
-      'date,dayNumber,city,title',
-      '2025-06-01,1,Paris,Jour 1',
-      '2025-06-02,2,Lyon,Jour 2',
-      '2025-06-10,3,Marseille,Jour 3',
+      'date,city,title',
+      '2025-06-01,Paris,Jour 1',
+      '2025-06-02,Lyon,Jour 2',
+      '2025-06-10,Marseille,Jour 3',
     ].join('\n')
     const result = parseCsv(csv)
     expect(result.tripStartDate).toBe('2025-06-01')
     expect(result.tripEndDate).toBe('2025-06-10')
+  })
+
+  it('auto-derives dayNumber from row position when the column is absent', () => {
+    const csv = [
+      'date,city,title',
+      '2025-06-01,Paris,Jour 1',
+      '2025-06-02,Lyon,Jour 2',
+    ].join('\n')
+    const result = parseCsv(csv)
+    expect(result.itinerary[0].dayNumber).toBe(1)
+    expect(result.itinerary[1].dayNumber).toBe(2)
+  })
+
+  it('uses explicit dayNumber when provided', () => {
+    const csv = [
+      'date,dayNumber,city,title',
+      '2025-06-01,5,Paris,Jour 5',
+    ].join('\n')
+    const result = parseCsv(csv)
+    expect(result.itinerary[0].dayNumber).toBe(5)
   })
 
   it('assigns a source of "import" to each day', () => {
@@ -66,9 +92,9 @@ describe('parseCsv – basic parsing', () => {
 
   it('generates sequential ids', () => {
     const csv = [
-      'date,dayNumber,city,title',
-      '2025-06-01,1,Paris,Jour 1',
-      '2025-06-02,2,Lyon,Jour 2',
+      'date,city,title',
+      '2025-06-01,Paris,Jour 1',
+      '2025-06-02,Lyon,Jour 2',
     ].join('\n')
 
     const result = parseCsv(csv)
@@ -77,25 +103,23 @@ describe('parseCsv – basic parsing', () => {
   })
 
   it('normalises Windows (CRLF) line endings', () => {
-    const csv = buildCsv()
-      .split('\n')
-      .join('\r\n')
+    const csv = buildCsv().split('\n').join('\r\n')
     const result = parseCsv(csv)
     expect(result.itinerary).toHaveLength(1)
   })
 
   it('ignores blank lines', () => {
-    const csv = 'date,dayNumber,city,title\n\n2025-06-01,1,Paris,Arrivée\n\n'
+    const csv = 'date,city,title\n\n2025-06-01,Paris,Arrivée\n\n'
     const result = parseCsv(csv)
     expect(result.itinerary).toHaveLength(1)
   })
 
   it('parses multiple days in order', () => {
     const csv = [
-      'date,dayNumber,city,title',
-      '2025-06-01,1,Paris,Jour 1',
-      '2025-06-02,2,Lyon,Jour 2',
-      '2025-06-03,3,Marseille,Jour 3',
+      'date,city,title',
+      '2025-06-01,Paris,Jour 1',
+      '2025-06-02,Lyon,Jour 2',
+      '2025-06-03,Marseille,Jour 3',
     ].join('\n')
 
     const result = parseCsv(csv)
@@ -111,16 +135,15 @@ describe('parseCsv – basic parsing', () => {
 describe('parseCsv – quoted fields', () => {
   it('handles quoted fields containing commas', () => {
     const csv =
-      'date,dayNumber,city,title\n' +
-      '2025-06-01,1,Paris,"Arrivée, installation"'
+      'date,city,title\n' + '2025-06-01,Paris,"Arrivée, installation"'
     const result = parseCsv(csv)
     expect(result.itinerary[0].title).toBe('Arrivée, installation')
   })
 
   it('handles escaped double-quotes inside quoted fields', () => {
     const csv =
-      'date,dayNumber,city,title,notes\n' +
-      '2025-06-01,1,Paris,Jour 1,"Hôtel ""La Paix"""'
+      'date,city,title,notes\n' +
+      '2025-06-01,Paris,Jour 1,"Hôtel ""La Paix"""'
     const result = parseCsv(csv)
     expect(result.itinerary[0].notes).toBe('Hôtel "La Paix"')
   })
@@ -206,11 +229,126 @@ describe('parseCsv – optional day fields', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Activities — basic
+// Activities — JSON format (primary)
 // ---------------------------------------------------------------------------
 
-describe('parseCsv – activities (basic)', () => {
-  it('parses a single activity with name, type and duration', () => {
+describe('parseCsv – activities (JSON format)', () => {
+  it('parses a single activity from a JSON array', () => {
+    const csv = [
+      'date,city,title,activities',
+      `2025-06-01,Paris,Arrivée,${jsonActivities([{ name: 'Tour Eiffel', type: 'visit', duration: '2h' }])}`,
+    ].join('\n')
+    const activities = parseCsv(csv).itinerary[0].activities
+    expect(activities).toHaveLength(1)
+    expect(activities[0].name).toBe('Tour Eiffel')
+    expect(activities[0].type).toBe('visit')
+    expect(activities[0].duration).toBe('2h')
+  })
+
+  it('parses multiple activities from a JSON array', () => {
+    const csv = [
+      'date,city,title,activities',
+      `2025-06-01,Paris,Arrivée,${jsonActivities([
+        { name: 'Tour Eiffel', type: 'visit', duration: '2h' },
+        { name: 'Déjeuner', type: 'food', duration: '1h' },
+      ])}`,
+    ].join('\n')
+    const activities = parseCsv(csv).itinerary[0].activities
+    expect(activities).toHaveLength(2)
+    expect(activities[1].type).toBe('food')
+  })
+
+  it('defaults to "visit" for unknown activity types', () => {
+    const csv = [
+      'date,city,title,activities',
+      `2025-06-01,Paris,Arrivée,${jsonActivities([{ name: 'Musée', type: 'unknown' }])}`,
+    ].join('\n')
+    expect(parseCsv(csv).itinerary[0].activities[0].type).toBe('visit')
+  })
+
+  it('accepts all valid activity types', () => {
+    const types = ['visit', 'transport', 'food', 'experience', 'shopping']
+    for (const type of types) {
+      const csv = [
+        'date,city,title,activities',
+        `2025-06-01,Paris,Arrivée,${jsonActivities([{ name: 'Act', type }])}`,
+      ].join('\n')
+      expect(parseCsv(csv).itinerary[0].activities[0].type).toBe(type)
+    }
+  })
+
+  it('parses all extended activity fields', () => {
+    const actObj = {
+      name: 'Louvre',
+      type: 'visit',
+      duration: '3h',
+      description: 'Musée',
+      address: 'Rue de Rivoli, Paris',
+      bookingUrl: 'https://louvre.fr',
+      price: 17,
+      currency: 'EUR',
+      rating: 4.5,
+      status: 'done',
+      openAt: '09:00–18:00',
+      tips: 'Arriver tôt',
+    }
+    const csv = [
+      'date,city,title,activities',
+      `2025-06-01,Paris,Arrivée,${jsonActivities([actObj])}`,
+    ].join('\n')
+    const a = parseCsv(csv).itinerary[0].activities[0]
+    expect(a.description).toBe('Musée')
+    expect(a.address).toBe('Rue de Rivoli, Paris')
+    expect(a.bookingUrl).toBe('https://louvre.fr')
+    expect(a.price).toBe(17)
+    expect(a.currency).toBe('EUR')
+    expect(a.rating).toBe(4.5)
+    expect(a.status).toBe('done')
+    expect(a.openAt).toBe('09:00–18:00')
+    expect(a.tips).toBe('Arriver tôt')
+  })
+
+  it('ignores unknown status values', () => {
+    const csv = [
+      'date,city,title,activities',
+      `2025-06-01,Paris,Arrivée,${jsonActivities([{ name: 'Act', type: 'visit', status: 'bad' }])}`,
+    ].join('\n')
+    expect(parseCsv(csv).itinerary[0].activities[0].status).toBeUndefined()
+  })
+
+  it('assigns source "import" to each activity', () => {
+    const csv = [
+      'date,city,title,activities',
+      `2025-06-01,Paris,Arrivée,${jsonActivities([{ name: 'Tour Eiffel', type: 'visit' }])}`,
+    ].join('\n')
+    expect(parseCsv(csv).itinerary[0].activities[0].source).toBe('import')
+  })
+
+  it('returns an empty array when the column is absent', () => {
+    const csv = buildCsv()
+    expect(parseCsv(csv).itinerary[0].activities).toEqual([])
+  })
+
+  it('returns an empty array for an empty activities cell', () => {
+    const csv = buildCsv(['activities'], [''])
+    expect(parseCsv(csv).itinerary[0].activities).toEqual([])
+  })
+
+  it('returns an empty array for an empty JSON array', () => {
+    const csv = [
+      'date,city,title,activities',
+      `2025-06-01,Paris,Arrivée,${jsonActivities([])}`,
+    ].join('\n')
+    expect(parseCsv(csv).itinerary[0].activities).toEqual([])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Activities — legacy pipe format (backward compatibility)
+// ---------------------------------------------------------------------------
+
+describe('parseCsv – activities (legacy pipe format)', () => {
+  it('parses a single activity from legacy pipe format', () => {
     const csv = buildCsv(['activities'], ['Tour Eiffel|visit|2h'])
     const activities = parseCsv(csv).itinerary[0].activities
     expect(activities).toHaveLength(1)
@@ -219,142 +357,20 @@ describe('parseCsv – activities (basic)', () => {
     expect(activities[0].duration).toBe('2h')
   })
 
-  it('parses multiple activities separated by semicolons', () => {
+  it('parses multiple activities from legacy pipe format (semicolon-separated)', () => {
     const csv = buildCsv(
       ['activities'],
-      ['Tour Eiffel|visit|2h;Déjeuner|food|1h30;Shopping|shopping|'],
+      ['Tour Eiffel|visit|2h;Déjeuner|food|1h30'],
     )
     const activities = parseCsv(csv).itinerary[0].activities
-    expect(activities).toHaveLength(3)
+    expect(activities).toHaveLength(2)
+    expect(activities[0].name).toBe('Tour Eiffel')
     expect(activities[1].type).toBe('food')
-    expect(activities[2].type).toBe('shopping')
   })
 
-  it('defaults to "visit" for unknown activity types', () => {
+  it('defaults to "visit" for unknown types in legacy format', () => {
     const csv = buildCsv(['activities'], ['Musée|unknown-type|1h'])
-    const activities = parseCsv(csv).itinerary[0].activities
-    expect(activities[0].type).toBe('visit')
-  })
-
-  it('accepts all valid activity types', () => {
-    const types = ['visit', 'transport', 'food', 'experience', 'shopping']
-    for (const type of types) {
-      const csv = buildCsv(['activities'], [`Act|${type}|1h`])
-      expect(parseCsv(csv).itinerary[0].activities[0].type).toBe(type)
-    }
-  })
-
-  it('omits duration when not provided', () => {
-    const csv = buildCsv(['activities'], ['Promenade|visit|'])
-    const activity = parseCsv(csv).itinerary[0].activities[0]
-    expect(activity.duration).toBeUndefined()
-  })
-
-  it('assigns source "import" to each activity', () => {
-    const csv = buildCsv(['activities'], ['Tour Eiffel|visit|2h'])
-    expect(parseCsv(csv).itinerary[0].activities[0].source).toBe('import')
-  })
-
-  it('returns an empty activities array when the column is absent', () => {
-    const csv = buildCsv()
-    expect(parseCsv(csv).itinerary[0].activities).toEqual([])
-  })
-
-  it('ignores empty activity tokens', () => {
-    const csv = buildCsv(['activities'], [''])
-    expect(parseCsv(csv).itinerary[0].activities).toEqual([])
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Activities — extended fields
-// ---------------------------------------------------------------------------
-
-describe('parseCsv – activities (extended fields)', () => {
-  it('parses address (field 4)', () => {
-    // address contains a comma, so the activities field must be quoted
-    const csv = [
-      'date,dayNumber,city,title,activities',
-      '2025-06-01,1,Paris,Arrivée à Paris,"Louvre|visit|3h||Rue de Rivoli, Paris"',
-    ].join('\n')
-    expect(parseCsv(csv).itinerary[0].activities[0].address).toBe(
-      'Rue de Rivoli, Paris',
-    )
-  })
-
-  it('parses bookingUrl (field 5)', () => {
-    const csv = buildCsv(
-      ['activities'],
-      ['Louvre|visit|3h|||https://louvre.fr'],
-    )
-    expect(parseCsv(csv).itinerary[0].activities[0].bookingUrl).toBe(
-      'https://louvre.fr',
-    )
-  })
-
-  it('parses price as a number (field 6)', () => {
-    const csv = buildCsv(
-      ['activities'],
-      ['Louvre|visit|3h||||17'],
-    )
-    expect(parseCsv(csv).itinerary[0].activities[0].price).toBe(17)
-  })
-
-  it('parses currency (field 7)', () => {
-    const csv = buildCsv(
-      ['activities'],
-      ['Louvre|visit|3h||||17|EUR'],
-    )
-    expect(parseCsv(csv).itinerary[0].activities[0].currency).toBe('EUR')
-  })
-
-  it('parses rating as a number (field 8)', () => {
-    // 6 pipes after '3h' puts 4.5 at index 8 (rating)
-    const csv = buildCsv(
-      ['activities'],
-      ['Louvre|visit|3h||||||4.5'],
-    )
-    expect(parseCsv(csv).itinerary[0].activities[0].rating).toBe(4.5)
-  })
-
-  it('parses status (field 9)', () => {
-    // 8 pipes after 'visit' puts status at index 9
-    const types = ['planned', 'done', 'skipped']
-    for (const status of types) {
-      const csv = buildCsv(['activities'], [`Act|visit||||||||${status}`])
-      expect(parseCsv(csv).itinerary[0].activities[0].status).toBe(status)
-    }
-  })
-
-  it('ignores unknown status values', () => {
-    const csv = buildCsv(['activities'], ['Act|visit||||||||bad-status'])
-    expect(parseCsv(csv).itinerary[0].activities[0].status).toBeUndefined()
-  })
-
-  it('parses openAt (field 10)', () => {
-    // 9 pipes after 'visit' puts value at index 10 (openAt)
-    const csv = buildCsv(
-      ['activities'],
-      ['Louvre|visit|||||||||09:00–18:00'],
-    )
-    expect(parseCsv(csv).itinerary[0].activities[0].openAt).toBe('09:00–18:00')
-  })
-
-  it('parses tips (field 11)', () => {
-    // 8 pipes → status(9), then openAt(10), then tips(11)
-    const csv = buildCsv(
-      ['activities'],
-      ['Louvre|visit||||||||planned|09:00–18:00|Arriver tôt'],
-    )
-    expect(parseCsv(csv).itinerary[0].activities[0].tips).toBe('Arriver tôt')
-  })
-
-  it('trims trailing empty fields from activity token', () => {
-    // Only name, type, duration provided — no excess pipes expected in output
-    const csv = buildCsv(['activities'], ['Promenade|visit|2h'])
-    const a = parseCsv(csv).itinerary[0].activities[0]
-    expect(a.description).toBeUndefined()
-    expect(a.address).toBeUndefined()
+    expect(parseCsv(csv).itinerary[0].activities[0].type).toBe('visit')
   })
 })
 
@@ -411,7 +427,14 @@ describe('parseCsv – transport', () => {
         'transportDepartureTime',
         'transportArrivalTime',
       ],
-      ['train', 'Paris Gare de Lyon', 'Lyon Part-Dieu', 'TGV 6607', '08:30', '10:00'],
+      [
+        'train',
+        'Paris Gare de Lyon',
+        'Lyon Part-Dieu',
+        'TGV 6607',
+        '08:30',
+        '10:00',
+      ],
     )
     const transport = parseCsv(csv).itinerary[0].transport
     expect(transport).toBeDefined()
@@ -449,7 +472,7 @@ describe('parseCsv – transport', () => {
 
 describe('parseCsv – error handling', () => {
   it('throws CsvParseError when the file has only one line', () => {
-    expect(() => parseCsv('date,dayNumber,city,title')).toThrow(CsvParseError)
+    expect(() => parseCsv('date,city,title')).toThrow(CsvParseError)
   })
 
   it('throws CsvParseError when the file is empty', () => {
@@ -457,21 +480,21 @@ describe('parseCsv – error handling', () => {
   })
 
   it('throws CsvParseError when "date" column is missing from a row', () => {
-    const csv = 'dayNumber,city,title\n1,Paris,Arrivée'
+    const csv = 'city,title\nParis,Arrivée'
     expect(() => parseCsv(csv)).toThrow(CsvParseError)
   })
 
   it('throws CsvParseError when "city" column is missing', () => {
-    const csv = 'date,dayNumber,title\n2025-06-01,1,Arrivée'
+    const csv = 'date,title\n2025-06-01,Arrivée'
     expect(() => parseCsv(csv)).toThrow(CsvParseError)
   })
 
   it('throws CsvParseError when "title" column is missing', () => {
-    const csv = 'date,dayNumber,city\n2025-06-01,1,Paris'
+    const csv = 'date,city\n2025-06-01,Paris'
     expect(() => parseCsv(csv)).toThrow(CsvParseError)
   })
 
-  it('throws CsvParseError when dayNumber is not an integer', () => {
+  it('throws CsvParseError when dayNumber is present but not an integer', () => {
     const csv = 'date,dayNumber,city,title\n2025-06-01,abc,Paris,Arrivée'
     expect(() => parseCsv(csv)).toThrow(CsvParseError)
   })
@@ -522,13 +545,14 @@ describe('exportCsv', () => {
     expect(lines).toHaveLength(3)
   })
 
-  it('includes the standard column headers', () => {
+  it('includes the standard column headers (no dayNumber, no tripDates)', () => {
     const headerLine = exportCsv(minimalData).split('\n')[0]
     expect(headerLine).toContain('date')
     expect(headerLine).toContain('city')
     expect(headerLine).toContain('activities')
     expect(headerLine).toContain('transportType')
-    // trip dates are NOT columns — derived on import
+    // auto-derived columns are NOT included
+    expect(headerLine).not.toContain('dayNumber')
     expect(headerLine).not.toContain('tripStartDate')
     expect(headerLine).not.toContain('tripEndDate')
   })
@@ -579,58 +603,7 @@ describe('exportCsv', () => {
     expect(csv).toContain('Tour Eiffel|Louvre')
   })
 
-  it('serialises activities with extended fields', () => {
-    const data: TripData = {
-      ...minimalData,
-      itinerary: [
-        {
-          ...minimalData.itinerary[0],
-          activities: [
-            {
-              id: 'a1',
-              name: 'Tour Eiffel',
-              type: 'visit',
-              duration: '2h',
-              description: 'Monument',
-              address: 'Champ de Mars',
-              price: 29.9,
-              currency: 'EUR',
-              rating: 4.5,
-              status: 'planned',
-              openAt: '09:00–18:00',
-              tips: 'Arriver tôt',
-            },
-          ],
-        },
-      ],
-    }
-    const csv = exportCsv(data)
-    // Should contain all extended fields
-    expect(csv).toContain('Tour Eiffel|visit|2h|Monument|Champ de Mars||29.9|EUR|4.5|planned|09:00–18:00|Arriver tôt')
-  })
-
-  it('trims trailing empty fields from activity serialisation', () => {
-    const data: TripData = {
-      ...minimalData,
-      itinerary: [
-        {
-          ...minimalData.itinerary[0],
-          activities: [{ id: 'a1', name: 'Promenade', type: 'visit' }],
-        },
-      ],
-    }
-    const csv = exportCsv(data)
-    // Should be just name|type, no trailing pipes
-    expect(csv).toContain('Promenade|visit')
-    // Should not have excessive trailing pipes
-    const activityToken = csv
-      .split('\n')[1]
-      .split(',')
-      .find((f) => f.includes('Promenade'))
-    expect(activityToken).toBe('Promenade|visit')
-  })
-
-  it('round-trips activities through export then parse', () => {
+  it('serialises activities as a JSON array in the CSV cell', () => {
     const data: TripData = {
       ...minimalData,
       itinerary: [
@@ -651,14 +624,25 @@ describe('exportCsv', () => {
       ],
     }
     const csv = exportCsv(data)
+    // The activities cell must contain JSON (double-quotes escaped as "")
+    expect(csv).toContain('Tour Eiffel')
+    expect(csv).toContain('visit')
+    // Round-trip check
     const parsed = parseCsv(csv)
-    const activity = parsed.itinerary[0].activities[0]
-    expect(activity.name).toBe('Tour Eiffel')
-    expect(activity.type).toBe('visit')
-    expect(activity.duration).toBe('2h')
-    expect(activity.price).toBe(29.9)
-    expect(activity.currency).toBe('EUR')
-    expect(activity.status).toBe('done')
+    const a = parsed.itinerary[0].activities[0]
+    expect(a.name).toBe('Tour Eiffel')
+    expect(a.type).toBe('visit')
+    expect(a.duration).toBe('2h')
+    expect(a.price).toBe(29.9)
+    expect(a.currency).toBe('EUR')
+    expect(a.status).toBe('done')
+  })
+
+  it('omits the activities cell when there are no activities', () => {
+    const csv = exportCsv(minimalData)
+    // No JSON brackets should appear when activities is empty
+    const dataLine = csv.split('\n')[1]
+    expect(dataLine).not.toContain('[')
   })
 })
 
@@ -669,9 +653,9 @@ describe('exportCsv', () => {
 describe('parseCsv – integration', () => {
   it('parses a rich two-day itinerary correctly', () => {
     const csv = [
-      'date,dayNumber,city,title,coordinates,notes,highlights,activities,accommodationName,transportType,transportFrom,transportTo',
-      '2025-06-01,1,Paris,Arrivée à Paris,48.8566|2.3522,Première journée,Tour Eiffel|Champs-Élysées,Tour Eiffel|visit|2h;Dîner|food|1h,Hôtel Lumière,train,CDG,Paris Gare du Nord',
-      '2025-06-02,2,Paris,Journée musées,48.8566|2.3522,,Louvre|Orsay,Louvre|visit|4h;Orsay|visit|2h,Hôtel Lumière,,',
+      'date,city,title,coordinates,notes,highlights,activities,accommodationName,transportType,transportFrom,transportTo',
+      `2025-06-01,Paris,Arrivée à Paris,48.8566|2.3522,Première journée,Tour Eiffel|Champs-Élysées,${jsonActivities([{ name: 'Tour Eiffel', type: 'visit', duration: '2h' }, { name: 'Dîner', type: 'food', duration: '1h' }])},Hôtel Lumière,train,CDG,Paris Gare du Nord`,
+      `2025-06-02,Paris,Journée musées,48.8566|2.3522,,Louvre|Orsay,${jsonActivities([{ name: 'Louvre', type: 'visit', duration: '4h' }, { name: 'Orsay', type: 'visit', duration: '2h' }])},Hôtel Lumière,,`,
     ].join('\n')
 
     const result: TripData = parseCsv(csv)
