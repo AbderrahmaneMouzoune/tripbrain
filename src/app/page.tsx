@@ -167,7 +167,16 @@ export default function HomePage() {
       {/* Timeline */}
       <section className="border-border/60 bg-card/55 border-b backdrop-blur-md">
         <div className="mx-auto max-w-4xl">
-          <Timeline itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
+          <Timeline
+            itinerary={itinerary}
+            selectedDay={selectedDay}
+            onSelectDay={(index) => {
+              setSelectedDay(index)
+              if (activeTab === 'documents') {
+                setActiveTab('roadbook')
+              }
+            }}
+          />
         </div>
       </section>
 
