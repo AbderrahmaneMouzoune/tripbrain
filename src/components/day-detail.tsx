@@ -10,6 +10,12 @@ import {
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
+import {
   Carousel,
   CarouselContent,
   CarouselItem,
@@ -20,12 +26,12 @@ import {
 import { Lightbox } from '@/components/lightbox'
 import { Badge } from '@/components/ui/badge'
 import { useClipboard } from '@/hooks/use-clipboard'
+import { TransportCard } from '@/components/transport-card'
+import { AccommodationCard } from '@/components/accommodation-card'
+import { TipsCard } from '@/components/tips-card'
 import {
   MapPin,
-  Hotel,
   Train,
-  Car,
-  Plane,
   Camera,
   Utensils,
   ShoppingBag,
@@ -38,10 +44,10 @@ import {
   Footprints,
   StickyNote,
   Backpack,
-  Lightbulb,
   Tag,
   Copy,
   Check,
+  Banknote,
 } from 'lucide-react'
 import { CachedImage } from '@/components/cached-image'
 
@@ -66,36 +72,32 @@ function getActivityIcon(type: string) {
   }
 }
 
-function getTransportIcon(type: string) {
-  switch (type) {
-    case 'train':
-      return Train
-    case 'car':
-      return Car
-    case 'plane':
-      return Plane
+type ActivityStatus = 'planned' | 'done' | 'skipped'
+
+function getActivityStatusClass(status: ActivityStatus) {
+  switch (status) {
+    case 'done':
+      return 'border-green-200 bg-green-500/10 text-green-600 dark:border-green-800 dark:text-green-400'
+    case 'skipped':
+      return 'border-red-200 bg-red-500/10 text-red-500 dark:border-red-800 dark:text-red-400'
     default:
-      return Train
+      return 'bg-muted/60 text-muted-foreground border-border/40'
   }
+}
+
+function formatPrice(value: number, currency?: string) {
+  return [value.toLocaleString('fr-FR'), currency].filter(Boolean).join(' ')
 }
 
 export function DayDetail({ day }: DayDetailProps) {
   const status = getDayStatus(day.date)
-  const images = day.accommodation?.images ?? []
   const dayImages = day.images ?? []
 
   const [carouselApi, setCarouselApi] = useState<CarouselApi>()
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [accommodationLightboxOpen, setAccommodationLightboxOpen] =
-    useState(false)
   const [dayLightboxOpen, setDayLightboxOpen] = useState(false)
-  const { copied: copiedName, copy: copyName } = useClipboard()
-  const { copied: copiedAddress, copy: copyAddress } = useClipboard()
-
-  const accommodationLightboxImages = images.map((src, i) => ({
-    url: src,
-    alt: `${day.accommodation?.name ?? ''} – photo ${i + 1}`,
-  }))
+  const { copied: copiedActivity, copy: copyActivity } = useClipboard()
+  const [copiedActivityId, setCopiedActivityId] = useState<string | null>(null)
 
   const dayLightboxImages = dayImages.map((img) => ({
     url: img.url,
@@ -120,11 +122,6 @@ export function DayDetail({ day }: DayDetailProps) {
 
   return (
     <>
-      <Lightbox
-        images={accommodationLightboxImages}
-        isOpen={accommodationLightboxOpen}
-        onClose={() => setAccommodationLightboxOpen(false)}
-      />
       <Lightbox
         images={dayLightboxImages}
         isOpen={dayLightboxOpen}
@@ -294,151 +291,11 @@ export function DayDetail({ day }: DayDetailProps) {
         )}
 
         {/* Transport info */}
-        {day.transport && (
-          <div className="border-border/60 bg-card/80 rounded-xl border px-4 py-3">
-            {(() => {
-              const transport = day.transport!
-              const Icon = getTransportIcon(transport.type)
-              const hasRoute = Boolean(transport.from && transport.to)
-
-              return (
-                <div className="flex items-start gap-3">
-                  <div className="bg-primary/10 mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-                    <Icon className="text-primary h-4 w-4" strokeWidth={1.75} />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                      <p className="text-muted-foreground text-[10px] font-semibold tracking-[0.14em] uppercase">
-                        Transport
-                      </p>
-                    </div>
-
-                    <p className="text-foreground text-sm leading-snug font-semibold">
-                      {hasRoute
-                        ? `${transport.from} → ${transport.to}`
-                        : transport.details}
-                    </p>
-
-                    {transport.details && hasRoute && (
-                      <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-                        {transport.details}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )
-            })()}
-          </div>
-        )}
+        {day.transport && <TransportCard transport={day.transport} />}
 
         {/* Accommodation */}
         {day.accommodation && (
-          <Card className="border-border/60 bg-card/80 overflow-hidden shadow-none">
-            <div className="flex items-stretch gap-3 px-3">
-              {images.length > 0 && (
-                <div className="aspect-square w-28 shrink-0 overflow-hidden rounded-xl">
-                  <Carousel opts={{ loop: true }} className="h-full w-full">
-                    <CarouselContent className="h-full">
-                      {images.map((src, i) => (
-                        <CarouselItem key={i} className="aspect-square h-full">
-                          <div
-                            className="h-full w-full cursor-zoom-in overflow-hidden"
-                            onClick={() => setAccommodationLightboxOpen(true)}
-                          >
-                            <CachedImage
-                              src={src}
-                              alt={`${day.accommodation!.name} – photo ${i + 1}`}
-                              className="h-full w-full object-cover"
-                              fallbackClassName="h-full w-full"
-                            />
-                          </div>
-                        </CarouselItem>
-                      ))}
-                    </CarouselContent>
-                    {images.length > 1 && (
-                      <>
-                        <CarouselPrevious
-                          className="left-1 h-5 w-5"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <CarouselNext
-                          className="right-1 h-5 w-5"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </>
-                    )}
-                  </Carousel>
-                </div>
-              )}
-              <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 py-3 leading-none">
-                <p className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
-                  <Hotel
-                    className="text-secondary h-3 w-3"
-                    strokeWidth={1.75}
-                  />
-                  Hébergement
-                </p>
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-foreground text-sm leading-snug font-semibold">
-                    {day.accommodation.name}
-                  </p>
-                  <div className="mt-0.5 flex shrink-0 items-center gap-1 pr-1.5">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => copyName(day.accommodation!.name)}
-                      title="Copier le nom"
-                      className="text-muted-foreground/50 hover:text-primary h-6 w-6"
-                    >
-                      {copiedName ? (
-                        <Check className="h-3.5 w-3.5 text-green-500" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
-                      )}
-                    </Button>
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(day.accommodation.name + ' ' + day.accommodation.address)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-muted-foreground/50 hover:text-primary transition-colors"
-                    >
-                      <Navigation className="h-3.5 w-3.5" strokeWidth={1.5} />
-                    </a>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <p className="text-muted-foreground min-w-0 flex-1 text-xs">
-                    {day.accommodation.address}
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => copyAddress(day.accommodation!.address)}
-                    title="Copier l'adresse"
-                    className="text-muted-foreground/50 hover:text-primary h-6 w-6 shrink-0"
-                  >
-                    {copiedAddress ? (
-                      <Check className="h-3 w-3 text-green-500" />
-                    ) : (
-                      <Copy className="h-3 w-3" strokeWidth={1.5} />
-                    )}
-                  </Button>
-                </div>
-                {day.accommodation.bookingUrl && (
-                  <a
-                    href={day.accommodation.bookingUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:text-primary/80 mt-0.5 inline-flex items-center gap-1 text-xs font-medium transition-colors hover:underline"
-                  >
-                    Voir la réservation
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
-              </div>
-            </div>
-          </Card>
+          <AccommodationCard accommodation={day.accommodation} />
         )}
 
         {/* Activities */}
@@ -453,55 +310,216 @@ export function DayDetail({ day }: DayDetailProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pt-0 pb-4">
-            <div className="divide-border/40 flex flex-col divide-y">
+            <Accordion
+              type="single"
+              collapsible
+              className="divide-border/40 divide-y"
+            >
               {day.activities.map((activity, index) => {
                 const Icon = getActivityIcon(activity.type)
+                const activityItemId = activity.id ?? `activity-${index}`
+                const hasDetails = Boolean(
+                  activity.description ||
+                  activity.address ||
+                  activity.rating !== undefined ||
+                  (activity.tags && activity.tags.length > 0) ||
+                  activity.price !== undefined ||
+                  activity.bookingUrl ||
+                  activity.tips,
+                )
+
                 return (
-                  <div
-                    key={index}
-                    className="flex gap-3 py-3 first:pt-0 last:pb-0"
+                  <AccordionItem
+                    key={activityItemId}
+                    value={activityItemId}
+                    className="border-b-0 py-3 first:pt-0 last:pb-0"
                   >
-                    <div className="bg-primary/10 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg">
-                      <Icon
-                        className="text-primary h-3.5 w-3.5"
-                        strokeWidth={1.75}
-                      />
-                    </div>
-                    <div className="min-w-0 flex-1 leading-none">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-foreground text-sm leading-snug font-semibold">
-                          {activity.name}
-                        </p>
-                        {activity.coordinates && (
-                          <a
-                            href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                    <div className="flex gap-3">
+                      <div className="bg-primary/10 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg">
+                        <Icon
+                          className="text-primary h-3.5 w-3.5"
+                          strokeWidth={1.75}
+                        />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start gap-2">
+                          <AccordionTrigger
+                            className={cn(
+                              'min-w-0 flex-1 py-0 pr-0 text-left hover:no-underline [&>svg]:mt-1 [&>svg]:size-3.5',
+                              !hasDetails &&
+                                'pointer-events-none [&>svg]:hidden',
+                            )}
+                          >
+                            <div className="min-w-0 space-y-1.5">
+                              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                                <p className="text-foreground text-sm leading-snug font-semibold">
+                                  {activity.name}
+                                </p>
+                                {activity.status && (
+                                  <span
+                                    className={cn(
+                                      'rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
+                                      getActivityStatusClass(activity.status),
+                                    )}
+                                  >
+                                    {activity.status}
+                                  </span>
+                                )}
+                              </div>
+
+                              {(activity.duration || activity.openAt) && (
+                                <div className="text-muted-foreground/70 flex flex-wrap items-center gap-1.5 text-[11px]">
+                                  <Clock
+                                    className="h-3 w-3 shrink-0"
+                                    strokeWidth={1.75}
+                                  />
+                                  {activity.openAt ? (
+                                    <span>
+                                      {activity.openAt}
+                                      {activity.duration &&
+                                        ` · ${activity.duration}`}
+                                    </span>
+                                  ) : (
+                                    <span>{activity.duration}</span>
+                                  )}
+                                </div>
+                              )}
+
+                              {activity.description && (
+                                <p className="text-muted-foreground line-clamp-1 text-xs leading-relaxed">
+                                  {activity.description}
+                                </p>
+                              )}
+                            </div>
+                          </AccordionTrigger>
+
+                          {activity.coordinates && (
+                            <a
+                              href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
+                              aria-label={`Voir ${activity.name} sur la carte`}
+                            >
+                              <Navigation
+                                className="h-3.5 w-3.5"
+                                strokeWidth={1.5}
+                              />
+                            </a>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void copyActivity(activity.name)
+                              setCopiedActivityId(activityItemId)
+                            }}
+                            title={
+                              activity.address
+                                ? "Copier l'adresse"
+                                : "Copier le nom de l'activité"
+                            }
+                            aria-label={
+                              activity.address
+                                ? `Copier l'adresse de ${activity.name}`
+                                : `Copier le nom de ${activity.name}`
+                            }
                             className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
                           >
-                            <Navigation
-                              className="h-3.5 w-3.5"
-                              strokeWidth={1.5}
-                            />
-                          </a>
+                            {copiedActivity &&
+                            copiedActivityId === activityItemId ? (
+                              <Check className="h-3.5 w-3.5 text-green-500" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                            )}
+                          </button>
+                        </div>
+
+                        {hasDetails && (
+                          <AccordionContent className="pt-2 pb-0">
+                            {activity.address && (
+                              <div className="text-muted-foreground/70 mt-1 flex items-start gap-1 text-[11px]">
+                                <MapPin
+                                  className="mt-0.5 h-3 w-3 shrink-0"
+                                  strokeWidth={1.5}
+                                />
+                                <span className="leading-relaxed">
+                                  {activity.address}
+                                </span>
+                              </div>
+                            )}
+
+                            {activity.rating !== undefined && (
+                              <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-500">
+                                <Star
+                                  className="h-3 w-3 fill-current"
+                                  strokeWidth={0}
+                                />
+                                <span className="font-medium">
+                                  {activity.rating}
+                                </span>
+                              </div>
+                            )}
+
+                            {activity.tags && activity.tags.length > 0 && (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {activity.tags.map((t) => (
+                                  <span
+                                    key={t}
+                                    className="border-border/50 text-muted-foreground/70 rounded-full border px-1.5 py-0.5 text-[10px]"
+                                  >
+                                    {t}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {activity.price !== undefined && (
+                              <div className="text-muted-foreground/70 mt-1 flex items-center gap-1 text-[11px]">
+                                <Banknote
+                                  className="h-3 w-3 shrink-0"
+                                  strokeWidth={1.5}
+                                />
+                                <span>
+                                  {formatPrice(
+                                    activity.price,
+                                    activity.currency,
+                                  )}
+                                </span>
+                                {activity.reservationRequired && (
+                                  <span className="text-muted-foreground/50">
+                                    · réservation requise
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {activity.bookingUrl && (
+                              <a
+                                href={activity.bookingUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:text-primary/80 mt-1 inline-flex items-center gap-1 text-xs font-medium transition-colors hover:underline"
+                              >
+                                Réserver
+                                <ExternalLink className="h-2.5 w-2.5" />
+                              </a>
+                            )}
+
+                            {activity.tips && (
+                              <p className="text-muted-foreground/70 mt-1 text-[11px] leading-relaxed italic">
+                                💡 {activity.tips}
+                              </p>
+                            )}
+                          </AccordionContent>
                         )}
                       </div>
-                      {activity.description && (
-                        <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-                          {activity.description}
-                        </p>
-                      )}
-                      {activity.duration && (
-                        <div className="text-muted-foreground/70 mt-1 flex items-center gap-1 text-[11px]">
-                          <Clock className="h-3 w-3" strokeWidth={1.75} />
-                          <span>{activity.duration}</span>
-                        </div>
-                      )}
                     </div>
-                  </div>
+                  </AccordionItem>
                 )
               })}
-            </div>
+            </Accordion>
           </CardContent>
         </Card>
 
@@ -559,27 +577,7 @@ export function DayDetail({ day }: DayDetailProps) {
 
         {/* Tips */}
         {day.tips && day.tips.length > 0 && (
-          <Card className="border-border/60 bg-card/80 shadow-none">
-            <CardHeader className="px-4 py-2">
-              <CardTitle className="text-muted-foreground flex items-center gap-2 text-sm font-semibold tracking-wide uppercase">
-                <Lightbulb
-                  className="text-secondary h-3.5 w-3.5"
-                  strokeWidth={1.75}
-                />
-                Conseils pratiques
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pt-0 pb-4">
-              <ul className="flex flex-col gap-2">
-                {day.tips.map((tip, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <span className="text-secondary mt-0.5 shrink-0">→</span>
-                    <span className="text-foreground leading-snug">{tip}</span>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
+          <TipsCard tips={day.tips} />
         )}
       </div>
     </>

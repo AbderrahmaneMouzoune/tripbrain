@@ -7,7 +7,11 @@ vi.mock('fflate', () => ({
 }))
 
 import { zip, unzip } from 'fflate'
-import { uniqueFileName, exportDocumentsAsZip, parseDocumentsZip } from '../document-zip'
+import {
+  uniqueFileName,
+  exportDocumentsAsZip,
+  parseDocumentsZip,
+} from '../document-zip'
 
 // ---------------------------------------------------------------------------
 // uniqueFileName – pure function, no mocking needed
@@ -19,7 +23,9 @@ describe('uniqueFileName', () => {
   })
 
   it('appends (1) when the exact name already exists', () => {
-    expect(uniqueFileName('file.pdf', new Set(['file.pdf']))).toBe('file (1).pdf')
+    expect(uniqueFileName('file.pdf', new Set(['file.pdf']))).toBe(
+      'file (1).pdf',
+    )
   })
 
   it('increments counter past existing numbered variants', () => {
@@ -63,30 +69,63 @@ describe('exportDocumentsAsZip', () => {
   let clickMock: ReturnType<typeof vi.fn>
   let createObjectURLMock: ReturnType<typeof vi.fn>
   let revokeObjectURLMock: ReturnType<typeof vi.fn>
+  const zipMock = zip as unknown as ReturnType<typeof vi.fn>
+  let originalURL: typeof globalThis.URL | undefined
+  let originalDocument: Document | undefined
 
   beforeEach(() => {
     clickMock = vi.fn()
     createObjectURLMock = vi.fn().mockReturnValue('blob:mock-url')
     revokeObjectURLMock = vi.fn()
 
-    vi.stubGlobal('URL', {
-      createObjectURL: createObjectURLMock,
-      revokeObjectURL: revokeObjectURLMock,
+    originalURL = globalThis.URL
+    originalDocument = globalThis.document
+
+    Object.defineProperty(globalThis, 'URL', {
+      configurable: true,
+      writable: true,
+      value: {
+        createObjectURL: createObjectURLMock,
+        revokeObjectURL: revokeObjectURLMock,
+      },
     })
 
     const mockAnchor = { href: '', download: '', click: clickMock }
-    vi.stubGlobal('document', {
-      createElement: vi.fn().mockReturnValue(mockAnchor),
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      writable: true,
+      value: {
+        createElement: vi.fn().mockReturnValue(mockAnchor),
+      },
     })
 
     // Make fflate.zip call back synchronously with a dummy buffer
-    vi.mocked(zip).mockImplementation(
+    zipMock.mockImplementation(
       (_files, _opts, cb) => void cb(null, new Uint8Array([80, 75, 3, 4])),
     )
   })
 
   afterEach(() => {
-    vi.unstubAllGlobals()
+    if (originalURL === undefined) {
+      delete (globalThis as { URL?: unknown }).URL
+    } else {
+      Object.defineProperty(globalThis, 'URL', {
+        configurable: true,
+        writable: true,
+        value: originalURL,
+      })
+    }
+
+    if (originalDocument === undefined) {
+      delete (globalThis as { document?: unknown }).document
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        configurable: true,
+        writable: true,
+        value: originalDocument,
+      })
+    }
+
     vi.clearAllMocks()
   })
 
@@ -95,7 +134,9 @@ describe('exportDocumentsAsZip', () => {
     const blob = new Blob(['hello'], { type: 'text/plain' })
     await exportDocumentsAsZip(
       [{ name: 'doc.txt', type: 'text/plain', size: 5, blob }],
-      (p) => { progress.push(p.status) },
+      (p) => {
+        progress.push(p.status)
+      },
     )
     expect(progress).toContain('preparing')
     expect(progress).toContain('done')
@@ -103,13 +144,17 @@ describe('exportDocumentsAsZip', () => {
 
   it('triggers an anchor click for download', async () => {
     const blob = new Blob(['data'], { type: 'application/pdf' })
-    await exportDocumentsAsZip([{ name: 'report.pdf', type: 'application/pdf', size: 4, blob }])
+    await exportDocumentsAsZip([
+      { name: 'report.pdf', type: 'application/pdf', size: 4, blob },
+    ])
     expect(clickMock).toHaveBeenCalledOnce()
   })
 
   it('revokes the object URL after download', async () => {
     const blob = new Blob(['x'])
-    await exportDocumentsAsZip([{ name: 'x.bin', type: 'application/octet-stream', size: 1, blob }])
+    await exportDocumentsAsZip([
+      { name: 'x.bin', type: 'application/octet-stream', size: 1, blob },
+    ])
     expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:mock-url')
   })
 
@@ -124,11 +169,15 @@ describe('exportDocumentsAsZip', () => {
 // ---------------------------------------------------------------------------
 
 describe('parseDocumentsZip', () => {
+  const unzipMock = unzip as unknown as ReturnType<typeof vi.fn>
+
   afterEach(() => {
     vi.clearAllMocks()
   })
 
-  function makeManifestEntries(docs: Array<{ name: string; type: string; size: number }>) {
+  function makeManifestEntries(
+    docs: Array<{ name: string; type: string; size: number }>,
+  ) {
     const encoder = new TextEncoder()
     const manifest = {
       version: '1.0' as const,
@@ -141,7 +190,9 @@ describe('parseDocumentsZip', () => {
       'manifest.json': encoder.encode(JSON.stringify(manifest)),
     }
     for (const doc of docs) {
-      entries[`documents/${doc.name}`] = encoder.encode(`content-of-${doc.name}`)
+      entries[`documents/${doc.name}`] = encoder.encode(
+        `content-of-${doc.name}`,
+      )
     }
     return entries
   }
@@ -155,9 +206,7 @@ describe('parseDocumentsZip', () => {
     const entries = makeManifestEntries([
       { name: 'file.txt', type: 'text/plain', size: 20 },
     ])
-    vi.mocked(unzip).mockImplementation(
-      (_data, cb) => void cb(null, entries),
-    )
+    unzipMock.mockImplementation((_data, cb) => void cb(null, entries))
     const file = new File([new Uint8Array([80, 75])], 'export.zip', {
       type: 'application/zip',
     })
@@ -169,9 +218,7 @@ describe('parseDocumentsZip', () => {
 
   it('accepts a file with application/zip mime type even without .zip extension', async () => {
     const entries = makeManifestEntries([])
-    vi.mocked(unzip).mockImplementation(
-      (_data, cb) => void cb(null, entries),
-    )
+    unzipMock.mockImplementation((_data, cb) => void cb(null, entries))
     const file = new File([new Uint8Array([80, 75])], 'archive', {
       type: 'application/zip',
     })
@@ -179,9 +226,7 @@ describe('parseDocumentsZip', () => {
   })
 
   it('throws when the ZIP has no manifest.json', async () => {
-    vi.mocked(unzip).mockImplementation(
-      (_data, cb) => void cb(null, {}),
-    )
+    unzipMock.mockImplementation((_data, cb) => void cb(null, {}))
     const file = new File([new Uint8Array([80, 75])], 'bad.zip', {
       type: 'application/zip',
     })
@@ -189,9 +234,11 @@ describe('parseDocumentsZip', () => {
   })
 
   it('throws when the manifest is not valid JSON', async () => {
-    vi.mocked(unzip).mockImplementation(
+    unzipMock.mockImplementation(
       (_data, cb) =>
-        void cb(null, { 'manifest.json': new TextEncoder().encode('NOT JSON!!!') }),
+        void cb(null, {
+          'manifest.json': new TextEncoder().encode('NOT JSON!!!'),
+        }),
     )
     const file = new File([new Uint8Array([80, 75])], 'bad.zip', {
       type: 'application/zip',
@@ -204,9 +251,7 @@ describe('parseDocumentsZip', () => {
       { name: 'a.pdf', type: 'application/pdf', size: 100 },
       { name: 'b.png', type: 'image/png', size: 200 },
     ])
-    vi.mocked(unzip).mockImplementation(
-      (_data, cb) => void cb(null, entries),
-    )
+    unzipMock.mockImplementation((_data, cb) => void cb(null, entries))
     const file = new File([new Uint8Array([80, 75])], 'export.zip', {
       type: 'application/zip',
     })
@@ -233,9 +278,7 @@ describe('parseDocumentsZip', () => {
       'documents/present.txt': encoder.encode('hello'),
       // 'documents/missing.txt' intentionally absent
     }
-    vi.mocked(unzip).mockImplementation(
-      (_data, cb) => void cb(null, entries),
-    )
+    unzipMock.mockImplementation((_data, cb) => void cb(null, entries))
     const file = new File([new Uint8Array([80, 75])], 'partial.zip', {
       type: 'application/zip',
     })
@@ -257,9 +300,7 @@ describe('parseDocumentsZip', () => {
       'manifest.json': encoder.encode(JSON.stringify(manifest)),
       'documents/unknown': encoder.encode('hello'),
     }
-    vi.mocked(unzip).mockImplementation(
-      (_data, cb) => void cb(null, entries),
-    )
+    unzipMock.mockImplementation((_data, cb) => void cb(null, entries))
     const file = new File([new Uint8Array([80, 75])], 'export.zip', {
       type: 'application/zip',
     })

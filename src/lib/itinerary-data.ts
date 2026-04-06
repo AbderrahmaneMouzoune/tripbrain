@@ -1,18 +1,64 @@
-export interface Accommodation {
+export interface EntityMetadata {
+  source?: 'user' | 'import' | 'ai'
+  priority?: 'must' | 'nice' | 'optional'
+}
+
+export interface Accommodation extends EntityMetadata {
+  id: string
   name: string
   address: string
   bookingUrl: string
   checkIn: string
   checkOut: string
   images?: string[]
+  price?: number
+  currency?: string
+  bookingReference?: string
+  status?: 'planned' | 'booked' | 'checked-in' | 'completed'
 }
 
-export interface Activity {
+export interface Activity extends EntityMetadata {
+  id: string
   name: string
   description?: string
   type: 'visit' | 'transport' | 'food' | 'experience' | 'shopping'
   duration?: string
   coordinates?: [number, number]
+  /** Opening hours / schedule — free-form string, e.g. "09:00–17:00" or "09:00–12:00, 14:00–17:00" */
+  openAt?: string
+  address?: string
+  bookingUrl?: string
+  reservationRequired?: boolean
+  price?: number
+  currency?: string
+  rating?: number
+  tags?: string[]
+  status?: 'planned' | 'done' | 'skipped'
+  tips?: string
+  images?: string[]
+}
+
+export interface Transport extends EntityMetadata {
+  id: string
+  type: 'train' | 'car' | 'plane' | 'bus'
+  from?: string
+  to?: string
+  details?: string
+  /** Human-readable address of the departure point (station, airport terminal, etc.) */
+  departureAddress?: string
+  departureTime?: string
+  arrivalTime?: string
+  duration?: string
+  provider?: string
+  bookingUrl?: string
+  bookingReference?: string
+  price?: number
+  currency?: string
+  seat?: string
+  gate?: string
+  terminal?: string
+  status?: 'planned' | 'booked' | 'checked-in' | 'completed'
+  notes?: string
 }
 
 export interface DayImage {
@@ -20,7 +66,8 @@ export interface DayImage {
   caption: string
 }
 
-export interface DayItinerary {
+export interface DayItinerary extends EntityMetadata {
+  id: string
   date: string
   dayNumber: number
   city: string
@@ -34,12 +81,7 @@ export interface DayItinerary {
   tips?: string[]
   accommodation?: Accommodation
   activities: Activity[]
-  transport?: {
-    type: 'train' | 'car' | 'plane' | 'bus'
-    from?: string
-    to?: string
-    details?: string
-  }
+  transport?: Transport
   coordinates: [number, number]
   images?: DayImage[]
 }
@@ -49,6 +91,7 @@ export const tripEndDate = new Date('2026-05-28')
 
 export const itinerary: DayItinerary[] = [
   {
+    id: 'day-1',
     date: '2026-05-10',
     dayNumber: 1,
     city: 'Shanghai',
@@ -86,11 +129,15 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
-      name: 'Hebergement reserve (anonymise)',
-      address: 'Adresse privee masquee',
-      bookingUrl: 'https://example.com/reservation-anonymisee',
+      id: 'acc-day1',
+      name: 'Waldorf Astoria Shanghai on the Bund',
+      address: '2 Zhongshan East 1st Road, Huangpu District, Shanghai 200002',
+      bookingUrl: 'https://www.waldorfastoria.com/shanghai',
       checkIn: '2026-05-10',
       checkOut: '2026-05-12',
+      price: 2800,
+      currency: 'CNY',
+      status: 'booked',
       images: [
         'https://images.pexels.com/photos/271624/pexels-photo-271624.jpeg',
         'https://images.pexels.com/photos/2869387/pexels-photo-2869387.jpeg',
@@ -100,24 +147,27 @@ export const itinerary: DayItinerary[] = [
       ],
     },
     activities: [
-      { name: 'Check-in hôtel', type: 'experience', duration: '1h' },
+      { id: 'act-day1-1', name: 'Check-in hôtel', type: 'experience', duration: '1h' },
       {
+        id: 'act-day1-2',
         name: "Temple Jing'an",
         type: 'visit',
         duration: '1h30',
         coordinates: [31.2235, 121.4452],
       },
       {
+        id: 'act-day1-3',
         name: 'Promenade sur le Bund',
         type: 'visit',
         duration: '2h',
         coordinates: [31.24, 121.49],
       },
-      { name: 'Dîner Xiaolongbao', type: 'food', duration: '1h30' },
+      { id: 'act-day1-4', name: 'Dîner Xiaolongbao', type: 'food', duration: '1h30' },
     ],
   },
 
   {
+    id: 'day-2',
     date: '2026-05-11',
     dayNumber: 2,
     city: 'Shanghai',
@@ -156,24 +206,50 @@ export const itinerary: DayItinerary[] = [
     ],
     activities: [
       {
+        id: 'act-day2-1',
         name: 'Yu Garden',
         type: 'visit',
         duration: '2h',
         coordinates: [31.227, 121.4923],
+        openAt: '09:00–17:00',
+        address: '218 Anren Street, Huangpu District, Shanghai',
+        bookingUrl: 'https://www.yugarden.com.cn',
+        reservationRequired: false,
+        price: 40,
+        currency: 'CNY',
+        rating: 4.6,
+        tags: ['historic', 'garden', 'classic'],
+        status: 'planned',
       },
-      { name: 'Bazar Yuyuan', type: 'shopping', duration: '1h30' },
-      { name: 'Nanxiang Dumpling House', type: 'food', duration: '1h' },
+      { id: 'act-day2-2', name: 'Bazar Yuyuan', type: 'shopping', duration: '1h30' },
+      { id: 'act-day2-3', name: 'Nanxiang Dumpling House', type: 'food', duration: '1h' },
       {
+        id: 'act-day2-4',
         name: 'Balade concession française',
         type: 'visit',
         duration: '2h',
         coordinates: [31.2139, 121.4701],
       },
     ],
-    transport: { type: 'train', from: 'Shanghai', to: 'Qingdao' },
+    transport: {
+      id: 'tr-day2',
+      type: 'train',
+      from: 'Shanghai',
+      to: 'Qingdao',
+      details: 'Train G195',
+      departureAddress: 'Shanghai Hongqiao Railway Station, 200 Hanzhong Road, Changning District',
+      departureTime: '07:53',
+      arrivalTime: '14:12',
+      duration: '6h19',
+      provider: 'China Railway',
+      price: 244,
+      currency: 'CNY',
+      status: 'booked',
+    },
   },
 
   {
+    id: 'day-3',
     date: '2026-05-12',
     dayNumber: 3,
     city: 'Qingdao',
@@ -207,37 +283,59 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
-      name: 'Hebergement reserve (anonymise)',
-      address: 'Adresse privee masquee',
-      bookingUrl: 'https://example.com/reservation-anonymisee',
+      id: 'acc-day3',
+      name: 'Hilton Qingdao Golden Beach',
+      address: '1 Yingkou Lu, Shinan District, Qingdao 266100',
+      bookingUrl: 'https://www.hilton.com/qingdao-golden-beach',
       checkIn: '2026-05-12',
       checkOut: '2026-05-13',
+      price: 980,
+      currency: 'CNY',
+      status: 'booked',
     },
     activities: [
       {
+        id: 'act-day3-1',
         name: 'Jetée Zhanqiao',
         type: 'visit',
         duration: '1h',
         coordinates: [36.0605, 120.3203],
       },
       {
+        id: 'act-day3-2',
         name: 'Cathédrale Saint-Michel',
         type: 'visit',
         duration: '45m',
         coordinates: [36.064, 120.327],
       },
       {
+        id: 'act-day3-3',
         name: 'Musée bière Tsingtao',
         type: 'visit',
         duration: '1h30',
         coordinates: [36.0775, 120.32],
       },
-      { name: 'Dîner fruits de mer', type: 'food', duration: '1h30' },
+      { id: 'act-day3-4', name: 'Dîner fruits de mer', type: 'food', duration: '1h30' },
     ],
-    transport: { type: 'train', from: 'Qingdao', to: 'Beijing' },
+    transport: {
+      id: 'tr-day3',
+      type: 'train',
+      from: 'Qingdao',
+      to: 'Beijing',
+      details: 'Train G206',
+      departureAddress: 'Qingdao North Railway Station, 2 Qingnianbei Road, Licang District',
+      departureTime: '09:06',
+      arrivalTime: '13:35',
+      duration: '4h29',
+      provider: 'China Railway',
+      price: 274,
+      currency: 'CNY',
+      status: 'booked',
+    },
   },
 
   {
+    id: 'day-4',
     date: '2026-05-13',
     dayNumber: 4,
     city: 'Beijing',
@@ -274,25 +372,31 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
-      name: 'Hebergement reserve (anonymise)',
-      address: 'Adresse privee masquee',
-      bookingUrl: 'https://example.com/reservation-anonymisee',
+      id: 'acc-day4',
+      name: 'The Opposite House Beijing',
+      address: '11 Sanlitun Road, Chaoyang District, Beijing 100027',
+      bookingUrl: 'https://www.theoppositehouse.com',
       checkIn: '2026-05-13',
       checkOut: '2026-05-16',
+      price: 2200,
+      currency: 'CNY',
+      status: 'booked',
     },
     activities: [
-      { name: 'Installation hôtel', type: 'experience', duration: '1h' },
+      { id: 'act-day4-1', name: 'Installation hôtel', type: 'experience', duration: '1h' },
       {
+        id: 'act-day4-2',
         name: 'Balade Wangfujing',
         type: 'visit',
         duration: '1h30',
         coordinates: [39.9153, 116.404],
       },
-      { name: 'Marché street food', type: 'food', duration: '1h30' },
+      { id: 'act-day4-3', name: 'Marché street food', type: 'food', duration: '1h30' },
     ],
   },
 
   {
+    id: 'day-5',
     date: '2026-05-14',
     dayNumber: 5,
     city: 'Beijing',
@@ -327,23 +431,35 @@ export const itinerary: DayItinerary[] = [
     ],
     activities: [
       {
+        id: 'act-day5-1',
         name: 'Place Tiananmen',
         type: 'visit',
         duration: '45m',
         coordinates: [39.9056, 116.3976],
       },
       {
+        id: 'act-day5-2',
         name: 'Cité interdite',
         type: 'visit',
         duration: '3h',
         coordinates: [39.9163, 116.3972],
+        openAt: '08:30–17:00',
+        address: '4 Jingshan Front Street, Dongcheng District, Beijing',
+        bookingUrl: 'https://www.dpm.org.cn/visit/buyTicket.html',
+        reservationRequired: true,
+        price: 60,
+        currency: 'CNY',
+        rating: 4.9,
+        tags: ['UNESCO', 'imperial', 'historic'],
+        status: 'planned',
       },
-      { name: 'Parc Jingshan', type: 'visit', duration: '1h' },
-      { name: 'Dîner canard laqué', type: 'food', duration: '1h30' },
+      { id: 'act-day5-3', name: 'Parc Jingshan', type: 'visit', duration: '1h' },
+      { id: 'act-day5-4', name: 'Dîner canard laqué', type: 'food', duration: '1h30' },
     ],
   },
 
   {
+    id: 'day-6',
     date: '2026-05-15',
     dayNumber: 6,
     city: 'Beijing',
@@ -385,18 +501,44 @@ export const itinerary: DayItinerary[] = [
     ],
     activities: [
       {
+        id: 'act-day6-1',
         name: 'Grande Muraille Mutianyu',
         type: 'visit',
         duration: '4h',
         coordinates: [40.4319, 116.5704],
+        openAt: '07:30–18:00',
+        address: 'Mutianyu Village, Huairou District, Beijing',
+        bookingUrl: 'https://www.mutianyugreatwall.com',
+        reservationRequired: true,
+        price: 65,
+        currency: 'CNY',
+        rating: 4.9,
+        tags: ['UNESCO', 'outdoor', 'hiking'],
+        status: 'planned',
       },
-      { name: 'Téléphérique', type: 'experience', duration: '20m' },
-      { name: 'Descente luge', type: 'experience', duration: '10m' },
+      { id: 'act-day6-2', name: 'Téléphérique', type: 'experience', duration: '20m' },
+      { id: 'act-day6-3', name: 'Descente luge', type: 'experience', duration: '10m' },
     ],
-    transport: { type: 'plane', from: 'Beijing', to: "Xi'an" },
+    transport: {
+      id: 'tr-day6',
+      type: 'plane',
+      from: 'Beijing',
+      to: "Xi'an",
+      details: 'Air China CA1205',
+      departureAddress: 'Beijing Capital International Airport, Terminal 3, Chaoyang District',
+      departureTime: '10:30',
+      arrivalTime: '12:45',
+      duration: '2h15',
+      provider: 'Air China',
+      terminal: 'T3',
+      price: 680,
+      currency: 'CNY',
+      status: 'booked',
+    },
   },
 
   {
+    id: 'day-7',
     date: '2026-05-16',
     dayNumber: 7,
     city: "Xi'an",
@@ -430,20 +572,25 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
-      name: 'Hebergement reserve (anonymise)',
-      address: 'Adresse privee masquee',
-      bookingUrl: 'https://example.com/reservation-anonymisee',
+      id: 'acc-day7',
+      name: "Sofitel Legend People's Grand Hotel Xi'an",
+      address: "319 Dong Xin Street, Xincheng District, Xi'an 710004",
+      bookingUrl: 'https://www.sofitel.com/xian',
       checkIn: '2026-05-16',
       checkOut: '2026-05-18',
+      price: 1500,
+      currency: 'CNY',
+      status: 'booked',
     },
     activities: [
-      { name: 'Quartier musulman', type: 'visit', duration: '2h' },
-      { name: 'Grande mosquée', type: 'visit', duration: '1h' },
-      { name: 'Street food noodles', type: 'food', duration: '1h' },
+      { id: 'act-day7-1', name: 'Quartier musulman', type: 'visit', duration: '2h' },
+      { id: 'act-day7-2', name: 'Grande mosquée', type: 'visit', duration: '1h' },
+      { id: 'act-day7-3', name: 'Street food noodles', type: 'food', duration: '1h' },
     ],
   },
 
   {
+    id: 'day-8',
     date: '2026-05-17',
     dayNumber: 8,
     city: "Xi'an",
@@ -482,18 +629,43 @@ export const itinerary: DayItinerary[] = [
     ],
     activities: [
       {
+        id: 'act-day8-1',
         name: 'Terracotta Army Museum',
         type: 'visit',
         duration: '3h',
         coordinates: [34.3849, 109.2786],
+        openAt: '08:30–17:00',
+        address: "Lintong District, Xi'an, Shaanxi",
+        bookingUrl: 'https://www.bmy.com.cn/ticket',
+        reservationRequired: true,
+        price: 150,
+        currency: 'CNY',
+        rating: 4.8,
+        tags: ['UNESCO', 'historic', 'museum'],
+        status: 'planned',
       },
-      { name: "Remparts Xi'an vélo", type: 'experience', duration: '2h' },
-      { name: "Pagode de l'oie sauvage", type: 'visit', duration: '1h' },
+      { id: 'act-day8-2', name: "Remparts Xi'an vélo", type: 'experience', duration: '2h' },
+      { id: 'act-day8-3', name: "Pagode de l'oie sauvage", type: 'visit', duration: '1h' },
     ],
-    transport: { type: 'train', from: "Xi'an", to: 'Chongqing' },
+    transport: {
+      id: 'tr-day8',
+      type: 'train',
+      from: "Xi'an",
+      to: 'Chongqing',
+      details: 'Train G2197',
+      departureAddress: "Xi'an North Railway Station, Weiyang District, Xi'an",
+      departureTime: '11:16',
+      arrivalTime: '15:04',
+      duration: '3h48',
+      provider: 'China Railway',
+      price: 315,
+      currency: 'CNY',
+      status: 'booked',
+    },
   },
 
   {
+    id: 'day-9',
     date: '2026-05-18',
     dayNumber: 9,
     city: 'Chongqing',
@@ -530,20 +702,25 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
-      name: 'Hebergement reserve (anonymise)',
-      address: 'Adresse privee masquee',
-      bookingUrl: 'https://example.com/reservation-anonymisee',
+      id: 'acc-day9',
+      name: 'JW Marriott Hotel Chongqing',
+      address: '29 Qingyun Road, Yuzhong District, Chongqing 400010',
+      bookingUrl: 'https://www.marriott.com/chongqing',
       checkIn: '2026-05-18',
       checkOut: '2026-05-20',
+      price: 1350,
+      currency: 'CNY',
+      status: 'booked',
     },
     activities: [
-      { name: 'Hongyadong', type: 'visit', duration: '2h' },
-      { name: 'Promenade Yangtze', type: 'visit', duration: '1h30' },
-      { name: 'Rooftop photo spot', type: 'experience', duration: '1h' },
+      { id: 'act-day9-1', name: 'Hongyadong', type: 'visit', duration: '2h' },
+      { id: 'act-day9-2', name: 'Promenade Yangtze', type: 'visit', duration: '1h30' },
+      { id: 'act-day9-3', name: 'Rooftop photo spot', type: 'experience', duration: '1h' },
     ],
   },
 
   {
+    id: 'day-10',
     date: '2026-05-19',
     dayNumber: 10,
     city: 'Chongqing',
@@ -581,14 +758,30 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Station Liziba', type: 'visit', duration: '30m' },
-      { name: 'Ciqikou Ancient Town', type: 'visit', duration: '2h' },
-      { name: 'Hot pot traditionnel', type: 'food', duration: '2h' },
+      { id: 'act-day10-1', name: 'Station Liziba', type: 'visit', duration: '30m' },
+      { id: 'act-day10-2', name: 'Ciqikou Ancient Town', type: 'visit', duration: '2h' },
+      { id: 'act-day10-3', name: 'Hot pot traditionnel', type: 'food', duration: '2h' },
     ],
-    transport: { type: 'plane', from: 'Chongqing', to: 'Zhangjiajie' },
+    transport: {
+      id: 'tr-day10',
+      type: 'plane',
+      from: 'Chongqing',
+      to: 'Zhangjiajie',
+      details: 'China Southern CZ6485',
+      departureAddress: 'Chongqing Jiangbei International Airport, Terminal 3, Yubei District',
+      departureTime: '08:15',
+      arrivalTime: '09:40',
+      duration: '1h25',
+      provider: 'China Southern',
+      terminal: 'T3',
+      price: 890,
+      currency: 'CNY',
+      status: 'booked',
+    },
   },
 
   {
+    id: 'day-11',
     date: '2026-05-20',
     dayNumber: 11,
     city: 'Zhangjiajie',
@@ -622,20 +815,38 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
-      name: 'Hebergement reserve (anonymise)',
-      address: 'Adresse privee masquee',
-      bookingUrl: 'https://example.com/reservation-anonymisee',
+      id: 'acc-day11',
+      name: 'Pullman Zhangjiajie',
+      address: '1 Chaoyang Road, Wulingyuan District, Zhangjiajie 427400',
+      bookingUrl: 'https://www.pullman-zhangjiajie.com',
       checkIn: '2026-05-20',
       checkOut: '2026-05-23',
+      price: 1100,
+      currency: 'CNY',
+      status: 'booked',
     },
     activities: [
-      { name: 'Parc national Zhangjiajie', type: 'visit', duration: '4h' },
-      { name: 'Bailong Elevator', type: 'experience', duration: '30m' },
-      { name: 'Points de vue Avatar', type: 'visit', duration: '2h' },
+      {
+        id: 'act-day11-1',
+        name: 'Parc national Zhangjiajie',
+        type: 'visit',
+        duration: '4h',
+        address: 'Zhangjiajie National Forest Park, Wulingyuan District, Zhangjiajie',
+        bookingUrl: 'https://www.zhangjiajiepark.com/ticket',
+        reservationRequired: true,
+        price: 248,
+        currency: 'CNY',
+        rating: 4.8,
+        tags: ['UNESCO', 'nature', 'hiking'],
+        status: 'planned',
+      },
+      { id: 'act-day11-2', name: 'Bailong Elevator', type: 'experience', duration: '30m' },
+      { id: 'act-day11-3', name: 'Points de vue Avatar', type: 'visit', duration: '2h' },
     ],
   },
 
   {
+    id: 'day-12',
     date: '2026-05-21',
     dayNumber: 12,
     city: 'Zhangjiajie',
@@ -669,13 +880,14 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Tianzi Mountain', type: 'visit', duration: '3h' },
-      { name: 'Téléphérique', type: 'experience', duration: '30m' },
-      { name: 'Randonnée vallée', type: 'experience', duration: '2h' },
+      { id: 'act-day12-1', name: 'Tianzi Mountain', type: 'visit', duration: '3h' },
+      { id: 'act-day12-2', name: 'Téléphérique', type: 'experience', duration: '30m' },
+      { id: 'act-day12-3', name: 'Randonnée vallée', type: 'experience', duration: '2h' },
     ],
   },
 
   {
+    id: 'day-13',
     date: '2026-05-22',
     dayNumber: 13,
     city: 'Zhangjiajie',
@@ -709,14 +921,29 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Téléphérique Tianmen', type: 'experience', duration: '30m' },
-      { name: 'Glass skywalk', type: 'experience', duration: '1h' },
-      { name: "Heaven's Gate stairs", type: 'visit', duration: '1h' },
+      { id: 'act-day13-1', name: 'Téléphérique Tianmen', type: 'experience', duration: '30m' },
+      { id: 'act-day13-2', name: 'Glass skywalk', type: 'experience', duration: '1h' },
+      { id: 'act-day13-3', name: "Heaven's Gate stairs", type: 'visit', duration: '1h' },
     ],
-    transport: { type: 'plane', from: 'Zhangjiajie', to: 'Shanghai' },
+    transport: {
+      id: 'tr-day13',
+      type: 'plane',
+      from: 'Zhangjiajie',
+      to: 'Shanghai',
+      details: 'Xiamen Air MF8401',
+      departureAddress: 'Zhangjiajie Hehua International Airport, Sangzhi County, Hunan',
+      departureTime: '15:30',
+      arrivalTime: '17:55',
+      duration: '2h25',
+      provider: 'Xiamen Air',
+      price: 1050,
+      currency: 'CNY',
+      status: 'booked',
+    },
   },
 
   {
+    id: 'day-14',
     date: '2026-05-23',
     dayNumber: 14,
     city: 'Shanghai',
@@ -750,19 +977,24 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
-      name: 'Hebergement reserve (anonymise)',
-      address: 'Adresse privee masquee',
-      bookingUrl: 'https://example.com/reservation-anonymisee',
+      id: 'acc-day14',
+      name: 'Shangri-La Hotel Pudong Shanghai',
+      address: '33 Fucheng Road, Pudong New Area, Shanghai 200120',
+      bookingUrl: 'https://www.shangri-la.com/shanghai/shangrila',
       checkIn: '2026-05-23',
       checkOut: '2026-05-25',
+      price: 2400,
+      currency: 'CNY',
+      status: 'booked',
     },
     activities: [
-      { name: 'Nanjing Road', type: 'shopping', duration: '2h' },
-      { name: 'Skyline night photos', type: 'experience', duration: '1h' },
+      { id: 'act-day14-1', name: 'Nanjing Road', type: 'shopping', duration: '2h' },
+      { id: 'act-day14-2', name: 'Skyline night photos', type: 'experience', duration: '1h' },
     ],
   },
 
   {
+    id: 'day-15',
     date: '2026-05-24',
     dayNumber: 15,
     city: 'Shanghai',
@@ -802,14 +1034,30 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Shanghai Tower observatory', type: 'visit', duration: '2h' },
-      { name: 'Lujiazui district walk', type: 'visit', duration: '1h30' },
-      { name: 'Aquarium Shanghai', type: 'visit', duration: '1h' },
+      { id: 'act-day15-1', name: 'Shanghai Tower observatory', type: 'visit', duration: '2h' },
+      { id: 'act-day15-2', name: 'Lujiazui district walk', type: 'visit', duration: '1h30' },
+      { id: 'act-day15-3', name: 'Aquarium Shanghai', type: 'visit', duration: '1h' },
     ],
-    transport: { type: 'plane', from: 'Shanghai', to: 'Taipei' },
+    transport: {
+      id: 'tr-day15',
+      type: 'plane',
+      from: 'Shanghai',
+      to: 'Taipei',
+      details: 'China Eastern MU501',
+      departureAddress: 'Shanghai Pudong International Airport, Terminal 1, Pudong New Area',
+      departureTime: '19:00',
+      arrivalTime: '21:10',
+      duration: '2h10',
+      provider: 'China Eastern',
+      terminal: 'T1',
+      price: 1350,
+      currency: 'CNY',
+      status: 'booked',
+    },
   },
 
   {
+    id: 'day-16',
     date: '2026-05-25',
     dayNumber: 16,
     city: 'Taipei',
@@ -846,10 +1094,11 @@ export const itinerary: DayItinerary[] = [
         caption: 'Ambiance nocturne de Taiwan',
       },
     ],
-    activities: [{ name: 'Shilin Night Market', type: 'food', duration: '2h' }],
+    activities: [{ id: 'act-day16-1', name: 'Shilin Night Market', type: 'food', duration: '2h' }],
   },
 
   {
+    id: 'day-17',
     date: '2026-05-26',
     dayNumber: 17,
     city: 'Taipei',
@@ -883,12 +1132,26 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Taipei 101 observatory', type: 'visit', duration: '2h' },
-      { name: 'Elephant Mountain hike', type: 'experience', duration: '1h' },
+      {
+        id: 'act-day17-1',
+        name: 'Taipei 101 observatory',
+        type: 'visit',
+        duration: '2h',
+        address: 'No. 7, Section 5, Xinyi Road, Xinyi District, Taipei',
+        bookingUrl: 'https://www.taipei-101.com.tw/en/observatory',
+        reservationRequired: false,
+        price: 600,
+        currency: 'TWD',
+        rating: 4.7,
+        tags: ['landmark', 'panoramic', 'urban'],
+        status: 'planned',
+      },
+      { id: 'act-day17-2', name: 'Elephant Mountain hike', type: 'experience', duration: '1h' },
     ],
   },
 
   {
+    id: 'day-18',
     date: '2026-05-27',
     dayNumber: 18,
     city: 'Taipei',
@@ -924,14 +1187,30 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     activities: [
-      { name: 'Temple Longshan', type: 'visit', duration: '1h' },
-      { name: 'Dihua Street', type: 'visit', duration: '1h' },
-      { name: 'Tea house traditionnel', type: 'food', duration: '1h' },
+      { id: 'act-day18-1', name: 'Temple Longshan', type: 'visit', duration: '1h' },
+      { id: 'act-day18-2', name: 'Dihua Street', type: 'visit', duration: '1h' },
+      { id: 'act-day18-3', name: 'Tea house traditionnel', type: 'food', duration: '1h' },
     ],
-    transport: { type: 'plane', from: 'Taipei', to: 'Shanghai' },
+    transport: {
+      id: 'tr-day18',
+      type: 'plane',
+      from: 'Taipei',
+      to: 'Shanghai',
+      details: 'EVA Air BR712',
+      departureAddress: 'Taiwan Taoyuan International Airport, Terminal 2, Dayuan District',
+      departureTime: '14:30',
+      arrivalTime: '16:35',
+      duration: '2h05',
+      provider: 'EVA Air',
+      terminal: 'T2',
+      price: 1200,
+      currency: 'CNY',
+      status: 'booked',
+    },
   },
 
   {
+    id: 'day-19',
     date: '2026-05-28',
     dayNumber: 19,
     city: 'Shanghai',
@@ -969,16 +1248,20 @@ export const itinerary: DayItinerary[] = [
       },
     ],
     accommodation: {
-      name: 'Hebergement reserve (anonymise)',
-      address: 'Adresse privee masquee',
-      bookingUrl: 'https://example.com/reservation-anonymisee',
+      id: 'acc-day19',
+      name: 'The Shanghai EDITION',
+      address: '199 Nanjing East Road, Huangpu District, Shanghai 200001',
+      bookingUrl: 'https://www.editionhotels.com/shanghai',
       checkIn: '2026-05-28',
       checkOut: '2026-05-29',
+      price: 3200,
+      currency: 'CNY',
+      status: 'planned',
     },
     activities: [
-      { name: 'Brunch', type: 'food', duration: '1h' },
-      { name: 'Derniers achats', type: 'shopping', duration: '1h' },
-      { name: 'Aéroport', type: 'transport', duration: '2h' },
+      { id: 'act-day19-1', name: 'Brunch', type: 'food', duration: '1h' },
+      { id: 'act-day19-2', name: 'Derniers achats', type: 'shopping', duration: '1h' },
+      { id: 'act-day19-3', name: 'Aéroport', type: 'transport', duration: '2h' },
     ],
   },
 ]

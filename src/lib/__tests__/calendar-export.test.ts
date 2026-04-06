@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { generateICSContent, getGoogleCalendarUrl, downloadICS } from '../calendar-export'
+import {
+  generateICSContent,
+  getGoogleCalendarUrl,
+  downloadICS,
+} from '../calendar-export'
 import { type DayItinerary } from '../itinerary-data'
 
 /**
@@ -15,6 +19,7 @@ function unfoldICS(ics: string): string {
 // ---------------------------------------------------------------------------
 
 const minimalDay: DayItinerary = {
+  id: 'day-1',
   date: '2026-05-10',
   dayNumber: 1,
   city: 'Tachkent',
@@ -24,17 +29,30 @@ const minimalDay: DayItinerary = {
 }
 
 const fullDay: DayItinerary = {
+  id: 'day-2',
   date: '2026-05-11',
   dayNumber: 2,
   city: 'Samarcande',
   title: 'Régistan & Bibi-Khanym',
   activities: [
-    { name: 'Régistan', type: 'visit', duration: '2h' },
-    { name: 'Bibi-Khanym', type: 'visit', duration: '1h' },
-    { name: 'Trajet bus', type: 'transport', duration: '30min' },
+    { id: 'act-day2-1', name: 'Régistan', type: 'visit', duration: '2h' },
+    { id: 'act-day2-2', name: 'Bibi-Khanym', type: 'visit', duration: '1h' },
+    {
+      id: 'act-day2-3',
+      name: 'Trajet bus',
+      type: 'transport',
+      duration: '30min',
+    },
   ],
-  transport: { type: 'train', from: 'Tachkent', to: 'Samarcande', details: 'Afrosiyob' },
+  transport: {
+    id: 'tr-day2',
+    type: 'train',
+    from: 'Tachkent',
+    to: 'Samarcande',
+    details: 'Afrosiyob',
+  },
   accommodation: {
+    id: 'acc-day2',
     name: 'Hôtel Registan Plaza',
     address: '1 Place du Régistan',
     bookingUrl: 'https://example.com',
@@ -47,11 +65,12 @@ const fullDay: DayItinerary = {
 }
 
 const specialCharsDay: DayItinerary = {
+  id: 'day-3',
   date: '2026-05-12',
   dayNumber: 3,
   city: 'Boukhara, Ouzbékistan',
   title: 'Visite; avec, virgules & backslash\\',
-  activities: [{ name: 'Arc de Boukhara', type: 'visit' }],
+  activities: [{ id: 'act-day3-1', name: 'Arc de Boukhara', type: 'visit' }],
   coordinates: [39.7747, 64.4286],
 }
 
@@ -267,41 +286,75 @@ describe('downloadICS', () => {
   let clickMock: ReturnType<typeof vi.fn>
   let createObjectURLMock: ReturnType<typeof vi.fn>
   let revokeObjectURLMock: ReturnType<typeof vi.fn>
+  let originalURL: typeof globalThis.URL | undefined
+  let originalDocument: Document | undefined
 
   beforeEach(() => {
     clickMock = vi.fn()
     createObjectURLMock = vi.fn().mockReturnValue('blob:test-url')
     revokeObjectURLMock = vi.fn()
 
-    vi.stubGlobal('URL', {
-      createObjectURL: createObjectURLMock,
-      revokeObjectURL: revokeObjectURLMock,
+    originalURL = globalThis.URL
+    originalDocument = globalThis.document
+
+    Object.defineProperty(globalThis, 'URL', {
+      configurable: true,
+      writable: true,
+      value: {
+        createObjectURL: createObjectURLMock,
+        revokeObjectURL: revokeObjectURLMock,
+      },
     })
 
     const mockLink = { href: '', download: '', click: clickMock }
-    vi.stubGlobal('document', {
-      createElement: vi.fn().mockReturnValue(mockLink),
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      writable: true,
+      value: {
+        createElement: vi.fn().mockReturnValue(mockLink),
+      },
     })
   })
 
   afterEach(() => {
-    vi.unstubAllGlobals()
+    if (originalURL === undefined) {
+      delete (globalThis as { URL?: unknown }).URL
+    } else {
+      Object.defineProperty(globalThis, 'URL', {
+        configurable: true,
+        writable: true,
+        value: originalURL,
+      })
+    }
+
+    if (originalDocument === undefined) {
+      delete (globalThis as { document?: unknown }).document
+    } else {
+      Object.defineProperty(globalThis, 'document', {
+        configurable: true,
+        writable: true,
+        value: originalDocument,
+      })
+    }
+
+    vi.clearAllMocks()
   })
 
   it('creates a Blob with the text/calendar MIME type', () => {
-    const BlobSpy = vi.spyOn(globalThis, 'Blob')
     downloadICS([minimalDay], 'trip.ics')
-    expect(BlobSpy).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ type: 'text/calendar;charset=utf-8' }),
-    )
-    BlobSpy.mockRestore()
+    const blobArg = createObjectURLMock.mock.calls[0]?.[0]
+    expect(blobArg).toBeInstanceOf(Blob)
+    expect((blobArg as Blob).type).toBe('text/calendar;charset=utf-8')
   })
 
   it('sets the anchor download attribute to the provided filename', () => {
     const mockLink = { href: '', download: '', click: clickMock }
-    vi.stubGlobal('document', {
-      createElement: vi.fn().mockReturnValue(mockLink),
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      writable: true,
+      value: {
+        createElement: vi.fn().mockReturnValue(mockLink),
+      },
     })
     downloadICS([minimalDay], 'my-trip.ics')
     expect(mockLink.download).toBe('my-trip.ics')
