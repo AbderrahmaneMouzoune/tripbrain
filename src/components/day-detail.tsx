@@ -26,6 +26,7 @@ import {
   Train,
   Car,
   Plane,
+  Bus,
   Camera,
   Utensils,
   ShoppingBag,
@@ -42,6 +43,11 @@ import {
   Tag,
   Copy,
   Check,
+  Banknote,
+  Hash,
+  Armchair,
+  Ticket,
+  BookCheck,
 } from 'lucide-react'
 
 interface DayDetailProps {
@@ -73,8 +79,32 @@ function getTransportIcon(type: string) {
       return Car
     case 'plane':
       return Plane
+    case 'bus':
+      return Bus
     default:
       return Train
+  }
+}
+
+type TransportStatus = 'planned' | 'booked' | 'checked-in' | 'completed'
+type ActivityStatus = 'planned' | 'done' | 'skipped'
+type AccommodationStatus = 'planned' | 'booked' | 'checked-in' | 'completed'
+
+function getStatusBadgeClass(
+  status: TransportStatus | ActivityStatus | AccommodationStatus,
+) {
+  switch (status) {
+    case 'booked':
+      return 'border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800 dark:text-blue-400'
+    case 'checked-in':
+    case 'done':
+      return 'border-green-200 bg-green-500/10 text-green-600 dark:border-green-800 dark:text-green-400'
+    case 'completed':
+      return 'bg-muted text-muted-foreground border-border/60'
+    case 'skipped':
+      return 'border-red-200 bg-red-500/10 text-red-500 dark:border-red-800 dark:text-red-400'
+    default:
+      return 'bg-muted/60 text-muted-foreground border-border/40'
   }
 }
 
@@ -310,6 +340,16 @@ export function DayDetail({ day }: DayDetailProps) {
                       <p className="text-muted-foreground text-[10px] font-semibold tracking-[0.14em] uppercase">
                         Transport
                       </p>
+                      {transport.status && (
+                        <span
+                          className={cn(
+                            'rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
+                            getStatusBadgeClass(transport.status),
+                          )}
+                        >
+                          {transport.status}
+                        </span>
+                      )}
                     </div>
 
                     <p className="text-foreground text-sm leading-snug font-semibold">
@@ -322,6 +362,102 @@ export function DayDetail({ day }: DayDetailProps) {
                       <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
                         {transport.details}
                       </p>
+                    )}
+
+                    {/* Timing row */}
+                    {(transport.departureTime ||
+                      transport.arrivalTime ||
+                      transport.duration) && (
+                      <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
+                        <Clock className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                        {transport.departureTime && transport.arrivalTime ? (
+                          <span>
+                            {transport.departureTime} → {transport.arrivalTime}
+                          </span>
+                        ) : (
+                          <span>
+                            {transport.departureTime ?? transport.arrivalTime}
+                          </span>
+                        )}
+                        {transport.duration && (
+                          <span className="text-muted-foreground/60">
+                            ({transport.duration})
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Provider */}
+                    {transport.provider && (
+                      <p className="text-muted-foreground/70 mt-1 text-[11px]">
+                        {transport.provider}
+                      </p>
+                    )}
+
+                    {/* Seat / Gate / Terminal chips */}
+                    {(transport.seat ||
+                      transport.gate ||
+                      transport.terminal) && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {transport.seat && (
+                          <span className="border-border/60 text-muted-foreground inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]">
+                            <Armchair className="h-2.5 w-2.5" strokeWidth={1.5} />
+                            {transport.seat}
+                          </span>
+                        )}
+                        {transport.gate && (
+                          <span className="border-border/60 text-muted-foreground inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]">
+                            Gate {transport.gate}
+                          </span>
+                        )}
+                        {transport.terminal && (
+                          <span className="border-border/60 text-muted-foreground inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px]">
+                            Terminal {transport.terminal}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Booking reference */}
+                    {transport.bookingReference && (
+                      <div className="text-muted-foreground/70 mt-1.5 flex items-center gap-1 text-[11px]">
+                        <Hash className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                        <span className="font-mono">
+                          {transport.bookingReference}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Price */}
+                    {transport.price !== undefined && (
+                      <div className="text-muted-foreground/70 mt-1 flex items-center gap-1 text-[11px]">
+                        <Banknote className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                        <span>
+                          {transport.price}{' '}
+                          {transport.currency ?? ''}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Notes */}
+                    {transport.notes && (
+                      <p className="text-muted-foreground/70 mt-1 text-[11px] leading-relaxed italic">
+                        {transport.notes}
+                      </p>
+                    )}
+
+                    {/* Booking link */}
+                    {transport.bookingUrl && (
+                      <a
+                        href={transport.bookingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:text-primary/80 mt-1.5 inline-flex items-center gap-1 text-xs font-medium transition-colors hover:underline"
+                      >
+                        <Ticket className="h-3 w-3" strokeWidth={1.5} />
+                        Voir le billet
+                        <ExternalLink className="h-2.5 w-2.5" />
+                      </a>
                     )}
                   </div>
                 </div>
@@ -433,6 +569,36 @@ export function DayDetail({ day }: DayDetailProps) {
                     <ExternalLink className="h-3 w-3" />
                   </a>
                 )}
+                {/* Status badge */}
+                {day.accommodation.status && (
+                  <span
+                    className={cn(
+                      'mt-0.5 w-fit rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
+                      getStatusBadgeClass(day.accommodation.status),
+                    )}
+                  >
+                    {day.accommodation.status}
+                  </span>
+                )}
+                {/* Price */}
+                {day.accommodation.price !== undefined && (
+                  <div className="text-muted-foreground/70 mt-0.5 flex items-center gap-1 text-[11px]">
+                    <Banknote className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                    <span>
+                      {day.accommodation.price}{' '}
+                      {day.accommodation.currency ?? ''} / nuit
+                    </span>
+                  </div>
+                )}
+                {/* Booking reference */}
+                {day.accommodation.bookingReference && (
+                  <div className="text-muted-foreground/70 flex items-center gap-1 text-[11px]">
+                    <BookCheck className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                    <span className="font-mono">
+                      {day.accommodation.bookingReference}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </Card>
@@ -466,9 +632,21 @@ export function DayDetail({ day }: DayDetailProps) {
                     </div>
                     <div className="min-w-0 flex-1 leading-none">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-foreground text-sm leading-snug font-semibold">
-                          {activity.name}
-                        </p>
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                          <p className="text-foreground text-sm leading-snug font-semibold">
+                            {activity.name}
+                          </p>
+                          {activity.status && (
+                            <span
+                              className={cn(
+                                'rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
+                                getStatusBadgeClass(activity.status),
+                              )}
+                            >
+                              {activity.status}
+                            </span>
+                          )}
+                        </div>
                         {activity.coordinates && (
                           <a
                             href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}
@@ -483,16 +661,95 @@ export function DayDetail({ day }: DayDetailProps) {
                           </a>
                         )}
                       </div>
+
                       {activity.description && (
                         <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
                           {activity.description}
                         </p>
                       )}
-                      {activity.duration && (
-                        <div className="text-muted-foreground/70 mt-1 flex items-center gap-1 text-[11px]">
-                          <Clock className="h-3 w-3" strokeWidth={1.75} />
-                          <span>{activity.duration}</span>
+
+                      {/* Timing row: duration or startTime–endTime */}
+                      {(activity.duration ||
+                        activity.startTime ||
+                        activity.endTime) && (
+                        <div className="text-muted-foreground/70 mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                          <Clock className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                          {activity.startTime || activity.endTime ? (
+                            <span>
+                              {[activity.startTime, activity.endTime]
+                                .filter(Boolean)
+                                .join(' – ')}
+                              {activity.duration && ` (${activity.duration})`}
+                            </span>
+                          ) : (
+                            <span>{activity.duration}</span>
+                          )}
                         </div>
+                      )}
+
+                      {/* Address */}
+                      {activity.address && (
+                        <div className="text-muted-foreground/70 mt-1 flex items-start gap-1 text-[11px]">
+                          <MapPin className="mt-0.5 h-3 w-3 shrink-0" strokeWidth={1.5} />
+                          <span className="leading-relaxed">{activity.address}</span>
+                        </div>
+                      )}
+
+                      {/* Rating */}
+                      {activity.rating !== undefined && (
+                        <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-500">
+                          <Star className="h-3 w-3 fill-current" strokeWidth={0} />
+                          <span className="font-medium">{activity.rating}</span>
+                        </div>
+                      )}
+
+                      {/* Tags */}
+                      {activity.tags && activity.tags.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {activity.tags.map((t) => (
+                            <span
+                              key={t}
+                              className="border-border/50 text-muted-foreground/70 rounded-full border px-1.5 py-0.5 text-[10px]"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Price */}
+                      {activity.price !== undefined && (
+                        <div className="text-muted-foreground/70 mt-1 flex items-center gap-1 text-[11px]">
+                          <Banknote className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                          <span>
+                            {activity.price} {activity.currency ?? ''}
+                          </span>
+                          {activity.reservationRequired && (
+                            <span className="text-muted-foreground/50">
+                              · réservation requise
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Booking link */}
+                      {activity.bookingUrl && (
+                        <a
+                          href={activity.bookingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:text-primary/80 mt-1 inline-flex items-center gap-1 text-xs font-medium transition-colors hover:underline"
+                        >
+                          Réserver
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                      )}
+
+                      {/* Tips */}
+                      {activity.tips && (
+                        <p className="text-muted-foreground/70 mt-1 text-[11px] leading-relaxed italic">
+                          💡 {activity.tips}
+                        </p>
                       )}
                     </div>
                   </div>
