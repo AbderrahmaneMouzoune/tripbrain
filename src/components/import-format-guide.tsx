@@ -452,7 +452,7 @@ const TRANSPORTS_EXAMPLE = [
 
 // ── Download helpers ──────────────────────────────────────────────────────────
 
-function makeCsv(headers: string[], example: string[]): string {
+function makeCsv(headers: readonly string[], example: readonly string[]): string {
   return [headers.join(','), example.join(',')].join('\n')
 }
 
@@ -594,7 +594,7 @@ export function ImportFormatGuide() {
                     variant="outline"
                     size="sm"
                     className="h-7 justify-start gap-2 px-2"
-                    onClick={() => downloadText(name, makeCsv(headers as unknown as string[], example as unknown as string[]))}
+                    onClick={() => downloadText(name, makeCsv(headers, example))}
                   >
                     <Download className="text-muted-foreground h-3 w-3 shrink-0" />
                     <code className="text-xs">{name}</code>
