@@ -1,14 +1,10 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { Compass, Upload, PlayCircle, AlertCircle, FileSpreadsheet, Table } from 'lucide-react'
+import { Compass, Upload, PlayCircle, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Separator } from '@/components/ui/separator'
 import { ImportFormatGuide } from '@/components/import-format-guide'
-
-type ImportMode = 'json' | 'xlsx' | 'csv'
 
 interface OnboardingScreenProps {
   onImportFile: (file: File) => Promise<void>
@@ -17,42 +13,17 @@ interface OnboardingScreenProps {
   onUseMockData: () => Promise<void>
 }
 
-const MODE_CONFIG: Record<
-  ImportMode,
-  { label: string; description: string; detail: string }
-> = {
-  json: {
-    label: 'Choisir un fichier .json',
-    description: 'Dépose ton fichier JSON ici, ou choisis-le manuellement.',
-    detail: "Le fichier doit provenir d'un export TripBrain.",
-  },
-  xlsx: {
-    label: 'Choisir un fichier .xlsx',
-    description: 'Dépose ton fichier Excel ici, ou choisis-le manuellement.',
-    detail: 'Le fichier doit contenir 3 onglets : Days, Activities, Transports.',
-  },
-  csv: {
-    label: 'Choisir les 3 fichiers CSV',
-    description: 'Dépose ou sélectionne tes 3 fichiers CSV simultanément.',
-    detail: "Les fichiers doivent s'appeler days.csv, activities.csv et transports.csv.",
-  },
-}
-
 export function OnboardingScreen({
   onImportFile,
   onImportXlsx,
   onImportCsv,
   onUseMockData,
 }: OnboardingScreenProps) {
-  const [importMode, setImportMode] = useState<ImportMode>('json')
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadingMock, setLoadingMock] = useState(false)
-
-  const jsonInputRef = useRef<HTMLInputElement>(null)
-  const xlsxInputRef = useRef<HTMLInputElement>(null)
-  const csvInputRef = useRef<HTMLInputElement>(null)
 
   // ── Generic async wrapper ─────────────────────────────────────────────────
 
@@ -68,31 +39,34 @@ export function OnboardingScreen({
     }
   }
 
-  // ── Per-format handlers ───────────────────────────────────────────────────
+  // ── Auto-detect format from files ────────────────────────────────────────
 
-  const handleJsonFile = (file: File) => {
-    if (!file.name.endsWith('.json')) {
-      setError('Veuillez sélectionner un fichier JSON.')
-      return
-    }
-    runImport(() => onImportFile(file))
-  }
-
-  const handleXlsxFile = (file: File) => {
-    if (!file.name.endsWith('.xlsx')) {
-      setError('Veuillez sélectionner un fichier .xlsx')
-      return
-    }
-    runImport(() => onImportXlsx(file))
-  }
-
-  const handleCsvFiles = (files: File[]) => {
+  const handleFiles = (files: File[]) => {
     if (files.length === 0) return
-    if (files.some((f) => !f.name.endsWith('.csv'))) {
-      setError('Veuillez sélectionner uniquement des fichiers .csv')
+
+    // Multiple files → must all be CSV
+    if (files.length > 1) {
+      if (files.some((f) => !f.name.toLowerCase().endsWith('.csv'))) {
+        setError('En cas de sélection multiple, tous les fichiers doivent être des .csv')
+        return
+      }
+      runImport(() => onImportCsv(files))
       return
     }
-    runImport(() => onImportCsv(files))
+
+    const file = files[0]
+    const name = file.name.toLowerCase()
+    if (name.endsWith('.json')) {
+      runImport(() => onImportFile(file))
+    } else if (name.endsWith('.xlsx')) {
+      runImport(() => onImportXlsx(file))
+    } else if (name.endsWith('.csv')) {
+      setError(
+        'Pour importer en CSV, sélectionnez les 3 fichiers simultanément (days.csv, activities.csv, transports.csv)',
+      )
+    } else {
+      setError('Format non supporté. Utilisez un fichier .json, .xlsx, ou 3 fichiers .csv')
+    }
   }
 
   // ── Drag & drop ───────────────────────────────────────────────────────────
@@ -100,11 +74,7 @@ export function OnboardingScreen({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    const files = Array.from(e.dataTransfer.files)
-    if (!files.length) return
-    if (importMode === 'json') handleJsonFile(files[0])
-    else if (importMode === 'xlsx') handleXlsxFile(files[0])
-    else handleCsvFiles(files)
+    handleFiles(Array.from(e.dataTransfer.files))
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -114,28 +84,12 @@ export function OnboardingScreen({
 
   const handleDragLeave = () => setIsDragging(false)
 
-  // ── File input change handlers ────────────────────────────────────────────
+  // ── File input ────────────────────────────────────────────────────────────
 
-  const handleJsonChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) handleJsonFile(file)
-  }
-
-  const handleXlsxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) handleXlsxFile(file)
-  }
-
-  const handleCsvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? [])
-    if (files.length > 0) handleCsvFiles(files)
-  }
-
-  const handleClickInput = () => {
-    setError(null)
-    if (importMode === 'json') jsonInputRef.current?.click()
-    else if (importMode === 'xlsx') xlsxInputRef.current?.click()
-    else csvInputRef.current?.click()
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleFiles(Array.from(e.target.files ?? []))
+    // Reset so the same file can be re-selected after an error
+    if (e.target) e.target.value = ''
   }
 
   const handleMockData = async () => {
@@ -150,15 +104,10 @@ export function OnboardingScreen({
     }
   }
 
-  const config = MODE_CONFIG[importMode]
-
   return (
     <div className="bg-background flex min-h-dvh flex-col items-center justify-center px-4 py-6 sm:py-8">
       {/* Background decoration */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 overflow-hidden"
-      >
+      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="animate-sticker-float bg-primary/12 border-primary/30 absolute top-8 -left-8 h-24 w-24 rotate-12 rounded-2xl border-2" />
         <div className="animate-sticker-bounce bg-secondary/16 border-secondary/35 absolute top-16 right-3 h-20 w-20 -rotate-12 rounded-full border-2" />
         <div className="animate-sticker-float bg-accent/14 border-accent/35 absolute top-72 right-10 h-16 w-16 rotate-6 rounded-xl border-2 [animation-delay:180ms]" />
@@ -170,10 +119,7 @@ export function OnboardingScreen({
           <div className="relative h-16 w-16 shrink-0">
             <div className="bg-primary absolute inset-0 rotate-6 rounded-2xl opacity-20" />
             <div className="bg-primary relative flex h-16 w-16 items-center justify-center rounded-2xl shadow-sm">
-              <Compass
-                className="text-primary-foreground h-8 w-8"
-                strokeWidth={1.5}
-              />
+              <Compass className="text-primary-foreground h-8 w-8" strokeWidth={1.5} />
             </div>
           </div>
           <div className="text-center">
@@ -203,29 +149,6 @@ export function OnboardingScreen({
         {/* Main card */}
         <Card className="overflow-hidden">
           <CardContent className="space-y-4 p-4 sm:p-5">
-            {/* Import mode selector */}
-            <Tabs
-              value={importMode}
-              onValueChange={(v) => {
-                setImportMode(v as ImportMode)
-                setError(null)
-              }}
-            >
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="json" className="gap-1.5 text-xs">
-                  JSON
-                </TabsTrigger>
-                <TabsTrigger value="xlsx" className="gap-1.5 text-xs">
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                  Excel .xlsx
-                </TabsTrigger>
-                <TabsTrigger value="csv" className="gap-1.5 text-xs">
-                  <Table className="h-3.5 w-3.5" />
-                  CSV
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-
             {/* Drop zone */}
             <div
               className={`rounded-xl border border-dashed p-4 text-center transition-all sm:p-5 ${
@@ -241,22 +164,29 @@ export function OnboardingScreen({
                 <Upload className="text-primary h-5 w-5" />
               </div>
               <p className="text-foreground text-sm font-semibold">Importer mes données</p>
-              <p className="text-muted-foreground mt-1 text-xs">{config.description}</p>
-              <p className="text-muted-foreground mt-2 text-[11px] leading-relaxed">
-                {config.detail}
+              <p className="text-muted-foreground mt-1 text-xs">
+                Formats acceptés : <strong>.json</strong> (export TripBrain),{' '}
+                <strong>.xlsx</strong> (Excel avec 3 onglets), ou{' '}
+                <strong>3 fichiers .csv</strong> simultanément.
               </p>
               <Button
                 variant="outline"
                 size="sm"
                 className="mt-4"
-                onClick={handleClickInput}
+                onClick={() => {
+                  setError(null)
+                  fileInputRef.current?.click()
+                }}
                 disabled={loading}
               >
-                {loading ? 'Chargement…' : config.label}
+                {loading ? 'Chargement…' : 'Choisir un fichier'}
               </Button>
             </div>
 
-            <Separator />
+            {/* Format guide — right after the upload zone */}
+            <div className="flex justify-center">
+              <ImportFormatGuide />
+            </div>
 
             {/* Demo data */}
             <div className="bg-secondary/10 flex flex-col items-center justify-between gap-3 rounded-xl p-3">
@@ -282,36 +212,16 @@ export function OnboardingScreen({
           </CardContent>
         </Card>
 
-        {/* Format guide */}
-        <div className="flex justify-center">
-          <ImportFormatGuide />
-        </div>
-
-        {/* Hidden file inputs */}
+        {/* Hidden file input — accepts all supported formats, multiple for CSV */}
         <input
-          ref={jsonInputRef}
+          ref={fileInputRef}
           type="file"
-          accept=".json,application/json"
-          className="sr-only"
-          onChange={handleJsonChange}
-        />
-        <input
-          ref={xlsxInputRef}
-          type="file"
-          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          className="sr-only"
-          onChange={handleXlsxChange}
-        />
-        <input
-          ref={csvInputRef}
-          type="file"
-          accept=".csv,text/csv"
+          accept=".json,.xlsx,.csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
           multiple
           className="sr-only"
-          onChange={handleCsvChange}
+          onChange={handleFileChange}
         />
       </div>
     </div>
   )
 }
-
