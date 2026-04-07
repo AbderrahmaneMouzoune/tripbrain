@@ -59,6 +59,8 @@ export default function HomePage() {
     tripEndDate,
     loadMockData,
     importData,
+    importXlsxData,
+    importCsvData,
     exportData,
     clearData,
     getCurrentDayIndex,
@@ -90,6 +92,8 @@ export default function HomePage() {
     return (
       <OnboardingScreen
         onImportFile={importData}
+        onImportXlsx={importXlsxData}
+        onImportCsv={importCsvData}
         onUseMockData={loadMockData}
       />
     )

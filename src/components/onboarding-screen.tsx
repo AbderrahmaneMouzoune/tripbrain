@@ -1,53 +1,110 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { Compass, Upload, PlayCircle, AlertCircle } from 'lucide-react'
+import { Compass, Upload, PlayCircle, AlertCircle, FileSpreadsheet, Table } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Separator } from '@/components/ui/separator'
+import { ImportFormatGuide } from '@/components/import-format-guide'
+
+type ImportMode = 'json' | 'xlsx' | 'csv'
 
 interface OnboardingScreenProps {
   onImportFile: (file: File) => Promise<void>
+  onImportXlsx: (file: File) => Promise<void>
+  onImportCsv: (files: File[]) => Promise<void>
   onUseMockData: () => Promise<void>
+}
+
+const MODE_CONFIG: Record<
+  ImportMode,
+  { label: string; description: string; detail: string }
+> = {
+  json: {
+    label: 'Choisir un fichier .json',
+    description: 'Dépose ton fichier JSON ici, ou choisis-le manuellement.',
+    detail: "Le fichier doit provenir d'un export TripBrain.",
+  },
+  xlsx: {
+    label: 'Choisir un fichier .xlsx',
+    description: 'Dépose ton fichier Excel ici, ou choisis-le manuellement.',
+    detail: 'Le fichier doit contenir 3 onglets : Days, Activities, Transports.',
+  },
+  csv: {
+    label: 'Choisir les 3 fichiers CSV',
+    description: 'Dépose ou sélectionne tes 3 fichiers CSV simultanément.',
+    detail: "Les fichiers doivent s'appeler days.csv, activities.csv et transports.csv.",
+  },
 }
 
 export function OnboardingScreen({
   onImportFile,
+  onImportXlsx,
+  onImportCsv,
   onUseMockData,
 }: OnboardingScreenProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [importMode, setImportMode] = useState<ImportMode>('json')
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const [loadingMock, setLoadingMock] = useState(false)
-  const [loadingImport, setLoadingImport] = useState(false)
 
-  const handleFile = async (file: File) => {
+  const jsonInputRef = useRef<HTMLInputElement>(null)
+  const xlsxInputRef = useRef<HTMLInputElement>(null)
+  const csvInputRef = useRef<HTMLInputElement>(null)
+
+  // ── Generic async wrapper ─────────────────────────────────────────────────
+
+  const runImport = async (action: () => Promise<void>) => {
+    setError(null)
+    setLoading(true)
+    try {
+      await action()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erreur lors de l'import.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // ── Per-format handlers ───────────────────────────────────────────────────
+
+  const handleJsonFile = (file: File) => {
     if (!file.name.endsWith('.json')) {
       setError('Veuillez sélectionner un fichier JSON.')
       return
     }
-    setError(null)
-    setLoadingImport(true)
-    try {
-      await onImportFile(file)
-    } catch {
-      setError(
-        "Impossible de lire le fichier. Vérifiez qu'il s'agit d'un export TripBrain valide.",
-      )
-    } finally {
-      setLoadingImport(false)
-    }
+    runImport(() => onImportFile(file))
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) handleFile(file)
+  const handleXlsxFile = (file: File) => {
+    if (!file.name.endsWith('.xlsx')) {
+      setError('Veuillez sélectionner un fichier .xlsx')
+      return
+    }
+    runImport(() => onImportXlsx(file))
   }
+
+  const handleCsvFiles = (files: File[]) => {
+    if (files.length === 0) return
+    if (files.some((f) => !f.name.endsWith('.csv'))) {
+      setError('Veuillez sélectionner uniquement des fichiers .csv')
+      return
+    }
+    runImport(() => onImportCsv(files))
+  }
+
+  // ── Drag & drop ───────────────────────────────────────────────────────────
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) handleFile(file)
+    const files = Array.from(e.dataTransfer.files)
+    if (!files.length) return
+    if (importMode === 'json') handleJsonFile(files[0])
+    else if (importMode === 'xlsx') handleXlsxFile(files[0])
+    else handleCsvFiles(files)
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -57,9 +114,33 @@ export function OnboardingScreen({
 
   const handleDragLeave = () => setIsDragging(false)
 
-  const handleMockData = async () => {
-    setLoadingMock(true)
+  // ── File input change handlers ────────────────────────────────────────────
+
+  const handleJsonChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleJsonFile(file)
+  }
+
+  const handleXlsxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleXlsxFile(file)
+  }
+
+  const handleCsvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    if (files.length > 0) handleCsvFiles(files)
+  }
+
+  const handleClickInput = () => {
     setError(null)
+    if (importMode === 'json') jsonInputRef.current?.click()
+    else if (importMode === 'xlsx') xlsxInputRef.current?.click()
+    else csvInputRef.current?.click()
+  }
+
+  const handleMockData = async () => {
+    setError(null)
+    setLoadingMock(true)
     try {
       await onUseMockData()
     } catch {
@@ -68,6 +149,8 @@ export function OnboardingScreen({
       setLoadingMock(false)
     }
   }
+
+  const config = MODE_CONFIG[importMode]
 
   return (
     <div className="bg-background flex min-h-dvh flex-col items-center justify-center px-4 py-6 sm:py-8">
@@ -105,9 +188,8 @@ export function OnboardingScreen({
 
         {/* Intro text */}
         <p className="text-muted-foreground mx-auto max-w-xl text-center text-sm leading-relaxed">
-          Bienvenue ! Pour commencer, importez votre fichier de données de
-          voyage ou utilisez les données de démonstration pour explorer
-          l&apos;application.
+          Bienvenue ! Importez votre itinéraire depuis un fichier JSON, Excel ou CSV, ou
+          utilisez les données de démonstration pour explorer l&apos;application.
         </p>
 
         {/* Error */}
@@ -118,11 +200,39 @@ export function OnboardingScreen({
           </div>
         )}
 
-        {/* Options */}
+        {/* Main card */}
         <Card className="overflow-hidden">
           <CardContent className="space-y-4 p-4 sm:p-5">
+            {/* Import mode selector */}
+            <Tabs
+              value={importMode}
+              onValueChange={(v) => {
+                setImportMode(v as ImportMode)
+                setError(null)
+              }}
+            >
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="json" className="gap-1.5 text-xs">
+                  JSON
+                </TabsTrigger>
+                <TabsTrigger value="xlsx" className="gap-1.5 text-xs">
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  Excel .xlsx
+                </TabsTrigger>
+                <TabsTrigger value="csv" className="gap-1.5 text-xs">
+                  <Table className="h-3.5 w-3.5" />
+                  CSV
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            {/* Drop zone */}
             <div
-              className={`rounded-xl border border-dashed p-4 text-center transition-all sm:p-5 ${isDragging ? 'border-primary bg-primary/5 ring-primary/30 ring-2' : 'hover:border-primary/50'}`}
+              className={`rounded-xl border border-dashed p-4 text-center transition-all sm:p-5 ${
+                isDragging
+                  ? 'border-primary bg-primary/5 ring-primary/30 ring-2'
+                  : 'hover:border-primary/50'
+              }`}
               onDrop={handleDrop}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -130,28 +240,25 @@ export function OnboardingScreen({
               <div className="bg-primary/10 mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl">
                 <Upload className="text-primary h-5 w-5" />
               </div>
-              <p className="text-foreground text-sm font-semibold">
-                Importer mes données
-              </p>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Dépose ton fichier JSON ici, ou choisis-le manuellement.
-              </p>
+              <p className="text-foreground text-sm font-semibold">Importer mes données</p>
+              <p className="text-muted-foreground mt-1 text-xs">{config.description}</p>
               <p className="text-muted-foreground mt-2 text-[11px] leading-relaxed">
-                Le fichier doit provenir d&apos;un export TripBrain. Après
-                import, ton itinéraire et tes infos sont disponibles
-                immédiatement.
+                {config.detail}
               </p>
               <Button
                 variant="outline"
                 size="sm"
                 className="mt-4"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={loadingImport}
+                onClick={handleClickInput}
+                disabled={loading}
               >
-                {loadingImport ? 'Chargement…' : 'Choisir un fichier .json'}
+                {loading ? 'Chargement…' : config.label}
               </Button>
             </div>
 
+            <Separator />
+
+            {/* Demo data */}
             <div className="bg-secondary/10 flex flex-col items-center justify-between gap-3 rounded-xl p-3">
               <div className="min-w-0">
                 <p className="text-foreground text-sm font-medium">
@@ -175,14 +282,36 @@ export function OnboardingScreen({
           </CardContent>
         </Card>
 
+        {/* Format guide */}
+        <div className="flex justify-center">
+          <ImportFormatGuide />
+        </div>
+
+        {/* Hidden file inputs */}
         <input
-          ref={fileInputRef}
+          ref={jsonInputRef}
           type="file"
           accept=".json,application/json"
           className="sr-only"
-          onChange={handleFileChange}
+          onChange={handleJsonChange}
+        />
+        <input
+          ref={xlsxInputRef}
+          type="file"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          className="sr-only"
+          onChange={handleXlsxChange}
+        />
+        <input
+          ref={csvInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          multiple
+          className="sr-only"
+          onChange={handleCsvChange}
         />
       </div>
     </div>
   )
 }
+

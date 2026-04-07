@@ -119,6 +119,42 @@ export function useTripData() {
     [saveData],
   )
 
+  const importXlsxData = useCallback(
+    async (file: File) => {
+      const { importFromXlsx } = await import('@/lib/importItinerary')
+      const result = await importFromXlsx(file)
+      const data: TripData = {
+        itinerary: result.itinerary,
+        tripStartDate: result.tripStartDate.toISOString().split('T')[0],
+        tripEndDate: result.tripEndDate.toISOString().split('T')[0],
+      }
+      await saveData(data)
+      setItinerary(result.itinerary)
+      setTripStartDate(result.tripStartDate)
+      setTripEndDate(result.tripEndDate)
+      setHasData(true)
+    },
+    [saveData],
+  )
+
+  const importCsvData = useCallback(
+    async (files: File[]) => {
+      const { importFromCsv } = await import('@/lib/importItinerary')
+      const result = await importFromCsv(files)
+      const data: TripData = {
+        itinerary: result.itinerary,
+        tripStartDate: result.tripStartDate.toISOString().split('T')[0],
+        tripEndDate: result.tripEndDate.toISOString().split('T')[0],
+      }
+      await saveData(data)
+      setItinerary(result.itinerary)
+      setTripStartDate(result.tripStartDate)
+      setTripEndDate(result.tripEndDate)
+      setHasData(true)
+    },
+    [saveData],
+  )
+
   const exportData = useCallback(() => {
     const data: TripData = {
       itinerary,
@@ -180,6 +216,8 @@ export function useTripData() {
     tripEndDate,
     loadMockData,
     importData,
+    importXlsxData,
+    importCsvData,
     exportData,
     clearData,
     getCurrentDayIndex,
