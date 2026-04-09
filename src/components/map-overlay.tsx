@@ -12,6 +12,30 @@ interface MapOverlayProps {
   onClose: () => void
 }
 
+function startOfDay(date: Date | string): Date {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function buildMarkerHtml(isActive: boolean, isPast: boolean): string {
+  const size = isActive ? 36 : 28
+  const iconSize = isActive ? 18 : 13
+  const bg = isActive
+    ? 'var(--color-primary, #8B5A2B)'
+    : isPast
+      ? '#9CA3AF'
+      : '#D4A574'
+  const border = isActive ? 'rgba(0,0,0,0.25)' : '#fff'
+
+  return `<div style="width:${size}px;height:${size}px;background:${bg};border:3px solid ${border};border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;transition:all .25s ease;">
+    <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+      <circle cx="12" cy="10" r="3"/>
+    </svg>
+  </div>`
+}
+
 export function MapOverlay({
   itinerary,
   selectedDay,
@@ -92,32 +116,15 @@ export function MapOverlay({
       const createIcon = (isActive: boolean, isPast: boolean) =>
         L.divIcon({
           className: '',
-          html: `<div style="
-            width:${isActive ? '36px' : '28px'};
-            height:${isActive ? '36px' : '28px'};
-            background:${isActive ? 'var(--color-primary, #8B5A2B)' : isPast ? '#9CA3AF' : '#D4A574'};
-            border:3px solid ${isActive ? 'rgba(0,0,0,0.25)' : '#fff'};
-            border-radius:50%;
-            box-shadow:0 2px 10px rgba(0,0,0,0.3);
-            display:flex;align-items:center;justify-content:center;
-            transition:all .25s ease;
-          ">
-            <svg width="${isActive ? '18' : '13'}" height="${isActive ? '18' : '13'}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-              <circle cx="12" cy="10" r="3"/>
-            </svg>
-          </div>`,
+          html: buildMarkerHtml(isActive, isPast),
           iconSize: [isActive ? 36 : 28, isActive ? 36 : 28],
           iconAnchor: [isActive ? 18 : 14, isActive ? 18 : 14],
         })
 
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
+      const today = startOfDay(new Date())
 
       uniqueDays.forEach(({ day, index }) => {
-        const dayDate = new Date(day.date)
-        dayDate.setHours(0, 0, 0, 0)
-        const isPast = dayDate < today
+        const isPast = startOfDay(day.date) < today
         const isActive = activeDay === index
 
         const marker = L.marker(day.coordinates as [number, number], {
@@ -162,8 +169,7 @@ export function MapOverlay({
 
     const loadLeaflet = async () => {
       const L = (await import('leaflet')).default
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
+      const today = startOfDay(new Date())
 
       const targetDay = itinerary[activeDay]
       if (targetDay) {
@@ -176,28 +182,13 @@ export function MapOverlay({
       markersRef.current.forEach((marker, i) => {
         const { day, index } = uniqueDays[i] ?? {}
         if (!day) return
-        const dayDate = new Date(day.date)
-        dayDate.setHours(0, 0, 0, 0)
-        const isPast = dayDate < today
+        const isPast = startOfDay(day.date) < today
         const isActive = activeDay === index
 
         marker.setIcon(
           L.divIcon({
             className: '',
-            html: `<div style="
-              width:${isActive ? '36px' : '28px'};
-              height:${isActive ? '36px' : '28px'};
-              background:${isActive ? 'var(--color-primary, #8B5A2B)' : isPast ? '#9CA3AF' : '#D4A574'};
-              border:3px solid ${isActive ? 'rgba(0,0,0,0.25)' : '#fff'};
-              border-radius:50%;
-              box-shadow:0 2px 10px rgba(0,0,0,0.3);
-              display:flex;align-items:center;justify-content:center;
-            ">
-              <svg width="${isActive ? '18' : '13'}" height="${isActive ? '18' : '13'}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                <circle cx="12" cy="10" r="3"/>
-              </svg>
-            </div>`,
+            html: buildMarkerHtml(isActive, isPast),
             iconSize: [isActive ? 36 : 28, isActive ? 36 : 28],
             iconAnchor: [isActive ? 18 : 14, isActive ? 18 : 14],
           }),
@@ -300,11 +291,7 @@ export function MapOverlay({
         >
           {uniqueDays.map(({ day, index }) => {
             const isActive = activeDay === index
-            const today = new Date()
-            today.setHours(0, 0, 0, 0)
-            const dayDate = new Date(day.date)
-            dayDate.setHours(0, 0, 0, 0)
-            const isPast = dayDate < today
+            const isPast = startOfDay(day.date) < startOfDay(new Date())
 
             return (
               <button
