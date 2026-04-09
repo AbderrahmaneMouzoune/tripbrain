@@ -364,6 +364,8 @@ export function ImportFormatGuide() {
   const [activeTab, setActiveTab] = useState<'xlsx' | 'csv'>('xlsx')
   const [xlsxLoading, setXlsxLoading] = useState(false)
   const [xlsxError, setXlsxError] = useState(false)
+  const [allLoading, setAllLoading] = useState(false)
+  const [allError, setAllError] = useState(false)
 
   const handleXlsxDownload = async () => {
     setXlsxLoading(true)
@@ -374,6 +376,21 @@ export function ImportFormatGuide() {
       setXlsxError(true)
     } finally {
       setXlsxLoading(false)
+    }
+  }
+
+  const handleDownloadAll = async () => {
+    setAllLoading(true)
+    setAllError(false)
+    try {
+      await downloadXlsxTemplate()
+      for (const { name, headers, rows } of CSV_TEMPLATES) {
+        downloadText(name, makeCsv(headers, rows))
+      }
+    } catch {
+      setAllError(true)
+    } finally {
+      setAllLoading(false)
     }
   }
 
@@ -401,7 +418,7 @@ export function ImportFormatGuide() {
           onValueChange={(v) => setActiveTab(v as 'xlsx' | 'csv')}
           className="flex min-h-0 flex-1 flex-col gap-0"
         >
-          <TabsList className="mx-5 mt-4 mb-0 grid shrink-0 grid-cols-2">
+          <TabsList className="mt-4 mb-0 grid shrink-0 grid-cols-2 rounded-none border-b px-5">
             <TabsTrigger value="xlsx" className="gap-1.5 text-xs">
               <FileSpreadsheet className="h-3.5 w-3.5" />
               Excel (.xlsx)
@@ -419,7 +436,7 @@ export function ImportFormatGuide() {
           >
             <div className="space-y-4">
               {/* Conseils */}
-              <Alert>
+              <Alert variant="info">
                 <Lightbulb className="h-4 w-4" />
                 <AlertTitle>Conseils avant de commencer</AlertTitle>
                 <AlertDescription>
@@ -484,7 +501,7 @@ export function ImportFormatGuide() {
           >
             <div className="space-y-4">
               {/* Conseils */}
-              <Alert>
+              <Alert variant="info">
                 <Lightbulb className="h-4 w-4" />
                 <AlertTitle>Conseils avant de commencer</AlertTitle>
                 <AlertDescription>
@@ -545,7 +562,7 @@ export function ImportFormatGuide() {
         </Tabs>
 
         {/* ── Sticky footer — download buttons ── */}
-        <div className="bg-background shrink-0 border-t px-5 py-3">
+        <div className="bg-background shrink-0 border-t px-5 py-3 space-y-2">
           {activeTab === 'xlsx' ? (
             <Button
               className="w-full gap-2"
@@ -560,22 +577,36 @@ export function ImportFormatGuide() {
                   : 'Télécharger le modèle Excel (.xlsx)'}
             </Button>
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {CSV_TEMPLATES.map(({ name, headers, rows }) => (
-                <Button
-                  key={name}
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 gap-1.5"
-                  onClick={() =>
-                    downloadText(name, makeCsv(headers, rows))
-                  }
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  {name}
-                </Button>
-              ))}
-            </div>
+            <>
+              <Button
+                className="w-full gap-2"
+                onClick={handleDownloadAll}
+                disabled={allLoading}
+              >
+                <Download className="h-4 w-4" />
+                {allLoading
+                  ? 'Téléchargement…'
+                  : allError
+                    ? 'Erreur — réessayer'
+                    : `Tout télécharger (xlsx + ${CSV_TEMPLATES.length} csv)`}
+              </Button>
+              <div className="flex flex-wrap gap-2">
+                {CSV_TEMPLATES.map(({ name, headers, rows }) => (
+                  <Button
+                    key={name}
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 gap-1.5"
+                    onClick={() =>
+                      downloadText(name, makeCsv(headers, rows))
+                    }
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    {name}
+                  </Button>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </DialogContent>
