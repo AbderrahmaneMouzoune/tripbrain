@@ -294,19 +294,16 @@ export function MapOverlay({
             const isPast = startOfDay(day.date) < startOfDay(new Date())
 
             return (
-              <button
+              <Button
                 key={`${day.city}-${index}`}
                 data-active={isActive}
                 onClick={() => handleSelectDay(index)}
+                variant={isActive ? 'default' : 'ghost'}
                 style={{ scrollSnapAlign: 'center' }}
-                className={`flex shrink-0 flex-col items-center gap-1 rounded-xl px-3 py-2 text-left transition-all ${
-                  isActive
-                    ? 'bg-primary text-primary-foreground shadow-md'
-                    : 'bg-muted/60 hover:bg-muted text-foreground'
-                }`}
+                className="flex h-auto shrink-0 flex-col items-center gap-1 rounded-xl px-3 py-2 shadow-none"
               >
                 <span
-                  className={`h-2 w-2 rounded-full ${isActive ? 'bg-primary-foreground' : isPast ? 'bg-muted-foreground' : 'bg-amber-400'}`}
+                  className={`h-2 w-2 rounded-full ${isActive ? 'bg-primary-foreground' : isPast ? 'bg-muted-foreground' : 'bg-secondary'}`}
                 />
                 <span className="text-[11px] font-semibold whitespace-nowrap">
                   {day.city}
@@ -316,7 +313,7 @@ export function MapOverlay({
                 >
                   J{day.dayNumber}
                 </span>
-              </button>
+              </Button>
             )
           })}
         </div>

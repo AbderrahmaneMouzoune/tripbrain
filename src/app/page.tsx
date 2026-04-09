@@ -304,14 +304,14 @@ export default function HomePage() {
       </nav>
 
       {/* Floating map button */}
-      <button
+      <Button
         onClick={() => setIsMapOpen(true)}
-        className="bg-primary text-primary-foreground hover:bg-primary/90 fixed right-5 bottom-24 z-40 flex items-center gap-2 rounded-full px-4 py-3 shadow-lg transition-all hover:shadow-xl active:scale-95 md:bottom-8"
+        className="fixed right-5 bottom-24 z-40 rounded-full shadow-lg hover:shadow-xl active:scale-95 md:bottom-8"
         aria-label="Ouvrir la carte"
       >
         <Map className="h-4 w-4" strokeWidth={2} />
         <span className="text-sm font-semibold">Carte</span>
-      </button>
+      </Button>
 
       {/* Immersive map overlay */}
       {isMapOpen && (
