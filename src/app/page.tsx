@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useTripData } from '@/hooks/use-trip-data'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
-import { TripMap } from '@/components/trip-map'
 import { ShareDialog } from '@/components/share-dialog'
 import { DataManager } from '@/components/data-manager'
 import { OnboardingScreen } from '@/components/onboarding-screen'
@@ -14,6 +13,7 @@ import { ChevronLeft, ChevronRight, Map, List, Compass, FolderOpen } from 'lucid
 import { DocumentsView } from '@/components/documents-view'
 import { ImageCacheProvider } from '@/components/image-cache-provider'
 import { CacheStatusBadge } from '@/components/cache-status-badge'
+import { MapOverlay } from '@/components/map-overlay'
 
 function getTripCountdown(
   tripStartDate: Date,
@@ -65,7 +65,8 @@ export default function HomePage() {
   } = useTripData()
 
   const [selectedDay, setSelectedDay] = useState(0)
-  const [activeTab, setActiveTab] = useState<'roadbook' | 'map' | 'documents'>('roadbook')
+  const [activeTab, setActiveTab] = useState<'roadbook' | 'documents'>('roadbook')
+  const [isMapOpen, setIsMapOpen] = useState(false)
 
   useEffect(() => {
     if (hasData) {
@@ -201,23 +202,16 @@ export default function HomePage() {
 
           <Tabs
             value={activeTab}
-            onValueChange={(v) => setActiveTab(v as 'roadbook' | 'map' | 'documents')}
+            onValueChange={(v) => setActiveTab(v as 'roadbook' | 'documents')}
             className="shrink-0"
           >
-            <TabsList className="bg-muted/70 grid h-9 w-full grid-cols-3">
+            <TabsList className="bg-muted/70 grid h-9 w-full grid-cols-2">
               <TabsTrigger
                 value="roadbook"
                 className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1.5 text-xs"
               >
                 <List className="h-3.5 w-3.5" />
                 Roadbook
-              </TabsTrigger>
-              <TabsTrigger
-                value="map"
-                className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-1.5 text-xs"
-              >
-                <Map className="h-3.5 w-3.5" />
-                Carte
               </TabsTrigger>
               <TabsTrigger
                 value="documents"
@@ -248,11 +242,6 @@ export default function HomePage() {
         {/* Content */}
         {activeTab === 'roadbook' ? (
           <DayDetail day={currentDay} />
-        ) : activeTab === 'map' ? (
-          <div className="flex flex-col gap-4">
-            <TripMap itinerary={itinerary} selectedDay={selectedDay} onSelectDay={setSelectedDay} />
-            <DayDetail day={currentDay} />
-          </div>
         ) : (
           <DocumentsView />
         )}
@@ -290,16 +279,6 @@ export default function HomePage() {
           </Button>
 
           <Button
-            variant={activeTab === 'map' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setActiveTab('map')}
-            className="h-auto flex-col gap-0.5 py-2"
-          >
-            <Map className="h-5 w-5" />
-            <span className="text-[10px]">Carte</span>
-          </Button>
-
-          <Button
             variant={activeTab === 'documents' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setActiveTab('documents')}
@@ -323,6 +302,29 @@ export default function HomePage() {
           </Button>
         </div>
       </nav>
+
+      {/* Floating map button */}
+      <button
+        onClick={() => setIsMapOpen(true)}
+        className="bg-primary text-primary-foreground hover:bg-primary/90 fixed right-5 bottom-24 z-40 flex items-center gap-2 rounded-full px-4 py-3 shadow-lg transition-all hover:shadow-xl active:scale-95 md:bottom-8"
+        style={{ paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom, 0px))' }}
+        aria-label="Ouvrir la carte"
+      >
+        <Map className="h-4 w-4" strokeWidth={2} />
+        <span className="text-sm font-semibold">Carte</span>
+      </button>
+
+      {/* Immersive map overlay */}
+      {isMapOpen && (
+        <MapOverlay
+          itinerary={itinerary}
+          selectedDay={selectedDay}
+          onSelectDay={(index) => {
+            setSelectedDay(index)
+          }}
+          onClose={() => setIsMapOpen(false)}
+        />
+      )}
       </div>
     </main>
     </ImageCacheProvider>
