@@ -49,17 +49,18 @@ export function MapOverlay({
   const [activeDay, setActiveDay] = useState(selectedDay)
   const cardListRef = useRef<HTMLDivElement>(null)
 
-  // Group unique cities for display
-  const uniqueDays = itinerary.reduce<{ day: DayItinerary; index: number }[]>(
-    (acc, day, index) => {
-      const last = acc[acc.length - 1]
-      if (!last || last.day.city !== day.city) {
-        acc.push({ day, index })
-      }
-      return acc
-    },
-    [],
-  )
+  // One map marker per consecutive same-city block; track endIndex for active state
+  const uniqueDays = itinerary.reduce<
+    { day: DayItinerary; index: number; endIndex: number }[]
+  >((acc, day, index) => {
+    const last = acc[acc.length - 1]
+    if (!last || last.day.city !== day.city) {
+      acc.push({ day, index, endIndex: index })
+    } else {
+      last.endIndex = index
+    }
+    return acc
+  }, [])
 
   const handleSelectDay = (index: number) => {
     setActiveDay(index)
@@ -123,9 +124,9 @@ export function MapOverlay({
 
       const today = startOfDay(new Date())
 
-      uniqueDays.forEach(({ day, index }) => {
+      uniqueDays.forEach(({ day, index, endIndex }) => {
         const isPast = startOfDay(day.date) < today
-        const isActive = activeDay === index
+        const isActive = activeDay >= index && activeDay <= endIndex
 
         const marker = L.marker(day.coordinates as [number, number], {
           icon: createIcon(isActive, isPast),
@@ -180,10 +181,10 @@ export function MapOverlay({
       }
 
       markersRef.current.forEach((marker, i) => {
-        const { day, index } = uniqueDays[i] ?? {}
+        const { day, index, endIndex } = uniqueDays[i] ?? {}
         if (!day) return
         const isPast = startOfDay(day.date) < today
-        const isActive = activeDay === index
+        const isActive = activeDay >= index && activeDay <= endIndex
 
         marker.setIcon(
           L.divIcon({
@@ -289,13 +290,13 @@ export function MapOverlay({
           className="flex gap-2 overflow-x-auto px-4 py-3 scrollbar-none"
           style={{ scrollSnapType: 'x mandatory' }}
         >
-          {uniqueDays.map(({ day, index }) => {
+          {itinerary.map((day, index) => {
             const isActive = activeDay === index
             const isPast = startOfDay(day.date) < startOfDay(new Date())
 
             return (
               <Button
-                key={`${day.city}-${index}`}
+                key={index}
                 data-active={isActive}
                 onClick={() => handleSelectDay(index)}
                 variant={isActive ? 'default' : 'ghost'}
