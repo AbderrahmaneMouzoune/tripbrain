@@ -1,5 +1,15 @@
 import { type DayItinerary } from '@/lib/itinerary-data'
 import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Footprints, Sparkles, Tag } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface MapDayPreviewCardProps {
@@ -11,11 +21,7 @@ interface MapDayPreviewCardProps {
 }
 
 function getPreviewItems(day: DayItinerary): string[] {
-  if (day.highlights?.length) {
-    return day.highlights.slice(0, 2)
-  }
-
-  return day.activities.slice(0, 2).map((activity) => activity.name)
+  return day.activities.map((activity) => activity.name)
 }
 
 export function MapDayPreviewCard({
@@ -28,14 +34,13 @@ export function MapDayPreviewCard({
   const previewItems = getPreviewItems(day)
 
   return (
-    <div
+    <Card
       data-active={isActive}
       style={{ scrollSnapAlign: 'center' }}
       className={cn(
-        'w-55 shrink-0 rounded-xl border p-3 transition-colors flex flex-col',
-        isActive
-          ? 'border-primary bg-primary/10 shadow-sm'
-          : 'border-border/60 bg-background/95',
+        'w-55 shrink-0 p-3 transition-colors',
+        { 'border-primary bg-primary/10 shadow-sm': isActive },
+        { 'border-border/60 bg-background/95': !isActive },
       )}
     >
       <button
@@ -44,61 +49,75 @@ export function MapDayPreviewCard({
         className="w-full text-left"
         aria-label={`Sélectionner le jour ${day.dayNumber}`}
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground">
-              Jour {day.dayNumber} · {day.city}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {new Date(day.date).toLocaleDateString('fr-FR', {
-                weekday: 'short',
-                day: 'numeric',
-                month: 'short',
-              })}
-            </p>
-          </div>
-          <span
-            className={cn(
-              'mt-1 h-2 w-2 shrink-0 rounded-full',
-              isActive
-                ? 'bg-primary'
-                : isPast
-                  ? 'bg-muted-foreground'
-                  : 'bg-secondary',
-            )}
-          />
-        </div>
-
-        <p className="mt-2 truncate text-xs font-medium text-foreground/90">
-          {day.title}
-        </p>
-
-        <div className="mt-2 flex min-h-5 flex-wrap gap-1">
-          {previewItems.map((item) => (
+        <CardHeader className="px-0 gap-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <CardTitle className="text-sm text-foreground">
+                Jour {day.dayNumber} · {day.city}
+              </CardTitle>
+              <CardDescription className="text-xs">
+                {new Date(day.date).toLocaleDateString('fr-FR', {
+                  weekday: 'short',
+                  day: 'numeric',
+                  month: 'short',
+                })}
+              </CardDescription>
+            </div>
             <span
-              key={item}
-              className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
-            >
-              {item}
-            </span>
-          ))}
-        </div>
+              className={cn(
+                'mt-1 h-2 w-2 shrink-0 rounded-full',
+                { 'bg-primary': isActive },
+                { 'bg-muted-foreground': isPast },
+                { 'bg-secondary': !isActive && !isPast },
+              )}
+            />
+          </div>
+        </CardHeader>
 
-        <div className="mt-3 flex items-center gap-3 text-[11px] text-muted-foreground">
-          <span>{day.activities.length} activités</span>
-          {day.walkingDistance && <span>{day.walkingDistance}</span>}
-        </div>
+        <CardContent className="px-0">
+          <p className="truncate text-xs font-medium text-foreground/90">
+            {day.title}
+          </p>
+
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {day.dayType && (
+              <Badge variant="outline" className="gap-1 font-medium capitalize">
+                <Tag className="h-3 w-3" strokeWidth={1.75} />
+                {day.dayType}
+              </Badge>
+            )}
+            {day.walkingDistance && (
+              <Badge variant="outline" className="gap-1 font-medium">
+                <Footprints className="h-3 w-3" strokeWidth={1.75} />
+                {day.walkingDistance}
+              </Badge>
+            )}
+          </div>
+
+          <ul className="list-disc mt-2 ml-4 flex flex-col gap-1 text-foreground/80">
+            {previewItems.map((item) => (
+              <li
+                key={item}
+                className="text-[10px]"
+              >
+                {item}
+              </li>
+            ))}
+          </ul>
+        </CardContent>
       </button>
 
-      <Button
-        type="button"
-        size="sm"
-        variant={isActive ? 'default' : 'secondary'}
-        onClick={onViewMore}
-        className="mt-auto h-8 w-full text-xs"
-      >
-        Voir plus
-      </Button>
-    </div>
+      <CardFooter className="px-0 mt-auto">
+        <Button
+          type="button"
+          size="sm"
+          variant={isActive ? 'default' : 'secondary'}
+          onClick={onViewMore}
+          className="h-8 w-full text-xs"
+        >
+          Voir plus
+        </Button>
+      </CardFooter>
+    </Card>
   )
 }
