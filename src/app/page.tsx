@@ -182,11 +182,11 @@ export default function HomePage() {
       </section>
 
       {/* Main Content */}
-      <div className="mx-auto max-w-4xl px-4 py-6">
+      <div id='main-content' className="mx-auto max-w-4xl px-4 py-6">
         {/* Navigation + tabs bar */}
         <div className="mb-6 flex items-center justify-between">
           {activeTab === 'documents' ? (
-            <div className="w-[88px]" aria-hidden />
+            <div className="w-22" aria-hidden />
           ) : (
             <Button
               variant="outline"
@@ -224,7 +224,7 @@ export default function HomePage() {
           </Tabs>
 
           {activeTab === 'documents' ? (
-            <div className="w-[88px]" aria-hidden />
+            <div className="w-22" aria-hidden />
           ) : (
             <Button
               variant="outline"
@@ -272,7 +272,7 @@ export default function HomePage() {
             variant={activeTab === 'roadbook' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setActiveTab('roadbook')}
-            className="h-auto flex-col gap-0.5 py-2"
+            className="h-auto flex-col flex-1 gap-0.5 py-2"
           >
             <List className="h-5 w-5" />
             <span className="text-[10px]">Roadbook</span>
@@ -282,7 +282,7 @@ export default function HomePage() {
             variant={activeTab === 'documents' ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setActiveTab('documents')}
-            className="h-auto flex-col gap-0.5 py-2"
+            className="h-auto flex-col flex-1 gap-0.5 py-2"
           >
             <FolderOpen className="h-5 w-5" />
             <span className="text-[10px]">Docs</span>

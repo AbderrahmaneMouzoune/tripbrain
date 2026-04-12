@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { type DayItinerary } from '@/lib/itinerary-data'
 import { Button } from '@/components/ui/button'
+import { MapDayPreviewCard } from '@/components/map-day-preview-card'
 import { X, MapPin, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface MapOverlayProps {
@@ -65,6 +66,18 @@ export function MapOverlay({
   const handleSelectDay = (index: number) => {
     setActiveDay(index)
     onSelectDay(index)
+  }
+
+  const handleViewMore = (index: number) => {
+    handleSelectDay(index)
+    onClose()
+
+    requestAnimationFrame(() => {
+      document.getElementById('main-content')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    })
   }
 
   // Scroll the active city card into view
@@ -202,6 +215,7 @@ export function MapOverlay({
   }, [activeDay, isLoaded])
 
   const currentDay = itinerary[activeDay]
+  const today = startOfDay(new Date())
 
   return (
     <div
@@ -225,7 +239,7 @@ export function MapOverlay({
       </div>
 
       {/* Map */}
-      <div className="flex-1 pt-[56px]" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 56px)' }}>
+      <div className="flex-1 pt-14" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 56px)' }}>
         <div ref={mapRef} className="h-full w-full" />
         {!isLoaded && (
           <div className="bg-muted/50 absolute inset-0 flex items-center justify-center">
@@ -292,29 +306,17 @@ export function MapOverlay({
         >
           {itinerary.map((day, index) => {
             const isActive = activeDay === index
-            const isPast = startOfDay(day.date) < startOfDay(new Date())
+            const isPast = startOfDay(day.date) < today
 
             return (
-              <Button
+              <MapDayPreviewCard
                 key={index}
-                data-active={isActive}
-                onClick={() => handleSelectDay(index)}
-                variant={isActive ? 'default' : 'ghost'}
-                style={{ scrollSnapAlign: 'center' }}
-                className="flex h-auto shrink-0 flex-col items-center gap-1 rounded-xl px-3 py-2 shadow-none"
-              >
-                <span
-                  className={`h-2 w-2 rounded-full ${isActive ? 'bg-primary-foreground' : isPast ? 'bg-muted-foreground' : 'bg-secondary'}`}
-                />
-                <span className="text-[11px] font-semibold whitespace-nowrap">
-                  {day.city}
-                </span>
-                <span
-                  className={`text-[10px] ${isActive ? 'text-primary-foreground/80' : 'text-muted-foreground'}`}
-                >
-                  J{day.dayNumber}
-                </span>
-              </Button>
+                day={day}
+                isActive={isActive}
+                isPast={isPast}
+                onSelect={() => handleSelectDay(index)}
+                onViewMore={() => handleViewMore(index)}
+              />
             )
           })}
         </div>
