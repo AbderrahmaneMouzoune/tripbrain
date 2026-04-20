@@ -22,7 +22,13 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Separator } from '@/components/ui/separator'
-import { Download, Upload, Trash2, Database, AlertCircle } from 'lucide-react'
+import {
+  IconAlertCircle,
+  IconDatabase,
+  IconFileExport,
+  IconFileImport,
+  IconTrash,
+} from '@tabler/icons-react'
 
 interface DataManagerProps {
   onExport: () => void
@@ -68,7 +74,7 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="icon" title="Gérer les données">
-          <Database className="h-5 w-5" />
+          <IconDatabase className="h-5 w-5" stroke={1.9} />
           <span className="sr-only">Gérer les données</span>
         </Button>
       </DialogTrigger>
@@ -85,7 +91,7 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
 
         {error && (
           <div className="bg-destructive/10 text-destructive flex items-start gap-2 rounded-lg px-4 py-3 text-sm">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <IconAlertCircle className="mt-0.5 h-4 w-4 shrink-0" stroke={1.9} />
             <span>{error}</span>
           </div>
         )}
@@ -94,15 +100,19 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
           {/* Export */}
           <Button
             variant="outline"
-            className="h-auto w-full justify-start gap-3 py-3"
+            className="border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3"
             onClick={() => {
               onExport()
               setOpen(false)
             }}
           >
-            <Download className="h-4 w-4 shrink-0" />
+            <span className="bg-primary/10 text-primary inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+              <IconFileExport className="h-4 w-4" stroke={1.9} />
+            </span>
             <div className="text-left">
-              <p className="text-sm font-medium">Exporter mes données</p>
+              <p className="text-foreground text-sm font-medium">
+                Exporter mes données
+              </p>
               <p className="text-muted-foreground text-xs">
                 Télécharger un fichier JSON de sauvegarde
               </p>
@@ -112,16 +122,18 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
           {/* Import */}
           <Button
             variant="outline"
-            className="h-auto w-full justify-start gap-3 py-3"
+            className="border-border h-auto w-full justify-start gap-3 py-3"
             onClick={() => {
               setError(null)
               fileInputRef.current?.click()
             }}
             disabled={loadingImport}
           >
-            <Upload className="h-4 w-4 shrink-0" />
+            <span className="bg-secondary text-secondary-foreground inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+              <IconFileImport className="h-4 w-4" stroke={1.9} />
+            </span>
             <div className="text-left">
-              <p className="text-sm font-medium">
+              <p className="text-foreground text-sm font-medium">
                 {loadingImport ? 'Chargement…' : 'Importer des données'}
               </p>
               <p className="text-muted-foreground text-xs">
@@ -145,7 +157,7 @@ export function DataManager({ onExport, onImport, onClear }: DataManagerProps) {
                 variant="outline"
                 className="text-destructive hover:text-destructive h-auto w-full justify-start gap-3 py-3"
               >
-                <Trash2 className="h-4 w-4 shrink-0" />
+                <IconTrash className="h-4 w-4 shrink-0" stroke={1.9} />
                 <div className="text-left">
                   <p className="text-sm font-medium">Réinitialiser</p>
                   <p className="text-muted-foreground text-xs">
