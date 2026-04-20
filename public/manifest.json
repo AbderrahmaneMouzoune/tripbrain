@@ -4,8 +4,8 @@
   "description": "Planifiez et consultez votre itineraire de voyage avec TripBrain",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FBF8F4",
-  "theme_color": "#8B5A2B",
+  "background_color": "#f3f7fd",
+  "theme_color": "#2268c7",
   "orientation": "portrait-primary",
   "icons": [
     {
