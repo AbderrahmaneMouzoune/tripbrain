@@ -1,5 +1,10 @@
 import type { CellValue, Worksheet } from 'exceljs'
-import type { DayItinerary, Activity, Transport, Accommodation } from '@/lib/itinerary-data'
+import type {
+  DayItinerary,
+  Activity,
+  Transport,
+  Accommodation,
+} from '@/lib/itinerary-data'
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -344,8 +349,9 @@ export async function importFromXlsx(file: File): Promise<ImportResult> {
 /**
  * Import trip data from three CSV files.
  *
- * The `files` array must contain exactly three files named (case-insensitive):
+ * The `files` array must contain exactly three files named:
  * `days.csv`, `activities.csv`, and `transports.csv`.
+ * File name matching is case-insensitive.
  *
  * Same column conventions as the Excel format.
  */
@@ -356,9 +362,18 @@ export async function importFromCsv(files: File[]): Promise<ImportResult> {
   const activitiesFile = fileMap.get('activities.csv')
   const transportsFile = fileMap.get('transports.csv')
 
-  if (!daysFile) throw new Error('Fichier "days.csv" manquant.')
-  if (!activitiesFile) throw new Error('Fichier "activities.csv" manquant.')
-  if (!transportsFile) throw new Error('Fichier "transports.csv" manquant.')
+  if (!daysFile)
+    throw new Error(
+      'Fichier "days.csv" manquant. Le fichier doit s\'appeler "days.csv".',
+    )
+  if (!activitiesFile)
+    throw new Error(
+      'Fichier "activities.csv" manquant. Le fichier doit s\'appeler "activities.csv".',
+    )
+  if (!transportsFile)
+    throw new Error(
+      'Fichier "transports.csv" manquant. Le fichier doit s\'appeler "transports.csv".',
+    )
 
   const [daysText, activitiesText, transportsText] = await Promise.all([
     daysFile.text(),

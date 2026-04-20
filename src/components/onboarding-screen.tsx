@@ -47,7 +47,9 @@ export function OnboardingScreen({
     // Multiple files → must all be CSV
     if (files.length > 1) {
       if (files.some((f) => !f.name.toLowerCase().endsWith('.csv'))) {
-        setError('En cas de sélection multiple, tous les fichiers doivent être des .csv')
+        setError(
+          'En cas de sélection multiple, tous les fichiers doivent être des .csv',
+        )
         return
       }
       runImport(() => onImportCsv(files))
@@ -65,7 +67,9 @@ export function OnboardingScreen({
         'Pour importer en CSV, sélectionnez les 3 fichiers simultanément (days.csv, activities.csv, transports.csv)',
       )
     } else {
-      setError('Format non supporté. Utilisez un fichier .json, .xlsx, ou 3 fichiers .csv')
+      setError(
+        'Format non supporté. Utilisez un fichier .json, .xlsx, ou 3 fichiers .csv',
+      )
     }
   }
 
@@ -107,7 +111,10 @@ export function OnboardingScreen({
   return (
     <div className="bg-background flex min-h-dvh flex-col items-center justify-center px-4 py-6 sm:py-8">
       {/* Background decoration */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 overflow-hidden"
+      >
         <div className="animate-sticker-float bg-primary/12 border-primary/30 absolute top-8 -left-8 h-24 w-24 rotate-12 rounded-2xl border-2" />
         <div className="animate-sticker-bounce bg-secondary/16 border-secondary/35 absolute top-16 right-3 h-20 w-20 -rotate-12 rounded-full border-2" />
         <div className="animate-sticker-float bg-accent/14 border-accent/35 absolute top-72 right-10 h-16 w-16 rotate-6 rounded-xl border-2 [animation-delay:180ms]" />
@@ -119,7 +126,10 @@ export function OnboardingScreen({
           <div className="relative h-16 w-16 shrink-0">
             <div className="bg-primary absolute inset-0 rotate-6 rounded-2xl opacity-20" />
             <div className="bg-primary relative flex h-16 w-16 items-center justify-center rounded-2xl shadow-sm">
-              <Compass className="text-primary-foreground h-8 w-8" strokeWidth={1.5} />
+              <Compass
+                className="text-primary-foreground h-8 w-8"
+                strokeWidth={1.5}
+              />
             </div>
           </div>
           <div className="text-center">
@@ -133,10 +143,10 @@ export function OnboardingScreen({
         </div>
 
         {/* Intro text */}
-        <p className="text-muted-foreground mx-auto max-w-xl text-center text-sm leading-relaxed">
+        {/* <p className="text-muted-foreground mx-auto max-w-xl text-center text-sm leading-relaxed">
           Bienvenue ! Importez votre itinéraire depuis un fichier JSON, Excel ou CSV, ou
           utilisez les données de démonstration pour explorer l&apos;application.
-        </p>
+        </p> */}
 
         {/* Error */}
         {error && (
@@ -163,7 +173,9 @@ export function OnboardingScreen({
               <div className="bg-primary/10 mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl">
                 <Upload className="text-primary h-5 w-5" />
               </div>
-              <p className="text-foreground text-sm font-semibold">Importer mes données</p>
+              <p className="text-foreground text-sm font-semibold">
+                Importer mes données
+              </p>
               <p className="text-muted-foreground mt-1 text-xs">
                 Formats acceptés : <strong>.json</strong> (export TripBrain),{' '}
                 <strong>.xlsx</strong> (Excel avec 3 onglets), ou{' '}
