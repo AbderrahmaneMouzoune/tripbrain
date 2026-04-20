@@ -1,0 +1,252 @@
+# TripBrain — Contrat d'interface itinéraire
+
+TripBrain est une PWA de carnet de voyage. Ce fichier décrit le format de données attendu pour importer un itinéraire. Tu peux générer un itinéraire valide en JSON ou en feuilles CSV/XLSX en respectant ce contrat.
+
+---
+
+## Format JSON (recommandé)
+
+Le JSON doit avoir la structure suivante :
+
+```json
+{
+  "itinerary": [ /* tableau de DayItinerary */ ]
+}
+```
+
+### Type DayItinerary
+
+```ts
+interface DayItinerary {
+  id: string                    // REQUIS — ex: "day-1"
+  date: string                  // REQUIS — ISO 8601, ex: "2026-06-01"
+  dayNumber: number             // REQUIS — ex: 1
+  city: string                  // REQUIS — ex: "Paris"
+  title: string                 // REQUIS — ex: "Arrivée à Paris"
+  coordinates: [number, number] // REQUIS — [lat, lng], ex: [48.8566, 2.3522]
+  highlights?: string[]         // Points forts de la journée
+  foodRecommendations?: string[] // Restaurants / plats recommandés
+  walkingDistance?: string      // ex: "8km"
+  notes?: string                // Notes libres
+  packingTips?: string[]        // Conseils bagages
+  dayType?: "arrival" | "sightseeing" | "travel" | "rest"
+  tips?: string[]               // Conseils pratiques
+  accommodation?: Accommodation // Hébergement de la nuit
+  activities: Activity[]        // REQUIS — tableau (peut être vide [])
+  transport?: Transport         // Transport principal de la journée
+}
+```
+
+### Type Activity
+
+```ts
+interface Activity {
+  id: string                    // REQUIS — ex: "act-1"
+  name: string                  // REQUIS — ex: "Visite Tour Eiffel"
+  type: "visit" | "food" | "transport" | "experience" | "shopping" // REQUIS
+  duration?: string             // ex: "3h"
+  description?: string
+  coordinates?: [number, number] // [lat, lng]
+  address?: string
+  bookingUrl?: string
+  reservationRequired?: boolean
+  price?: number                // nombre brut, ex: 32
+  currency?: string             // ex: "EUR"
+  rating?: number               // 0 à 5
+  tags?: string[]
+  status?: "planned" | "done" | "skipped"
+  tips?: string
+  openAt?: string               // ex: "09:30-23:45"
+}
+```
+
+### Type Transport
+
+```ts
+interface Transport {
+  id: string                    // REQUIS — ex: "tr-1"
+  type: "train" | "car" | "plane" | "bus" // REQUIS
+  from?: string                 // Lieu de départ
+  to?: string                   // Lieu d'arrivée
+  details?: string              // ex: "TGV INOUI direct"
+  departureAddress?: string     // Adresse physique de départ
+  departureTime?: string        // ex: "09:00"
+  arrivalTime?: string          // ex: "10:58"
+  duration?: string             // ex: "1h58"
+  provider?: string             // ex: "SNCF"
+  bookingUrl?: string
+  bookingReference?: string
+  price?: number
+  currency?: string
+  seat?: string                 // ex: "42C"
+  gate?: string                 // ex: "Voie 6"
+  terminal?: string             // ex: "2E"
+  status?: "planned" | "booked" | "checked-in" | "completed"
+  notes?: string
+}
+```
+
+### Type Accommodation
+
+```ts
+interface Accommodation {
+  id: string                    // REQUIS — ex: "acc-1"
+  name: string                  // REQUIS — ex: "Hôtel des Arts"
+  address: string               // REQUIS
+  bookingUrl: string            // REQUIS (peut être "")
+  checkIn: string               // REQUIS — ISO 8601
+  checkOut: string              // REQUIS — ISO 8601
+  price?: number
+  currency?: string
+  bookingReference?: string
+  status?: "planned" | "booked" | "checked-in" | "completed"
+}
+```
+
+---
+
+## Format CSV / XLSX
+
+3 feuilles (XLSX) ou 3 fichiers (CSV) : **Days**, **Activities**, **Transports**.
+Activities et Transports se lient aux Days via `day_id`.
+
+### Feuille Days
+
+| Colonne | Requis | Exemple |
+|---|---|---|
+| id | OUI | day-1 |
+| date | OUI | 2026-06-01 |
+| city | OUI | Paris |
+| title | OUI | Arrivée à Paris |
+| day_number | non | 1 |
+| coordinates | non | 48.8566\|2.3522 |
+| highlights | non | Tour Eiffel\|Louvre |
+| food_recommendations | non | Brasserie Lipp\|Café de Flore |
+| walking_distance | non | 8km |
+| notes | non | Journée tranquille |
+| packing_tips | non | Baskets\|Imperméable |
+| day_type | non | arrival |
+| tips | non | Éviter les taxis\|Prendre le RER B |
+| accommodation_id | non | acc-1 |
+| accommodation_name | non | Hôtel des Arts |
+| accommodation_address | non | 5 rue Tholozé 75018 Paris |
+| accommodation_booking_url | non | https://booking.com |
+| accommodation_check_in | non | 2026-06-01 |
+| accommodation_check_out | non | 2026-06-03 |
+| accommodation_price | non | 180 |
+| accommodation_currency | non | EUR |
+| accommodation_booking_reference | non | HDM-2026-001 |
+| accommodation_status | non | booked |
+
+### Feuille Activities
+
+| Colonne | Requis | Exemple |
+|---|---|---|
+| id | OUI | act-1 |
+| day_id | OUI | day-1 |
+| name | OUI | Visite Tour Eiffel |
+| type | OUI | visit |
+| duration | non | 3h |
+| description | non | Vue panoramique |
+| coordinates | non | 48.8584\|2.2945 |
+| address | non | Champ de Mars 75007 Paris |
+| booking_url | non | https://example.com |
+| reservation_required | non | true |
+| price | non | 32 |
+| currency | non | EUR |
+| rating | non | 4.8 |
+| tags | non | monument\|incontournable |
+| status | non | planned |
+| tips | non | Réserver à l'avance |
+| open_at | non | 09:30-23:45 |
+
+### Feuille Transports
+
+| Colonne | Requis | Exemple |
+|---|---|---|
+| id | OUI | tr-1 |
+| day_id | OUI | day-1 |
+| type | OUI | train |
+| from | non | Paris Gare de Lyon |
+| to | non | Lyon Part-Dieu |
+| details | non | TGV INOUI direct |
+| departure_address | non | Place Louis Armand 75012 Paris |
+| departure_time | non | 09:00 |
+| arrival_time | non | 10:58 |
+| duration | non | 1h58 |
+| provider | non | SNCF |
+| booking_url | non | https://sncf-connect.com |
+| booking_reference | non | TGV-2026-XY9 |
+| price | non | 65 |
+| currency | non | EUR |
+| seat | non | 42C |
+| gate | non | Voie 6 |
+| terminal | non | 2E |
+| status | non | booked |
+| notes | non | Voiture 5 côté fenêtre |
+
+---
+
+## Conventions
+
+- **Listes** → valeurs séparées par `|` — ex: `Paris|Lyon|Nice`
+- **Coordonnées** → `lat|lng` — ex: `48.8566|2.3522`
+- **Dates** → ISO 8601 — ex: `2026-06-01`
+- **Booléens** → `true` / `false` ou `oui` / `non`
+- **Champs optionnels** → laisser la cellule vide (CSV) ou omettre la clé (JSON)
+- **Prix** → nombre brut — ex: `120` ; devise dans `currency`
+- **day_id** → doit correspondre exactement à un `id` de la feuille Days
+
+---
+
+## Exemple JSON minimal (1 jour)
+
+```json
+{
+  "itinerary": [
+    {
+      "id": "day-1",
+      "date": "2026-06-01",
+      "dayNumber": 1,
+      "city": "Paris",
+      "title": "Arrivée à Paris",
+      "coordinates": [48.8566, 2.3522],
+      "dayType": "arrival",
+      "activities": [
+        {
+          "id": "act-1",
+          "name": "Montée Tour Eiffel",
+          "type": "visit",
+          "duration": "3h",
+          "coordinates": [48.8584, 2.2945],
+          "price": 32,
+          "currency": "EUR",
+          "status": "planned"
+        }
+      ],
+      "transport": {
+        "id": "tr-1",
+        "type": "train",
+        "from": "Aéroport CDG",
+        "to": "Paris Gare du Nord",
+        "departureTime": "14:30",
+        "arrivalTime": "15:10",
+        "status": "planned"
+      }
+    }
+  ]
+}
+```
+
+---
+
+## Instructions pour génération LLM
+
+Pour générer un itinéraire valide pour TripBrain :
+
+1. Produis un JSON avec la clé racine `"itinerary"` contenant un tableau de jours.
+2. Chaque jour **doit** avoir : `id`, `date`, `dayNumber`, `city`, `title`, `coordinates`, `activities`.
+3. Les IDs doivent être uniques et cohérents (`day-1`, `day-2`, … / `act-1`, `act-2`, … / `tr-1`, …).
+4. `coordinates` est toujours `[latitude, longitude]` (tableau de 2 nombres).
+5. Utilise les énumérations exactes définies ci-dessus (ex: `"visit"` et non `"visite"`).
+6. Le JSON doit être valide et directement importable — pas de commentaires, pas de texte autour.
