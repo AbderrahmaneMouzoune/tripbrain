@@ -6,7 +6,6 @@ import { useTripData } from '@/hooks/use-trip-data'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
 import { ShareDialog } from '@/components/share-dialog'
-import { DataManager } from '@/components/data-manager'
 import { OnboardingScreen } from '@/components/onboarding-screen'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -62,6 +61,8 @@ function HomePageContent() {
     tripEndDate,
     loadMockData,
     importData,
+    importXlsxData,
+    importCsvData,
     exportData,
     clearData,
     getCurrentDayIndex,
@@ -102,6 +103,8 @@ function HomePageContent() {
     return (
       <OnboardingScreen
         onImportFile={importData}
+        onImportXlsx={importXlsxData}
+        onImportCsv={importCsvData}
         onUseMockData={loadMockData}
       />
     )
@@ -126,9 +129,9 @@ function HomePageContent() {
           aria-hidden
           className="pointer-events-none absolute inset-0 overflow-hidden"
         >
-          <div className="animate-sticker-float bg-primary/12 border-primary/30 absolute top-8 -left-8 h-24 w-24 rotate-12 rounded-2xl border-2" />
-          <div className="animate-sticker-bounce bg-secondary/16 border-secondary/35 absolute top-16 right-3 h-20 w-20 -rotate-12 rounded-full border-2" />
-          <div className="animate-sticker-float bg-accent/14 border-accent/35 absolute top-72 right-10 h-16 w-16 rotate-6 rounded-xl border-2 [animation-delay:180ms]" />
+          <div className="animate-sticker-float bg-primary/10 border-primary/15 shadow-primary/10 absolute top-8 -left-8 h-24 w-24 rotate-12 rounded-2xl border shadow-sm" />
+          <div className="animate-sticker-bounce bg-secondary/10 border-secondary/15 shadow-secondary/10 absolute top-16 right-3 h-20 w-20 -rotate-12 rounded-full border shadow-sm" />
+          <div className="animate-sticker-float bg-accent/10 border-accent/15 shadow-accent/10 absolute top-72 right-10 h-16 w-16 rotate-6 rounded-xl border shadow-sm [animation-delay:180ms]" />
         </div>
 
         <div className="relative z-10">
@@ -158,14 +161,14 @@ function HomePageContent() {
                 </div>
                 <div className="flex items-center gap-1">
                   <CacheStatusBadge />
-                  <DataManager
-                    onExport={exportData}
-                    onImport={importData}
-                    onClear={clearData}
-                  />
                   <ShareDialog
                     itinerary={itinerary}
                     selectedDay={selectedDay}
+                    onExport={exportData}
+                    onImport={importData}
+                    onImportXlsx={importXlsxData}
+                    onImportCsv={importCsvData}
+                    onClear={clearData}
                   />
                 </div>
               </div>

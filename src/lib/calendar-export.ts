@@ -41,7 +41,12 @@ function buildEventDescription(day: DayItinerary): string {
 
   if (day.transport) {
     const { type, from, to, details } = day.transport
-    const label = { train: 'Train', car: 'Voiture', plane: 'Avion', bus: 'Bus' }[type]
+    const label = {
+      train: 'Train',
+      car: 'Voiture',
+      plane: 'Avion',
+      bus: 'Bus',
+    }[type]
     const route = from && to ? ` ${from} → ${to}` : ''
     parts.push(`Transport : ${label}${route}${details ? ` (${details})` : ''}`)
   }
@@ -69,7 +74,7 @@ function generateVEvent(day: DayItinerary): string {
   const summary = escapeICSText(`Jour ${day.dayNumber} – ${day.title}`)
   const description = escapeICSText(buildEventDescription(day))
   const location = escapeICSText(day.city)
-  const uid = `ouzbekistan-2026-day-${day.dayNumber}@voyage`
+  const uid = `tripbrain-day-${day.dayNumber}@voyage`
 
   const lines = [
     'BEGIN:VEVENT',
@@ -85,16 +90,48 @@ function generateVEvent(day: DayItinerary): string {
   return lines.join('\r\n')
 }
 
+function buildCalendarMetadata(days: DayItinerary[]): {
+  calName: string
+  calDescription: string
+} {
+  if (days.length === 0) {
+    return {
+      calName: 'Mon voyage',
+      calDescription: 'Itinéraire de voyage généré par TripBrain',
+    }
+  }
+
+  const cities = [
+    ...new Set(days.map((day) => day.city.trim()).filter(Boolean)),
+  ]
+  const sortedByDate = [...days].sort((a, b) => a.date.localeCompare(b.date))
+  const startDate = sortedByDate[0]?.date
+  const endDate = sortedByDate.at(-1)?.date
+
+  const routeLabel =
+    cities.length <= 1
+      ? cities[0]
+      : `${cities[0]} → ${cities[cities.length - 1]}`
+
+  return {
+    calName: routeLabel ? `Voyage - ${routeLabel}` : 'Mon voyage',
+    calDescription:
+      startDate && endDate
+        ? `Itinéraire du ${startDate} au ${endDate}`
+        : 'Itinéraire de voyage généré par TripBrain',
+  }
+}
+
 export function generateICSContent(days: DayItinerary[]): string {
   const events = days.map(generateVEvent).join('\r\n')
+  const { calName, calDescription } = buildCalendarMetadata(days)
 
   return [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Ouzbekistan 2026//Mon Voyage//FR',
-    'X-WR-CALNAME:Ouzbekistan 2026',
-    'X-WR-CALDESC:Mon itineraire de voyage en Ouzbekistan',
-    'X-WR-TIMEZONE:Asia/Tashkent',
+    'PRODID:-//TripBrain//Itinéraire//FR',
+    foldICSLine(`X-WR-CALNAME:${escapeICSText(calName)}`),
+    foldICSLine(`X-WR-CALDESC:${escapeICSText(calDescription)}`),
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     events,
