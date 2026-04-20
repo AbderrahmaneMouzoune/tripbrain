@@ -25,11 +25,12 @@ export function AppIconImage({
         width: size,
         height: size,
         borderRadius: radius,
-        background: 'linear-gradient(135deg, #1a5fd6 0%, #2268c7 100%)',
+        background: 'rgba(26, 95, 214, 0.1)',
+        border: '1px solid rgba(26, 95, 214, 0.15)',
+        boxShadow: shadow ?? '0 1px 2px 0 rgba(26, 95, 214, 0.1)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        ...(shadow ? { boxShadow: shadow } : {}),
       }}
     >
       {/* IconRoute — Tabler Icons */}
@@ -39,7 +40,7 @@ export function AppIconImage({
         height={iconSize}
         viewBox="0 0 24 24"
         fill="none"
-        stroke="white"
+        stroke="#1a5fd6"
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
