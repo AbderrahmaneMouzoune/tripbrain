@@ -19,9 +19,9 @@ function startOfDay(date: Date | string): Date {
   return d
 }
 
-function buildMarkerHtml(isActive: boolean, isPast: boolean): string {
+function buildMarkerHtml(dayNumber: number, isActive: boolean, isPast: boolean): string {
   const size = isActive ? 36 : 28
-  const iconSize = isActive ? 18 : 13
+  const fontSize = isActive ? 15 : 12
   const bg = isActive
     ? 'var(--color-primary, #8B5A2B)'
     : isPast
@@ -29,11 +29,8 @@ function buildMarkerHtml(isActive: boolean, isPast: boolean): string {
       : '#D4A574'
   const border = isActive ? 'rgba(0,0,0,0.25)' : '#fff'
 
-  return `<div style="width:${size}px;height:${size}px;background:${bg};border:3px solid ${border};border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;transition:all .25s ease;">
-    <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2">
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-      <circle cx="12" cy="10" r="3"/>
-    </svg>
+  return `<div style="width:${size}px;height:${size}px;background:${bg};border:3px solid ${border};border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;transition:all .25s ease;color:white;font-size:${fontSize}px;font-weight:700;line-height:1;">
+    ${dayNumber}
   </div>`
 }
 
@@ -127,10 +124,10 @@ export function MapOverlay({
 
       mapInstanceRef.current = map
 
-      const createIcon = (isActive: boolean, isPast: boolean) =>
+      const createIcon = (dayNumber: number, isActive: boolean, isPast: boolean) =>
         L.divIcon({
           className: '',
-          html: buildMarkerHtml(isActive, isPast),
+          html: buildMarkerHtml(dayNumber, isActive, isPast),
           iconSize: [isActive ? 36 : 28, isActive ? 36 : 28],
           iconAnchor: [isActive ? 18 : 14, isActive ? 18 : 14],
         })
@@ -142,7 +139,7 @@ export function MapOverlay({
         const isActive = activeDay >= index && activeDay <= endIndex
 
         const marker = L.marker(day.coordinates as [number, number], {
-          icon: createIcon(isActive, isPast),
+          icon: createIcon(day.dayNumber, isActive, isPast),
         }).addTo(map)
 
         marker.bindPopup(
@@ -202,7 +199,7 @@ export function MapOverlay({
         marker.setIcon(
           L.divIcon({
             className: '',
-            html: buildMarkerHtml(isActive, isPast),
+            html: buildMarkerHtml(day.dayNumber, isActive, isPast),
             iconSize: [isActive ? 36 : 28, isActive ? 36 : 28],
             iconAnchor: [isActive ? 18 : 14, isActive ? 18 : 14],
           }),
