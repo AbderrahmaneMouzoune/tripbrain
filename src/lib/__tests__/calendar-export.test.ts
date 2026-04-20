@@ -92,6 +92,14 @@ describe('generateICSContent', () => {
     expect(ics).toContain('METHOD:PUBLISH')
   })
 
+  it('uses metadata derived from itinerary days instead of hardcoded destination', () => {
+    const ics = generateICSContent([minimalDay, fullDay])
+    expect(ics).toContain('PRODID:-//TripBrain//Itinéraire//FR')
+    expect(ics).toContain('X-WR-CALNAME:Voyage - Tachkent → Samarcande')
+    expect(ics).toContain('X-WR-CALDESC:Itinéraire du 2026-05-10 au 2026-05-11')
+    expect(ics).not.toContain('Ouzbekistan 2026')
+  })
+
   it('generates a VEVENT for each day', () => {
     const ics = generateICSContent([minimalDay, fullDay])
     const beginCount = (ics.match(/BEGIN:VEVENT/g) ?? []).length
@@ -135,7 +143,7 @@ describe('generateICSContent', () => {
 
   it('includes a stable UID for each event', () => {
     const ics = generateICSContent([minimalDay])
-    expect(ics).toContain('UID:ouzbekistan-2026-day-1@voyage')
+    expect(ics).toContain('UID:tripbrain-day-1@voyage')
   })
 
   it('includes non-transport activities in description', () => {

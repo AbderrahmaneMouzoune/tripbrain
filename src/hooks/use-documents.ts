@@ -9,7 +9,7 @@ import {
   type ImportProgress,
 } from '@/lib/document-zip'
 
-const DB_NAME = 'ouzbekistan-documents'
+const DB_NAME = 'tripbrain-documents'
 const DB_VERSION = 1
 const STORE_NAME = 'files'
 

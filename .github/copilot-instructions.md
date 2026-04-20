@@ -23,11 +23,12 @@ TripBrain is a **client-only Next.js 16 PWA** (no API routes, no server-side dat
 3. `useTripData` hook (`src/hooks/use-trip-data.ts`) manages CRUD: load from IndexedDB on mount, save on import/edit, export as JSON.
 4. Import supports **JSON**, **XLSX** (3-sheet workbook: Days/Activities/Transports), and **CSV** (3 files: days.csv/activities.csv/transports.csv). Import logic is in `src/lib/importItinerary.ts`.
 5. A separate IndexedDB database (`tripbrain-images`) caches images for offline use, managed by `useImageCache` hook.
-6. Documents (PDFs, tickets, etc.) are stored in a third IndexedDB database (`ouzbekistan-documents`), managed by `useDocuments` hook.
+6. Documents (PDFs, tickets, etc.) are stored in a third IndexedDB database (`tripbrain-documents`), managed by `useDocuments` hook.
 
 ### Single-page structure
 
 The app is a single route (`src/app/page.tsx`). It shows:
+
 - An **onboarding screen** when no data is loaded
 - A **timeline** + **day detail** (roadbook) as the main view
 - A **documents tab** for file storage

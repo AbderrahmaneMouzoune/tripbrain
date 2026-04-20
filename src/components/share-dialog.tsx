@@ -1,7 +1,6 @@
 'use client'
 
-import { useState } from 'react'
-import { QRCodeSVG } from 'qrcode.react'
+import { useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -10,186 +9,267 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Separator } from '@/components/ui/separator'
 import {
   Share2,
-  Copy,
-  Check,
-  QrCode,
-  Link as LinkIcon,
   Download,
   CalendarDays,
-  CalendarPlus,
+  Upload,
+  Trash2,
+  AlertCircle,
+  HardDriveDownload,
 } from 'lucide-react'
 import type { DayItinerary } from '@/lib/itinerary-data'
-import { downloadICS, getGoogleCalendarUrl } from '@/lib/calendar-export'
+import { downloadICS } from '@/lib/calendar-export'
+import { ImportFormatGuide } from '@/components/import-format-guide'
 
 interface ShareDialogProps {
   itinerary: DayItinerary[]
   selectedDay?: number
   trigger?: React.ReactNode
+  onExport: () => void
+  onImport: (file: File) => Promise<void>
+  onImportXlsx: (file: File) => Promise<void>
+  onImportCsv: (files: File[]) => Promise<void>
+  onClear: () => Promise<void>
 }
 
-export function ShareDialog({ itinerary, selectedDay, trigger }: ShareDialogProps) {
-  const [copied, setCopied] = useState(false)
+export function ShareDialog({
+  itinerary,
+  selectedDay,
+  trigger,
+  onExport,
+  onImport,
+  onImportXlsx,
+  onImportCsv,
+  onClear,
+}: ShareDialogProps) {
   const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [loadingImport, setLoadingImport] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const getShareUrl = () => {
-    if (typeof window === 'undefined') return ''
-    const url = new URL(window.location.href)
-    if (selectedDay !== undefined) {
-      url.searchParams.set('day', String(selectedDay + 1))
-    }
-    return url.toString()
-  }
+  const handleFiles = async (files: File[]) => {
+    if (files.length === 0) return
 
-  const shareUrl = getShareUrl()
+    setError(null)
+    setLoadingImport(true)
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(shareUrl)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const handleNativeShare = async () => {
-    const day = selectedDay !== undefined ? itinerary[selectedDay] : null
-    const shareData = {
-      title: 'Mon voyage en Ouzbekistan 2026',
-      text: day
-        ? `Jour ${day.dayNumber}: ${day.title} - ${day.city}`
-        : 'Decouvrez mon itineraire de voyage en Ouzbekistan',
-      url: shareUrl,
-    }
-
-    if (navigator.share) {
-      try {
-        await navigator.share(shareData)
-      } catch {
-        // User cancelled
+    try {
+      if (files.length > 1) {
+        if (files.some((f) => !f.name.toLowerCase().endsWith('.csv'))) {
+          setError(
+            'En cas de sélection multiple, tous les fichiers doivent être des .csv',
+          )
+          return
+        }
+        await onImportCsv(files)
+        setOpen(false)
+        return
       }
+
+      const file = files[0]
+      const name = file.name.toLowerCase()
+      if (name.endsWith('.json')) {
+        await onImport(file)
+      } else if (name.endsWith('.xlsx')) {
+        await onImportXlsx(file)
+      } else if (name.endsWith('.csv')) {
+        setError(
+          'Pour importer en CSV, sélectionnez les 3 fichiers simultanément (days.csv, activities.csv, transports.csv)',
+        )
+        return
+      } else {
+        setError(
+          'Format non supporté. Utilisez un fichier .json, .xlsx, ou 3 fichiers .csv',
+        )
+        return
+      }
+      setOpen(false)
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Impossible de lire le fichier. Vérifiez qu'il s'agit d'un export TripBrain valide.",
+      )
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    } finally {
+      setLoadingImport(false)
     }
   }
 
-  const handleDownloadQR = () => {
-    const svg = document.getElementById('qr-code')
-    if (!svg) return
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleFiles(Array.from(e.target.files ?? []))
+    if (e.target) e.target.value = ''
+  }
 
-    const svgData = new XMLSerializer().serializeToString(svg)
-    const canvas = document.createElement('canvas')
-    const ctx = canvas.getContext('2d')
-    const img = new Image()
-
-    img.onload = () => {
-      canvas.width = img.width
-      canvas.height = img.height
-      ctx?.drawImage(img, 0, 0)
-      const pngFile = canvas.toDataURL('image/png')
-
-      const downloadLink = document.createElement('a')
-      downloadLink.download = 'uzbekistan-trip-qr.png'
-      downloadLink.href = pngFile
-      downloadLink.click()
-    }
-
-    img.crossOrigin = 'anonymous'
-    img.src = 'data:image/svg+xml;base64,' + btoa(svgData)
+  const handleClear = async () => {
+    await onClear()
+    setOpen(false)
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" title="Partager & données">
             <Share2 className="h-5 w-5" />
-            <span className="sr-only">Partager</span>
+            <span className="sr-only">Partager & données</span>
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Partager l&apos;itineraire</DialogTitle>
+          <DialogTitle>Partager & données</DialogTitle>
           <DialogDescription>
-            Partagez votre voyage avec vos proches
+            Exportez votre voyage ou gérez vos données
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="link" className="mt-4">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="link" className="gap-2">
-              <LinkIcon className="h-4 w-4" />
-              Lien
+        <Tabs defaultValue="data" className="mt-2">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="data" className="gap-1.5 text-xs">
+              <HardDriveDownload className="h-3.5 w-3.5" />
+              Données
             </TabsTrigger>
-            <TabsTrigger value="qr" className="gap-2">
-              <QrCode className="h-4 w-4" />
-              QR Code
-            </TabsTrigger>
-            <TabsTrigger value="calendar" className="gap-2">
-              <CalendarDays className="h-4 w-4" />
+            <TabsTrigger value="calendar" className="gap-1.5 text-xs">
+              <CalendarDays className="h-3.5 w-3.5" />
               Calendrier
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="link" className="mt-4 space-y-4">
-            <div className="flex items-center gap-2">
-              <Input value={shareUrl} readOnly className="flex-1 text-sm" />
-              <Button size="icon" variant="outline" onClick={handleCopy}>
-                {copied ? (
-                  <Check className="h-4 w-4 text-green-500" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-
-            {typeof navigator !== 'undefined' && 'share' in navigator && (
-              <Button onClick={handleNativeShare} className="w-full gap-2">
-                <Share2 className="h-4 w-4" />
-                Partager via...
-              </Button>
-            )}
-          </TabsContent>
-
-          <TabsContent value="qr" className="mt-4 space-y-4">
-            <div className="flex flex-col items-center gap-4">
-              <div className="bg-card rounded-lg border p-4">
-                <QRCodeSVG
-                  id="qr-code"
-                  value={shareUrl}
-                  size={200}
-                  level="M"
-                  includeMargin
-                  bgColor="transparent"
-                  fgColor="currentColor"
-                  className="text-foreground"
-                />
+          {/* ── Données ── */}
+          <TabsContent value="data" className="mt-4 space-y-3">
+            {error && (
+              <div className="bg-destructive/10 text-destructive flex items-start gap-2 rounded-lg px-4 py-3 text-sm">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{error}</span>
               </div>
-              <p className="text-muted-foreground text-center text-sm">
-                Scannez ce QR code pour acceder a l&apos;itineraire
-              </p>
-              <Button
-                variant="outline"
-                onClick={handleDownloadQR}
-                className="gap-2"
-              >
+            )}
+
+            {/* Export */}
+            <Button
+              variant="outline"
+              className="border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3"
+              onClick={() => {
+                onExport()
+                setOpen(false)
+              }}
+            >
+              <span className="bg-primary/10 text-primary inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
                 <Download className="h-4 w-4" />
-                Telecharger le QR code
-              </Button>
+              </span>
+              <div className="text-left">
+                <p className="text-foreground text-sm font-medium">
+                  Exporter mes données
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  Télécharger un fichier JSON de sauvegarde
+                </p>
+              </div>
+            </Button>
+
+            {/* Import */}
+            <Button
+              variant="outline"
+              className="border-border h-auto w-full justify-start gap-3 py-3"
+              onClick={() => {
+                setError(null)
+                fileInputRef.current?.click()
+              }}
+              disabled={loadingImport}
+            >
+              <span className="bg-secondary text-secondary-foreground inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+                <Upload className="h-4 w-4" />
+              </span>
+              <div className="text-left">
+                <p className="text-foreground text-sm font-medium">
+                  {loadingImport ? 'Chargement…' : 'Importer des données'}
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  Formats : .json, .xlsx, ou 3 fichiers .csv
+                </p>
+              </div>
+            </Button>
+
+            <div className="flex justify-center">
+              <ImportFormatGuide />
             </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.xlsx,.csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+              multiple
+              className="sr-only"
+              onChange={handleFileChange}
+            />
+
+            <Separator />
+
+            {/* Reset */}
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="text-destructive hover:text-destructive h-auto w-full justify-start gap-3 py-3"
+                >
+                  <Trash2 className="h-4 w-4 shrink-0" />
+                  <div className="text-left">
+                    <p className="text-sm font-medium">Réinitialiser</p>
+                    <p className="text-muted-foreground text-xs">
+                      Supprimer toutes les données du voyage
+                    </p>
+                  </div>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    Réinitialiser les données ?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Cette action supprimera définitivement toutes les données de
+                    votre voyage. Pensez à exporter une sauvegarde avant de
+                    continuer.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Annuler</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={handleClear}
+                  >
+                    Réinitialiser
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </TabsContent>
 
+          {/* ── Calendrier ── */}
           <TabsContent value="calendar" className="mt-4 space-y-4">
             <div className="flex flex-col gap-3">
               <p className="text-muted-foreground text-sm">
                 Exportez votre voyage vers votre application de calendrier
-                préférée (Google Calendar, Apple Calendar, Outlook…)
+                préférée (Apple Calendar, Outlook…)
               </p>
 
               <Button
-                onClick={() =>
-                  downloadICS(itinerary, 'ouzbekistan-2026-voyage.ics')
-                }
+                onClick={() => downloadICS(itinerary, 'tripbrain-voyage.ics')}
                 className="w-full gap-2"
               >
                 <Download className="h-4 w-4" />
@@ -197,34 +277,17 @@ export function ShareDialog({ itinerary, selectedDay, trigger }: ShareDialogProp
               </Button>
 
               {selectedDay !== undefined && (
-                <>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const day = itinerary[selectedDay]
-                      downloadICS(
-                        [day],
-                        `ouzbekistan-2026-jour-${day.dayNumber}.ics`,
-                      )
-                    }}
-                    className="w-full gap-2"
-                  >
-                    <Download className="h-4 w-4" />
-                    Télécharger ce jour (.ics)
-                  </Button>
-
-                  <a
-                    href={getGoogleCalendarUrl(itinerary[selectedDay])}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full"
-                  >
-                    <Button variant="outline" className="w-full gap-2">
-                      <CalendarPlus className="h-4 w-4" />
-                      Ajouter ce jour à Google Calendar
-                    </Button>
-                  </a>
-                </>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const day = itinerary[selectedDay]
+                    downloadICS([day], `tripbrain-jour-${day.dayNumber}.ics`)
+                  }}
+                  className="w-full gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Télécharger ce jour (.ics)
+                </Button>
               )}
             </div>
           </TabsContent>

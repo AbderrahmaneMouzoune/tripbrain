@@ -6,7 +6,6 @@ import { useTripData } from '@/hooks/use-trip-data'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
 import { ShareDialog } from '@/components/share-dialog'
-import { DataManager } from '@/components/data-manager'
 import { OnboardingScreen } from '@/components/onboarding-screen'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -162,14 +161,14 @@ function HomePageContent() {
                 </div>
                 <div className="flex items-center gap-1">
                   <CacheStatusBadge />
-                  <DataManager
-                    onExport={exportData}
-                    onImport={importData}
-                    onClear={clearData}
-                  />
                   <ShareDialog
                     itinerary={itinerary}
                     selectedDay={selectedDay}
+                    onExport={exportData}
+                    onImport={importData}
+                    onImportXlsx={importXlsxData}
+                    onImportCsv={importCsvData}
+                    onClear={clearData}
                   />
                 </div>
               </div>
