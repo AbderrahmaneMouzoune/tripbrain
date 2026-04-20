@@ -1129,7 +1129,7 @@ const CSV_TEMPLATES: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function ImportFormatGuide() {
+export function ImportFormatGuideContent() {
   const [activeTab, setActiveTab] = useState<'xlsx' | 'csv' | 'json'>('xlsx')
   const [xlsxLoading, setXlsxLoading] = useState(false)
   const [xlsxError, setXlsxError] = useState(false)
@@ -1177,373 +1177,346 @@ export function ImportFormatGuide() {
   }
 
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground gap-1.5 text-xs"
+    <div className="flex flex-col gap-0">
+      {/* ── Format tabs + scrollable content ── */}
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as 'xlsx' | 'csv' | 'json')}
+        className="flex min-h-0 flex-1 flex-col gap-0"
+      >
+        <TabsList className="my-0 grid w-full shrink-0 grid-cols-3 rounded-none border-b px-5">
+          <TabsTrigger value="xlsx" className="gap-1.5 text-xs">
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Excel
+          </TabsTrigger>
+          <TabsTrigger value="csv" className="gap-1.5 text-xs">
+            <Table className="h-3.5 w-3.5" />
+            CSV
+          </TabsTrigger>
+          <TabsTrigger value="json" className="gap-1.5 text-xs">
+            <Braces className="h-3.5 w-3.5" />
+            JSON
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ── XLSX tab ── */}
+        <TabsContent
+          value="xlsx"
+          className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4"
         >
-          <HelpCircle className="h-3.5 w-3.5" />
-          Guide de format
-        </Button>
-      </DialogTrigger>
+          <div className="space-y-4">
+            {/* Conseils */}
+            <Alert variant="info">
+              <Lightbulb className="h-4 w-4" />
+              <AlertTitle>Conseils avant de commencer</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-1 list-disc space-y-1 pl-4">
+                  <li>
+                    Un seul fichier{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      .xlsx
+                    </code>{' '}
+                    avec exactement 3 onglets obligatoires.
+                  </li>
+                  <li>
+                    Les onglets doivent se nommer{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      Days
+                    </code>
+                    ,{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      Activities
+                    </code>{' '}
+                    et{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      Transports
+                    </code>{' '}
+                    (respectez la casse).
+                  </li>
+                  <li>
+                    La première ligne de chaque onglet doit être la ligne
+                    d&apos;en-têtes.
+                  </li>
+                  <li>
+                    Les activités et transports sont liés aux jours via la
+                    colonne{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      day_id
+                    </code>
+                    .
+                  </li>
+                  <li>Laissez une cellule vide pour les champs optionnels.</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
 
-      <DialogContent className="flex max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-md">
-        {/* ── Header ── */}
-        <DialogHeader className="shrink-0 border-b p-5">
-          <DialogTitle>Guide de format d&apos;import</DialogTitle>
-          <DialogDescription>
-            Choisissez votre format ci-dessous pour voir les instructions et
-            télécharger un modèle.
-          </DialogDescription>
-        </DialogHeader>
+            {/* Erreurs fréquentes */}
+            <Alert variant="destructive">
+              <TriangleAlert className="h-4 w-4" />
+              <AlertTitle>Erreurs fréquentes</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-1 list-disc space-y-1 pl-4">
+                  <li>
+                    Onglet mal orthographié — ex :{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      day
+                    </code>{' '}
+                    au lieu de{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      Days
+                    </code>
+                    .
+                  </li>
+                  <li>
+                    Ligne d&apos;en-tête manquante ou en ligne 2 (et non 1).
+                  </li>
+                  <li>
+                    Valeur{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      day_id
+                    </code>{' '}
+                    dans Activities / Transports sans correspondance dans Days.
+                  </li>
+                  <li>
+                    Cellule de prix contenant du texte (ex :{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      120€
+                    </code>
+                    ) au lieu d&apos;un nombre brut (
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      120
+                    </code>
+                    ).
+                  </li>
+                </ul>
+              </AlertDescription>
+            </Alert>
 
-        {/* ── Format tabs + scrollable content ── */}
-        <Tabs
-          value={activeTab}
-          onValueChange={(v) => setActiveTab(v as 'xlsx' | 'csv' | 'json')}
-          className="flex min-h-0 flex-1 flex-col gap-0"
+            <Separator />
+            <ColumnAccordion />
+          </div>
+        </TabsContent>
+
+        {/* ── CSV tab ── */}
+        <TabsContent
+          value="csv"
+          className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4"
         >
-          <TabsList className="my-0 grid w-full shrink-0 grid-cols-3 rounded-none border-b px-5">
-            <TabsTrigger value="xlsx" className="gap-1.5 text-xs">
-              <FileSpreadsheet className="h-3.5 w-3.5" />
-              Excel
-            </TabsTrigger>
-            <TabsTrigger value="csv" className="gap-1.5 text-xs">
-              <Table className="h-3.5 w-3.5" />
-              CSV
-            </TabsTrigger>
-            <TabsTrigger value="json" className="gap-1.5 text-xs">
-              <Braces className="h-3.5 w-3.5" />
-              JSON
-            </TabsTrigger>
-          </TabsList>
+          <div className="space-y-4">
+            {/* Conseils */}
+            <Alert variant="info">
+              <Lightbulb className="h-4 w-4" />
+              <AlertTitle>Conseils avant de commencer</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-1 list-disc space-y-1 pl-4">
+                  <li>
+                    3 fichiers distincts à sélectionner{' '}
+                    <strong>simultanément</strong> lors de l&apos;import.
+                  </li>
+                  <li>
+                    Noms obligatoires (sensibles à la casse) :{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      days.csv
+                    </code>
+                    ,{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      activities.csv
+                    </code>
+                    ,{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      transports.csv
+                    </code>
+                    .
+                  </li>
+                  <li>
+                    Séparateur de colonnes :{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      virgule (,)
+                    </code>{' '}
+                    — pas le point-virgule.
+                  </li>
+                  <li>Encodage UTF-8 recommandé (pour les accents).</li>
+                  <li>
+                    La première ligne de chaque fichier doit être la ligne
+                    d&apos;en-têtes.
+                  </li>
+                </ul>
+              </AlertDescription>
+            </Alert>
 
-          {/* ── XLSX tab ── */}
-          <TabsContent
-            value="xlsx"
-            className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4"
-          >
-            <div className="space-y-4">
-              {/* Conseils */}
-              <Alert variant="info">
-                <Lightbulb className="h-4 w-4" />
-                <AlertTitle>Conseils avant de commencer</AlertTitle>
-                <AlertDescription>
-                  <ul className="mt-1 list-disc space-y-1 pl-4">
-                    <li>
-                      Un seul fichier{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        .xlsx
-                      </code>{' '}
-                      avec exactement 3 onglets obligatoires.
-                    </li>
-                    <li>
-                      Les onglets doivent se nommer{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        Days
-                      </code>
-                      ,{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        Activities
-                      </code>{' '}
-                      et{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        Transports
-                      </code>{' '}
-                      (respectez la casse).
-                    </li>
-                    <li>
-                      La première ligne de chaque onglet doit être la ligne
-                      d&apos;en-têtes.
-                    </li>
-                    <li>
-                      Les activités et transports sont liés aux jours via la
-                      colonne{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        day_id
-                      </code>
-                      .
-                    </li>
-                    <li>
-                      Laissez une cellule vide pour les champs optionnels.
-                    </li>
-                  </ul>
-                </AlertDescription>
-              </Alert>
+            {/* Erreurs fréquentes */}
+            <Alert variant="destructive">
+              <TriangleAlert className="h-4 w-4" />
+              <AlertTitle>Erreurs fréquentes</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-1 list-disc space-y-1 pl-4">
+                  <li>
+                    Nom de fichier incorrect — ex :{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      day.csv
+                    </code>{' '}
+                    au lieu de{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      days.csv
+                    </code>
+                    .
+                  </li>
+                  <li>Importer un seul fichier au lieu des 3 simultanément.</li>
+                  <li>
+                    Utiliser un point-virgule (
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      ;
+                    </code>
+                    ) comme séparateur (souvent le cas avec Excel en français).
+                  </li>
+                  <li>
+                    Valeur{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      day_id
+                    </code>{' '}
+                    sans correspondance dans{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      days.csv
+                    </code>
+                    .
+                  </li>
+                </ul>
+              </AlertDescription>
+            </Alert>
 
-              {/* Erreurs fréquentes */}
-              <Alert variant="destructive">
-                <TriangleAlert className="h-4 w-4" />
-                <AlertTitle>Erreurs fréquentes</AlertTitle>
-                <AlertDescription>
-                  <ul className="mt-1 list-disc space-y-1 pl-4">
-                    <li>
-                      Onglet mal orthographié — ex :{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        day
-                      </code>{' '}
-                      au lieu de{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        Days
-                      </code>
-                      .
-                    </li>
-                    <li>
-                      Ligne d&apos;en-tête manquante ou en ligne 2 (et non 1).
-                    </li>
-                    <li>
-                      Valeur{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        day_id
-                      </code>{' '}
-                      dans Activities / Transports sans correspondance dans
-                      Days.
-                    </li>
-                    <li>
-                      Cellule de prix contenant du texte (ex :{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        120€
-                      </code>
-                      ) au lieu d&apos;un nombre brut (
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        120
-                      </code>
-                      ).
-                    </li>
-                  </ul>
-                </AlertDescription>
-              </Alert>
+            <Separator />
+            <ColumnAccordion />
+          </div>
+        </TabsContent>
 
-              <Separator />
-              <ColumnAccordion />
-            </div>
-          </TabsContent>
+        {/* ── JSON tab ── */}
+        <TabsContent
+          value="json"
+          className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4"
+        >
+          <div className="space-y-4">
+            {/* Conseils */}
+            <Alert variant="info">
+              <Lightbulb className="h-4 w-4" />
+              <AlertTitle>Conseils avant de commencer</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-1 list-disc space-y-1 pl-4">
+                  <li>
+                    Un seul fichier{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      .json
+                    </code>{' '}
+                    contenant l&apos;intégralité du voyage.
+                  </li>
+                  <li>
+                    Structure racine :{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      {'{ itinerary }'}
+                    </code>
+                  </li>
+                  <li>
+                    Les clés sont en <strong>camelCase</strong> — ex :{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      dayNumber
+                    </code>
+                    ,{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      bookingUrl
+                    </code>
+                    .
+                  </li>
+                  <li>
+                    Les coordonnées sont un tableau{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      [lat, lng]
+                    </code>{' '}
+                    de nombres.
+                  </li>
+                  <li>
+                    Les listes (highlights, tags…) sont des tableaux JSON
+                    classiques.
+                  </li>
+                  <li>
+                    Activités et transport sont imbriqués dans chaque jour (pas
+                    de{' '}
+                    <code className="bg-muted rounded px-1 text-[11px]">
+                      day_id
+                    </code>
+                    ).
+                  </li>
+                </ul>
+              </AlertDescription>
+            </Alert>
 
-          {/* ── CSV tab ── */}
-          <TabsContent
-            value="csv"
-            className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4"
-          >
-            <div className="space-y-4">
-              {/* Conseils */}
-              <Alert variant="info">
-                <Lightbulb className="h-4 w-4" />
-                <AlertTitle>Conseils avant de commencer</AlertTitle>
-                <AlertDescription>
-                  <ul className="mt-1 list-disc space-y-1 pl-4">
-                    <li>
-                      3 fichiers distincts à sélectionner{' '}
-                      <strong>simultanément</strong> lors de l&apos;import.
-                    </li>
-                    <li>
-                      Noms obligatoires (sensibles à la casse) :{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        days.csv
-                      </code>
-                      ,{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        activities.csv
-                      </code>
-                      ,{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        transports.csv
-                      </code>
-                      .
-                    </li>
-                    <li>
-                      Séparateur de colonnes :{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        virgule (,)
-                      </code>{' '}
-                      — pas le point-virgule.
-                    </li>
-                    <li>Encodage UTF-8 recommandé (pour les accents).</li>
-                    <li>
-                      La première ligne de chaque fichier doit être la ligne
-                      d&apos;en-têtes.
-                    </li>
-                  </ul>
-                </AlertDescription>
-              </Alert>
+            {/* Erreurs fréquentes */}
+            <Alert variant="destructive">
+              <TriangleAlert className="h-4 w-4" />
+              <AlertTitle>Erreurs fréquentes</AlertTitle>
+              <AlertDescription>
+                <ul className="mt-1 list-disc space-y-1 pl-4">
+                  <li>
+                    Clé{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      itinerary
+                    </code>{' '}
+                    manquante ou pas un tableau.
+                  </li>
+                  <li>
+                    Coordonnées en string{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      &quot;48.85|2.35&quot;
+                    </code>{' '}
+                    au lieu d&apos;un tableau{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      [48.85, 2.35]
+                    </code>
+                    .
+                  </li>
+                  <li>
+                    Prix en string{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      &quot;120&quot;
+                    </code>{' '}
+                    au lieu d&apos;un nombre{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      120
+                    </code>
+                    .
+                  </li>
+                  <li>
+                    Utiliser{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      snake_case
+                    </code>{' '}
+                    au lieu de{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      camelCase
+                    </code>{' '}
+                    (ex :{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      day_number
+                    </code>{' '}
+                    → doit être{' '}
+                    <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                      dayNumber
+                    </code>
+                    ).
+                  </li>
+                </ul>
+              </AlertDescription>
+            </Alert>
 
-              {/* Erreurs fréquentes */}
-              <Alert variant="destructive">
-                <TriangleAlert className="h-4 w-4" />
-                <AlertTitle>Erreurs fréquentes</AlertTitle>
-                <AlertDescription>
-                  <ul className="mt-1 list-disc space-y-1 pl-4">
-                    <li>
-                      Nom de fichier incorrect — ex :{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        day.csv
-                      </code>{' '}
-                      au lieu de{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        days.csv
-                      </code>
-                      .
-                    </li>
-                    <li>
-                      Importer un seul fichier au lieu des 3 simultanément.
-                    </li>
-                    <li>
-                      Utiliser un point-virgule (
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        ;
-                      </code>
-                      ) comme séparateur (souvent le cas avec Excel en
-                      français).
-                    </li>
-                    <li>
-                      Valeur{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        day_id
-                      </code>{' '}
-                      sans correspondance dans{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        days.csv
-                      </code>
-                      .
-                    </li>
-                  </ul>
-                </AlertDescription>
-              </Alert>
+            <Separator />
 
-              <Separator />
-              <ColumnAccordion />
-            </div>
-          </TabsContent>
-
-          {/* ── JSON tab ── */}
-          <TabsContent
-            value="json"
-            className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4"
-          >
-            <div className="space-y-4">
-              {/* Conseils */}
-              <Alert variant="info">
-                <Lightbulb className="h-4 w-4" />
-                <AlertTitle>Conseils avant de commencer</AlertTitle>
-                <AlertDescription>
-                  <ul className="mt-1 list-disc space-y-1 pl-4">
-                    <li>
-                      Un seul fichier{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        .json
-                      </code>{' '}
-                      contenant l&apos;intégralité du voyage.
-                    </li>
-                    <li>
-                      Structure racine :{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        {'{ itinerary }'}
-                      </code>
-                    </li>
-                    <li>
-                      Les clés sont en <strong>camelCase</strong> — ex :{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        dayNumber
-                      </code>
-                      ,{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        bookingUrl
-                      </code>
-                      .
-                    </li>
-                    <li>
-                      Les coordonnées sont un tableau{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        [lat, lng]
-                      </code>{' '}
-                      de nombres.
-                    </li>
-                    <li>
-                      Les listes (highlights, tags…) sont des tableaux JSON
-                      classiques.
-                    </li>
-                    <li>
-                      Activités et transport sont imbriqués dans chaque jour
-                      (pas de{' '}
-                      <code className="bg-muted rounded px-1 text-[11px]">
-                        day_id
-                      </code>
-                      ).
-                    </li>
-                  </ul>
-                </AlertDescription>
-              </Alert>
-
-              {/* Erreurs fréquentes */}
-              <Alert variant="destructive">
-                <TriangleAlert className="h-4 w-4" />
-                <AlertTitle>Erreurs fréquentes</AlertTitle>
-                <AlertDescription>
-                  <ul className="mt-1 list-disc space-y-1 pl-4">
-                    <li>
-                      Clé{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        itinerary
-                      </code>{' '}
-                      manquante ou pas un tableau.
-                    </li>
-                    <li>
-                      Coordonnées en string{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        &quot;48.85|2.35&quot;
-                      </code>{' '}
-                      au lieu d&apos;un tableau{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        [48.85, 2.35]
-                      </code>
-                      .
-                    </li>
-                    <li>
-                      Prix en string{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        &quot;120&quot;
-                      </code>{' '}
-                      au lieu d&apos;un nombre{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        120
-                      </code>
-                      .
-                    </li>
-                    <li>
-                      Utiliser{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        snake_case
-                      </code>{' '}
-                      au lieu de{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        camelCase
-                      </code>{' '}
-                      (ex :{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        day_number
-                      </code>{' '}
-                      → doit être{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        dayNumber
-                      </code>
-                      ).
-                    </li>
-                  </ul>
-                </AlertDescription>
-              </Alert>
-
-              <Separator />
-
-              {/* Structure JSON */}
-              <Accordion type="multiple">
-                <AccordionItem value="json-structure">
-                  <AccordionTrigger className="text-sm font-medium">
-                    Structure du fichier
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <pre className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-relaxed">
-                      {`{
+            {/* Structure JSON */}
+            <Accordion type="multiple">
+              <AccordionItem value="json-structure">
+                <AccordionTrigger className="text-sm font-medium">
+                  Structure du fichier
+                </AccordionTrigger>
+                <AccordionContent>
+                  <pre className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-relaxed">
+                    {`{
   "itinerary": [
     {
       "id": "day-1",
@@ -1559,785 +1532,814 @@ export function ImportFormatGuide() {
     }
   ]
 }`}
-                    </pre>
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="json-day">
-                  <AccordionTrigger className="text-sm font-medium">
-                    Propriétés d&apos;un jour
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <ul className="text-muted-foreground space-y-1 text-xs">
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          id
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — Identifiant unique
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          date
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — Date ISO 8601
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          city
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — Ville
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          title
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — Titre de la journée
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          coordinates
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — <code className="text-[10px]">[lat, lng]</code>
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          activities
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — Tableau d&apos;activités
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          dayNumber
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — N° du jour
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          highlights
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Tableau de points forts
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          foodRecommendations
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Tableau de restos
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          walkingDistance
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Distance de marche
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          notes
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Notes libres
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          packingTips
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Conseils bagages
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          dayType
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — arrival | sightseeing | travel | rest
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          tips
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Tableau de conseils
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          transport
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Objet transport
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          accommodation
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Objet hébergement
-                      </li>
-                    </ul>
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="json-activity">
-                  <AccordionTrigger className="text-sm font-medium">
-                    Propriétés d&apos;une activité
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <ul className="text-muted-foreground space-y-1 text-xs">
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          id
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — Identifiant unique
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          name
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — Nom
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          type
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — visit | food | transport | experience | shopping
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          duration
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Durée libre
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          description
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Description
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          coordinates
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — <code className="text-[10px]">[lat, lng]</code>
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          address
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Adresse
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          bookingUrl
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — URL de réservation
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          reservationRequired
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Booléen
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          price
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Nombre
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          currency
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Devise
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          rating
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Note 0-5
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          tags
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Tableau de tags
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          status
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — planned | done | skipped
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          tips
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Conseil (string)
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          openAt
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Horaires
-                      </li>
-                    </ul>
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="json-transport">
-                  <AccordionTrigger className="text-sm font-medium">
-                    Propriétés d&apos;un transport
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <ul className="text-muted-foreground space-y-1 text-xs">
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          id
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — Identifiant unique
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          type
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — train | car | plane | bus
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          from
-                        </code>{' '}
-                        /{' '}
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          to
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Départ / Arrivée
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          details
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Détails
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          departureAddress
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Adresse départ
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          departureTime
-                        </code>{' '}
-                        /{' '}
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          arrivalTime
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Horaires
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          duration
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Durée
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          provider
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Compagnie
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          bookingUrl
-                        </code>{' '}
-                        /{' '}
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          bookingReference
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Réservation
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          price
-                        </code>{' '}
-                        /{' '}
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          currency
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Prix
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          seat
-                        </code>{' '}
-                        /{' '}
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          gate
-                        </code>{' '}
-                        /{' '}
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          terminal
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          status
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — planned | booked | checked-in | completed
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          notes
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Notes libres
-                      </li>
-                    </ul>
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="json-accommodation">
-                  <AccordionTrigger className="text-sm font-medium">
-                    Propriétés d&apos;un hébergement
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <ul className="text-muted-foreground space-y-1 text-xs">
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          id
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — Identifiant unique
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          name
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — Nom
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          address
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — Adresse
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          bookingUrl
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — URL de réservation
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          checkIn
-                        </code>{' '}
-                        /{' '}
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          checkOut
-                        </code>{' '}
-                        <Badge
-                          variant="default"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          requis
-                        </Badge>{' '}
-                        — Dates
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          price
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Nombre
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          currency
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Devise
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          bookingReference
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — Référence
-                      </li>
-                      <li>
-                        <code className="bg-muted rounded px-1 text-[11px]">
-                          status
-                        </code>{' '}
-                        <Badge
-                          variant="secondary"
-                          className="h-4 px-1.5 py-0 text-[10px]"
-                        >
-                          optionnel
-                        </Badge>{' '}
-                        — planned | booked | checked-in | completed
-                      </li>
-                    </ul>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </div>
-          </TabsContent>
-        </Tabs>
+                  </pre>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="json-day">
+                <AccordionTrigger className="text-sm font-medium">
+                  Propriétés d&apos;un jour
+                </AccordionTrigger>
+                <AccordionContent>
+                  <ul className="text-muted-foreground space-y-1 text-xs">
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        id
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — Identifiant unique
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        date
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — Date ISO 8601
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        city
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — Ville
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        title
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — Titre de la journée
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        coordinates
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — <code className="text-[10px]">[lat, lng]</code>
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        activities
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — Tableau d&apos;activités
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        dayNumber
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — N° du jour
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        highlights
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Tableau de points forts
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        foodRecommendations
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Tableau de restos
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        walkingDistance
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Distance de marche
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        notes
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Notes libres
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        packingTips
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Conseils bagages
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        dayType
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — arrival | sightseeing | travel | rest
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        tips
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Tableau de conseils
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        transport
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Objet transport
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        accommodation
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Objet hébergement
+                    </li>
+                  </ul>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="json-activity">
+                <AccordionTrigger className="text-sm font-medium">
+                  Propriétés d&apos;une activité
+                </AccordionTrigger>
+                <AccordionContent>
+                  <ul className="text-muted-foreground space-y-1 text-xs">
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        id
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — Identifiant unique
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        name
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — Nom
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        type
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — visit | food | transport | experience | shopping
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        duration
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Durée libre
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        description
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Description
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        coordinates
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — <code className="text-[10px]">[lat, lng]</code>
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        address
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Adresse
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        bookingUrl
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — URL de réservation
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        reservationRequired
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Booléen
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        price
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Nombre
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        currency
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Devise
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        rating
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Note 0-5
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        tags
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Tableau de tags
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        status
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — planned | done | skipped
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        tips
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Conseil (string)
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        openAt
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Horaires
+                    </li>
+                  </ul>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="json-transport">
+                <AccordionTrigger className="text-sm font-medium">
+                  Propriétés d&apos;un transport
+                </AccordionTrigger>
+                <AccordionContent>
+                  <ul className="text-muted-foreground space-y-1 text-xs">
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        id
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — Identifiant unique
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        type
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — train | car | plane | bus
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        from
+                      </code>{' '}
+                      /{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        to
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Départ / Arrivée
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        details
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Détails
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        departureAddress
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Adresse départ
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        departureTime
+                      </code>{' '}
+                      /{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        arrivalTime
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Horaires
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        duration
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Durée
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        provider
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Compagnie
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        bookingUrl
+                      </code>{' '}
+                      /{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        bookingReference
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Réservation
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        price
+                      </code>{' '}
+                      /{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        currency
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Prix
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        seat
+                      </code>{' '}
+                      /{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        gate
+                      </code>{' '}
+                      /{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        terminal
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        status
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — planned | booked | checked-in | completed
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        notes
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Notes libres
+                    </li>
+                  </ul>
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="json-accommodation">
+                <AccordionTrigger className="text-sm font-medium">
+                  Propriétés d&apos;un hébergement
+                </AccordionTrigger>
+                <AccordionContent>
+                  <ul className="text-muted-foreground space-y-1 text-xs">
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        id
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — Identifiant unique
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        name
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — Nom
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        address
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — Adresse
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        bookingUrl
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — URL de réservation
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        checkIn
+                      </code>{' '}
+                      /{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        checkOut
+                      </code>{' '}
+                      <Badge
+                        variant="default"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        requis
+                      </Badge>{' '}
+                      — Dates
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        price
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Nombre
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        currency
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Devise
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        bookingReference
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — Référence
+                    </li>
+                    <li>
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        status
+                      </code>{' '}
+                      <Badge
+                        variant="secondary"
+                        className="h-4 px-1.5 py-0 text-[10px]"
+                      >
+                        optionnel
+                      </Badge>{' '}
+                      — planned | booked | checked-in | completed
+                    </li>
+                  </ul>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </div>
+        </TabsContent>
+      </Tabs>
 
-        {/* ── Sticky footer — download buttons ── */}
-        <div className="bg-background shrink-0 space-y-2 border-t px-5 py-3">
-          {activeTab === 'xlsx' && (
+      {/* ── Sticky footer — download buttons ── */}
+      <div className="bg-background shrink-0 space-y-2 border-t px-5 py-3">
+        {activeTab === 'xlsx' && (
+          <Button
+            className="w-full gap-2"
+            onClick={handleXlsxDownload}
+            disabled={xlsxLoading}
+          >
+            <Download className="h-4 w-4" />
+            {xlsxLoading
+              ? 'Génération…'
+              : xlsxError
+                ? 'Erreur — réessayer'
+                : 'Télécharger le modèle Excel (.xlsx)'}
+          </Button>
+        )}
+        {activeTab === 'csv' && (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {CSV_TEMPLATES.map(({ name, headers, rows }) => (
+                <Button
+                  key={name}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 gap-1.5"
+                  onClick={() => downloadText(name, makeCsv(headers, rows))}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {name}
+                </Button>
+              ))}
+            </div>
             <Button
               className="w-full gap-2"
-              onClick={handleXlsxDownload}
-              disabled={xlsxLoading}
+              onClick={handleDownloadAll}
+              disabled={allLoading}
             >
               <Download className="h-4 w-4" />
-              {xlsxLoading
-                ? 'Génération…'
-                : xlsxError
+              {allLoading
+                ? 'Téléchargement…'
+                : allError
                   ? 'Erreur — réessayer'
-                  : 'Télécharger le modèle Excel (.xlsx)'}
+                  : `Tout télécharger (${CSV_TEMPLATES.length} csv)`}
             </Button>
-          )}
-          {activeTab === 'csv' && (
-            <>
-              <div className="flex flex-wrap gap-2">
-                {CSV_TEMPLATES.map(({ name, headers, rows }) => (
-                  <Button
-                    key={name}
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 gap-1.5"
-                    onClick={() => downloadText(name, makeCsv(headers, rows))}
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    {name}
-                  </Button>
-                ))}
-              </div>
-              <Button
-                className="w-full gap-2"
-                onClick={handleDownloadAll}
-                disabled={allLoading}
-              >
-                <Download className="h-4 w-4" />
-                {allLoading
-                  ? 'Téléchargement…'
-                  : allError
-                    ? 'Erreur — réessayer'
-                    : `Tout télécharger (${CSV_TEMPLATES.length} csv)`}
-              </Button>
-            </>
-          )}
-          {activeTab === 'json' && (
-            <Button
-              className="w-full gap-2"
-              onClick={handleJsonDownload}
-              disabled={jsonLoading}
-            >
-              <Download className="h-4 w-4" />
-              {jsonLoading
-                ? 'Génération…'
-                : jsonError
-                  ? 'Erreur — réessayer'
-                  : 'Télécharger le modèle JSON (.json)'}
-            </Button>
-          )}
+          </>
+        )}
+        {activeTab === 'json' && (
+          <Button
+            className="w-full gap-2"
+            onClick={handleJsonDownload}
+            disabled={jsonLoading}
+          >
+            <Download className="h-4 w-4" />
+            {jsonLoading
+              ? 'Génération…'
+              : jsonError
+                ? 'Erreur — réessayer'
+                : 'Télécharger le modèle JSON (.json)'}
+          </Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function ImportFormatGuide() {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground gap-1.5 text-xs"
+        >
+          <HelpCircle className="h-3.5 w-3.5" />
+          Guide de format
+        </Button>
+      </DialogTrigger>
+
+      <DialogContent className="flex max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-md">
+        <DialogHeader className="shrink-0 border-b p-5">
+          <DialogTitle>Guide de format d&apos;import</DialogTitle>
+          <DialogDescription>
+            Choisissez votre format ci-dessous pour voir les instructions et
+            télécharger un modèle.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ImportFormatGuideContent />
         </div>
       </DialogContent>
     </Dialog>
