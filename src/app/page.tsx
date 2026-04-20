@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, Suspense } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useTripData } from '@/hooks/use-trip-data'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
@@ -58,6 +58,7 @@ function HomePageContent() {
   const {
     isLoading,
     hasData,
+    isDemo,
     itinerary,
     tripStartDate,
     tripEndDate,
@@ -69,29 +70,18 @@ function HomePageContent() {
   } = useTripData()
 
   const searchParams = useSearchParams()
-  const router = useRouter()
 
   const [selectedDay, setSelectedDay] = useState(0)
   const [activeTab, setActiveTab] = useState<'roadbook' | 'documents'>(
     'roadbook',
   )
   const [isMapOpen, setIsMapOpen] = useState(false)
-  const [isDemo, setIsDemo] = useState(false)
 
   useEffect(() => {
     if (!hasData && !isLoading && searchParams.get('demo') === 'true') {
       loadMockData()
-      setIsDemo(true)
-    } else if (hasData && searchParams.get('demo') === 'true') {
-      setIsDemo(true)
     }
   }, [hasData, isLoading, searchParams, loadMockData])
-
-  const handleQuitDemo = useCallback(async () => {
-    await clearData()
-    setIsDemo(false)
-    router.replace('/')
-  }, [clearData, router])
 
   useEffect(() => {
     if (hasData) {
@@ -145,7 +135,7 @@ function HomePageContent() {
 
         <div className="relative z-10">
           {/* Demo banner */}
-          {isDemo && <DemoBanner onQuitDemo={handleQuitDemo} />}
+          {isDemo && <DemoBanner onQuitDemo={clearData} />}
 
           {/* Header */}
           <header
