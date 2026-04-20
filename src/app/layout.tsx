@@ -43,6 +43,16 @@ export const metadata: Metadata = {
   icons: {
     apple: '/apple-icon.png',
   },
+  openGraph: {
+    siteName: 'TripBrain',
+    title: 'TripBrain',
+    description:
+      'Planifiez et consultez votre itinéraire de voyage avec TripBrain',
+    url: 'https://app.tripbrain.fr',
+  },
+  alternates: {
+    canonical: 'https://app.tripbrain.fr',
+  },
 }
 
 export default function RootLayout({
