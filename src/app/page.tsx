@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useTripData } from '@/hooks/use-trip-data'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
@@ -52,7 +53,7 @@ function getTripCountdown(
   return { type: 'during', days: diff }
 }
 
-export default function HomePage() {
+function HomePageContent() {
   const {
     isLoading,
     hasData,
@@ -66,11 +67,19 @@ export default function HomePage() {
     getCurrentDayIndex,
   } = useTripData()
 
+  const searchParams = useSearchParams()
+
   const [selectedDay, setSelectedDay] = useState(0)
   const [activeTab, setActiveTab] = useState<'roadbook' | 'documents'>(
     'roadbook',
   )
   const [isMapOpen, setIsMapOpen] = useState(false)
+
+  useEffect(() => {
+    if (!hasData && !isLoading && searchParams.get('demo') === 'true') {
+      loadMockData()
+    }
+  }, [hasData, isLoading, searchParams, loadMockData])
 
   useEffect(() => {
     if (hasData) {
@@ -332,5 +341,13 @@ export default function HomePage() {
         </div>
       </main>
     </ImageCacheProvider>
+  )
+}
+
+export default function HomePage() {
+  return (
+    <Suspense>
+      <HomePageContent />
+    </Suspense>
   )
 }
