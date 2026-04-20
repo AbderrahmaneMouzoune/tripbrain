@@ -72,9 +72,9 @@ function HomePageContent() {
   const searchParams = useSearchParams()
 
   const [selectedDay, setSelectedDay] = useState(0)
-  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(
-    null,
-  )
+  const [swipeDirection, setSwipeDirection] = useState<
+    'left' | 'right' | 'idle' | null
+  >(null)
   const [activeTab, setActiveTab] = useState<'roadbook' | 'documents'>(
     'roadbook',
   )
@@ -286,7 +286,7 @@ function HomePageContent() {
                   'animate-slide-from-left': swipeDirection === 'left',
                   'animate-fade-up': swipeDirection === null,
                 })}
-                onAnimationEnd={() => setSwipeDirection(null)}
+                onAnimationEnd={() => setSwipeDirection('idle')}
               >
                 <DayDetail day={currentDay} />
               </div>
