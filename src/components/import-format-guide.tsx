@@ -1189,9 +1189,9 @@ export function ImportFormatGuide() {
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="flex max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-xl">
+      <DialogContent className="flex max-h-[85dvh] flex-col gap-0 p-0 sm:max-w-md">
         {/* ── Header ── */}
-        <DialogHeader className="shrink-0 border-b px-5 pt-5 pb-4">
+        <DialogHeader className="shrink-0 border-b p-5">
           <DialogTitle>Guide de format d&apos;import</DialogTitle>
           <DialogDescription>
             Choisissez votre format ci-dessous pour voir les instructions et
@@ -1205,7 +1205,7 @@ export function ImportFormatGuide() {
           onValueChange={(v) => setActiveTab(v as 'xlsx' | 'csv' | 'json')}
           className="flex min-h-0 flex-1 flex-col gap-0"
         >
-          <TabsList className="mx-auto mt-4 mb-0 grid shrink-0 grid-cols-3 rounded-none border-b px-5">
+          <TabsList className="my-0 grid w-full shrink-0 grid-cols-3 rounded-none border-b px-5">
             <TabsTrigger value="xlsx" className="gap-1.5 text-xs">
               <FileSpreadsheet className="h-3.5 w-3.5" />
               Excel

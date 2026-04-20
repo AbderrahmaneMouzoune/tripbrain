@@ -1,14 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+import { ImportFormatGuide } from '@/components/import-format-guide'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,20 +13,27 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Separator } from '@/components/ui/separator'
 import {
-  Share2,
-  Download,
-  CalendarDays,
-  Upload,
-  Trash2,
-  AlertCircle,
-  HardDriveDownload,
-} from 'lucide-react'
-import type { DayItinerary } from '@/lib/itinerary-data'
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Separator } from '@/components/ui/separator'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { downloadICS } from '@/lib/calendar-export'
-import { ImportFormatGuide } from '@/components/import-format-guide'
+import type { DayItinerary } from '@/lib/itinerary-data'
+import { IconFileExport, IconFileImport, IconTrash } from '@tabler/icons-react'
+import {
+  AlertCircle,
+  CalendarDays,
+  Download,
+  HardDriveDownload,
+  Share2,
+} from 'lucide-react'
+import { useRef, useState } from 'react'
 
 interface ShareDialogProps {
   itinerary: DayItinerary[]
@@ -170,7 +169,7 @@ export function ShareDialog({
               }}
             >
               <span className="bg-primary/10 text-primary inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
-                <Download className="h-4 w-4" />
+                <IconFileExport className="h-4 w-4" />
               </span>
               <div className="text-left">
                 <p className="text-foreground text-sm font-medium">
@@ -193,7 +192,7 @@ export function ShareDialog({
               disabled={loadingImport}
             >
               <span className="bg-secondary text-secondary-foreground inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
-                <Upload className="h-4 w-4" />
+                <IconFileImport className="h-4 w-4" />
               </span>
               <div className="text-left">
                 <p className="text-foreground text-sm font-medium">
@@ -225,9 +224,11 @@ export function ShareDialog({
               <AlertDialogTrigger asChild>
                 <Button
                   variant="outline"
-                  className="text-destructive hover:text-destructive h-auto w-full justify-start gap-3 py-3"
+                  className="border-border h-auto w-full justify-start gap-3 py-3"
                 >
-                  <Trash2 className="h-4 w-4 shrink-0" />
+                  <span className="bg-destructive text-destructive-foreground inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+                    <IconTrash className="h-4 w-4" stroke={1.9} />
+                  </span>
                   <div className="text-left">
                     <p className="text-sm font-medium">Réinitialiser</p>
                     <p className="text-muted-foreground text-xs">
