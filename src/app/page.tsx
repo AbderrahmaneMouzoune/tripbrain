@@ -201,8 +201,10 @@ function HomePageContent() {
                 itinerary={itinerary}
                 selectedDay={selectedDay}
                 onSelectDay={(index) => {
-                  setSwipeDirection(index > selectedDay ? 'left' : 'right')
-                  setSelectedDay(index)
+                  if (index !== selectedDay) {
+                    setSwipeDirection(index > selectedDay ? 'left' : 'right')
+                    setSelectedDay(index)
+                  }
                   if (activeTab === 'documents') {
                     setActiveTab('roadbook')
                   }
@@ -284,6 +286,7 @@ function HomePageContent() {
                   'animate-slide-from-left': swipeDirection === 'left',
                   'animate-fade-up': swipeDirection === null,
                 })}
+                onAnimationEnd={() => setSwipeDirection(null)}
               >
                 <DayDetail day={currentDay} />
               </div>
