@@ -52,35 +52,13 @@ tr-1,day-2,train,Paris,Lyon,TGV,Gare de Lyon,08:00,10:00,2h,SNCF,https://sncf.co
 // ── importFromCsv ─────────────────────────────────────────────────────────────
 
 describe('importFromCsv', () => {
-  it('returns an ImportResult with itinerary and dates', async () => {
+  it('returns an ImportResult with itinerary', async () => {
     const result = await importFromCsv([
       makeCsvFile('days.csv', DAYS_CSV),
       makeCsvFile('activities.csv', ACTIVITIES_CSV),
       makeCsvFile('transports.csv', TRANSPORTS_CSV),
     ])
     expect(result.itinerary).toHaveLength(2)
-    expect(result.tripStartDate).toBeInstanceOf(Date)
-    expect(result.tripEndDate).toBeInstanceOf(Date)
-  })
-
-  it('sets tripStartDate to the earliest day date', async () => {
-    const result = await importFromCsv([
-      makeCsvFile('days.csv', DAYS_CSV),
-      makeCsvFile('activities.csv', ACTIVITIES_CSV),
-      makeCsvFile('transports.csv', TRANSPORTS_CSV),
-    ])
-    expect(result.tripStartDate.toISOString().startsWith('2026-05-10')).toBe(
-      true,
-    )
-  })
-
-  it('sets tripEndDate to the latest day date', async () => {
-    const result = await importFromCsv([
-      makeCsvFile('days.csv', DAYS_CSV),
-      makeCsvFile('activities.csv', ACTIVITIES_CSV),
-      makeCsvFile('transports.csv', TRANSPORTS_CSV),
-    ])
-    expect(result.tripEndDate.toISOString().startsWith('2026-05-11')).toBe(true)
   })
 
   it('maps core day fields correctly', async () => {
@@ -354,8 +332,6 @@ describe('importFromXlsx', () => {
     )
     const result = await importFromXlsx(file)
     expect(result.itinerary).toHaveLength(1)
-    expect(result.tripStartDate).toBeInstanceOf(Date)
-    expect(result.tripEndDate).toBeInstanceOf(Date)
   })
 
   it('maps day fields from Excel rows', async () => {
@@ -468,7 +444,7 @@ describe('importFromXlsx', () => {
     expect(acc?.currency).toBe('EUR')
   })
 
-  it('sets tripStartDate and tripEndDate from day dates', async () => {
+  it('dates are derivable from day dates in itinerary', async () => {
     const file = await makeXlsxFile(
       [
         ['id', 'date', 'city', 'title'],
@@ -479,10 +455,8 @@ describe('importFromXlsx', () => {
       [['id', 'day_id', 'type']],
     )
     const result = await importFromXlsx(file)
-    expect(result.tripStartDate.toISOString().startsWith('2026-05-10')).toBe(
-      true,
-    )
-    expect(result.tripEndDate.toISOString().startsWith('2026-05-15')).toBe(true)
+    expect(result.itinerary[0].date).toBe('2026-05-10')
+    expect(result.itinerary[1].date).toBe('2026-05-15')
   })
 
   it('throws when "Days" sheet is missing', async () => {

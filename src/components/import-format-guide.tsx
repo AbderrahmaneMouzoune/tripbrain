@@ -880,8 +880,6 @@ function ColumnAccordion() {
 // ── JSON template ─────────────────────────────────────────────────────────────
 
 const JSON_TEMPLATE: TripData = {
-  tripStartDate: '2026-06-01',
-  tripEndDate: '2026-06-03',
   itinerary: [
     {
       id: 'day-1',
@@ -1440,7 +1438,7 @@ export function ImportFormatGuide() {
                     <li>
                       Structure racine :{' '}
                       <code className="bg-muted rounded px-1 text-[11px]">
-                        {'{ itinerary, tripStartDate, tripEndDate }'}
+                        {'{ itinerary }'}
                       </code>
                     </li>
                     <li>
@@ -1489,17 +1487,6 @@ export function ImportFormatGuide() {
                         itinerary
                       </code>{' '}
                       manquante ou pas un tableau.
-                    </li>
-                    <li>
-                      Dates{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        tripStartDate
-                      </code>{' '}
-                      /{' '}
-                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
-                        tripEndDate
-                      </code>{' '}
-                      manquantes.
                     </li>
                     <li>
                       Coordonnées en string{' '}
@@ -1557,8 +1544,6 @@ export function ImportFormatGuide() {
                   <AccordionContent>
                     <pre className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-relaxed">
                       {`{
-  "tripStartDate": "2026-06-01",
-  "tripEndDate": "2026-06-03",
   "itinerary": [
     {
       "id": "day-1",

@@ -10,8 +10,6 @@ import type {
 
 export interface ImportResult {
   itinerary: DayItinerary[]
-  tripStartDate: Date
-  tripEndDate: Date
 }
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -182,20 +180,7 @@ function buildItinerary(
     transport: transByDayId.get(day.id),
   }))
 
-  const dates = itinerary
-    .map((d) => new Date(d.date))
-    .filter((d) => !isNaN(d.getTime()))
-
-  const tripStartDate =
-    dates.length > 0
-      ? new Date(Math.min(...dates.map((d) => d.getTime())))
-      : new Date()
-  const tripEndDate =
-    dates.length > 0
-      ? new Date(Math.max(...dates.map((d) => d.getTime())))
-      : new Date()
-
-  return { itinerary, tripStartDate, tripEndDate }
+  return { itinerary }
 }
 
 // ── XLSX helpers ──────────────────────────────────────────────────────────────
