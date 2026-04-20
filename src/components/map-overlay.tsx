@@ -19,9 +19,35 @@ function startOfDay(date: Date | string): Date {
   return d
 }
 
-function buildMarkerHtml(dayNumber: number, isActive: boolean, isPast: boolean): string {
+/**
+ * Returns a compact label for a pin covering multiple days/ranges.
+ * Examples: "5"  "5-7"  "5-7+"  "5+"
+ */
+function formatDayLabel(indices: number[], itinerary: DayItinerary[]): string {
+  const dayNums = indices
+    .map((i) => itinerary[i].dayNumber)
+    .sort((a, b) => a - b)
+  if (dayNums.length === 1) return `${dayNums[0]}`
+
+  // Build the first consecutive range
+  let rangeEnd = dayNums[0]
+  for (let k = 1; k < dayNums.length; k++) {
+    if (dayNums[k] === rangeEnd + 1) rangeEnd = dayNums[k]
+    else break
+  }
+
+  const firstRange =
+    rangeEnd > dayNums[0] ? `${dayNums[0]}-${rangeEnd}` : `${dayNums[0]}`
+  const hasMore = rangeEnd < dayNums[dayNums.length - 1]
+  return hasMore ? `${firstRange}+` : firstRange
+}
+
+function buildMarkerHtml(label: string, isActive: boolean, isPast: boolean): string {
   const size = isActive ? 36 : 28
-  const fontSize = isActive ? 15 : 12
+  const baseSize = isActive ? 14 : 11
+  // Reduce font size progressively as label gets longer to stay inside the circle
+  const fontSize =
+    label.length <= 2 ? baseSize : label.length <= 4 ? baseSize - 2 : baseSize - 3
   const bg = isActive
     ? 'var(--color-primary, #8B5A2B)'
     : isPast
@@ -29,8 +55,8 @@ function buildMarkerHtml(dayNumber: number, isActive: boolean, isPast: boolean):
       : '#D4A574'
   const border = isActive ? 'rgba(0,0,0,0.25)' : '#fff'
 
-  return `<div style="width:${size}px;height:${size}px;background:${bg};border:3px solid ${border};border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;transition:all .25s ease;color:white;font-size:${fontSize}px;font-weight:700;line-height:1;">
-    ${dayNumber}
+  return `<div style="width:${size}px;height:${size}px;background:${bg};border:3px solid ${border};border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;transition:all .25s ease;color:white;font-size:${fontSize}px;font-weight:700;line-height:1;letter-spacing:-0.5px;">
+    ${label}
   </div>`
 }
 
@@ -47,15 +73,22 @@ export function MapOverlay({
   const [activeDay, setActiveDay] = useState(selectedDay)
   const cardListRef = useRef<HTMLDivElement>(null)
 
-  // One map marker per consecutive same-city block; track endIndex for active state
-  const uniqueDays = itinerary.reduce<
-    { day: DayItinerary; index: number; endIndex: number }[]
+  // One map marker per unique location (coordinates), grouping all days at the same spot
+  // ~10 m tolerance so GPS coords entered with minor precision differences still merge
+  const COORD_EPSILON = 0.0001
+  const locationGroups = itinerary.reduce<
+    { day: DayItinerary; indices: number[] }[]
   >((acc, day, index) => {
-    const last = acc[acc.length - 1]
-    if (!last || last.day.city !== day.city) {
-      acc.push({ day, index, endIndex: index })
+    if (!day.coordinates) return acc
+    const [lat, lng] = day.coordinates as [number, number]
+    const existing = acc.find((g) => {
+      const [glat, glng] = g.day.coordinates as [number, number]
+      return Math.abs(glat - lat) < COORD_EPSILON && Math.abs(glng - lng) < COORD_EPSILON
+    })
+    if (existing) {
+      existing.indices.push(index)
     } else {
-      last.endIndex = index
+      acc.push({ day, indices: [index] })
     }
     return acc
   }, [])
@@ -124,32 +157,41 @@ export function MapOverlay({
 
       mapInstanceRef.current = map
 
-      const createIcon = (dayNumber: number, isActive: boolean, isPast: boolean) =>
+      const createIcon = (label: string, isActive: boolean, isPast: boolean) =>
         L.divIcon({
           className: '',
-          html: buildMarkerHtml(dayNumber, isActive, isPast),
+          html: buildMarkerHtml(label, isActive, isPast),
           iconSize: [isActive ? 36 : 28, isActive ? 36 : 28],
           iconAnchor: [isActive ? 18 : 14, isActive ? 18 : 14],
         })
 
       const today = startOfDay(new Date())
 
-      uniqueDays.forEach(({ day, index, endIndex }) => {
-        const isPast = startOfDay(day.date) < today
-        const isActive = activeDay >= index && activeDay <= endIndex
+      locationGroups.forEach(({ day, indices }) => {
+        const isPast = indices.every((i) => startOfDay(itinerary[i].date) < today)
+        const isActive = indices.includes(activeDay)
+        const label = formatDayLabel(indices, itinerary)
 
         const marker = L.marker(day.coordinates as [number, number], {
-          icon: createIcon(day.dayNumber, isActive, isPast),
+          icon: createIcon(label, isActive, isPast),
         }).addTo(map)
+
+        const dayNums = indices
+          .map((i) => itinerary[i].dayNumber)
+          .sort((a, b) => a - b)
+        const daysText =
+          dayNums.length === 1
+            ? `Jour ${dayNums[0]}`
+            : `Jours ${dayNums.join(', ')}`
 
         marker.bindPopup(
           `<div style="min-width:140px;font-family:sans-serif;">
             <strong style="font-size:13px;">${day.city}</strong><br/>
-            <span style="color:#666;font-size:11px;">Jour ${day.dayNumber} · ${new Date(day.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+            <span style="color:#666;font-size:11px;">${daysText}</span>
           </div>`,
         )
 
-        marker.on('click', () => handleSelectDay(index))
+        marker.on('click', () => handleSelectDay(indices[0]))
         markersRef.current.push(marker)
       })
 
@@ -191,15 +233,18 @@ export function MapOverlay({
       }
 
       markersRef.current.forEach((marker, i) => {
-        const { day, index, endIndex } = uniqueDays[i] ?? {}
-        if (!day) return
-        const isPast = startOfDay(day.date) < today
-        const isActive = activeDay >= index && activeDay <= endIndex
+        const group = locationGroups[i]
+        if (!group) return
+        const isPast = group.indices.every(
+          (idx) => startOfDay(itinerary[idx].date) < today,
+        )
+        const isActive = group.indices.includes(activeDay)
+        const label = formatDayLabel(group.indices, itinerary)
 
         marker.setIcon(
           L.divIcon({
             className: '',
-            html: buildMarkerHtml(day.dayNumber, isActive, isPast),
+            html: buildMarkerHtml(label, isActive, isPast),
             iconSize: [isActive ? 36 : 28, isActive ? 36 : 28],
             iconAnchor: [isActive ? 18 : 14, isActive ? 18 : 14],
           }),
