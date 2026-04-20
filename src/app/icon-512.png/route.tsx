@@ -1,11 +1,8 @@
-import { ImageResponse } from 'next/og'
-import { AppIconImage } from '@/lib/app-icon-image'
+import { createPwaIconImageResponse } from '@/lib/pwa-icon-image-response'
 
+const size = 512
 export const runtime = 'edge'
 
 export function GET() {
-  return new ImageResponse(<AppIconImage size={512} />, {
-    width: 512,
-    height: 512,
-  })
+  return createPwaIconImageResponse(size)
 }
