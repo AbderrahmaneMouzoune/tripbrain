@@ -92,6 +92,29 @@ function HomePageContent() {
     }
   }, [hasData, getCurrentDayIndex])
 
+  const handlePrevDay = () => {
+    setSwipeDirection('right')
+    setSelectedDay((prev) => Math.max(0, prev - 1))
+  }
+
+  const handleNextDay = () => {
+    setSwipeDirection('left')
+    setSelectedDay((prev) => Math.min(itinerary.length - 1, prev + 1))
+  }
+
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: () => {
+      if (activeTab === 'roadbook' && selectedDay < itinerary.length - 1) {
+        handleNextDay()
+      }
+    },
+    onSwipeRight: () => {
+      if (activeTab === 'roadbook' && selectedDay > 0) {
+        handlePrevDay()
+      }
+    },
+  })
+
   if (isLoading) {
     return (
       <div className="bg-background flex min-h-screen items-center justify-center">
@@ -117,29 +140,6 @@ function HomePageContent() {
   const countdown = getTripCountdown(tripStartDate, tripEndDate)
   const safeDay = Math.min(selectedDay, itinerary.length - 1)
   const currentDay = itinerary[safeDay]
-
-  const handlePrevDay = () => {
-    setSwipeDirection('right')
-    setSelectedDay((prev) => Math.max(0, prev - 1))
-  }
-
-  const handleNextDay = () => {
-    setSwipeDirection('left')
-    setSelectedDay((prev) => Math.min(itinerary.length - 1, prev + 1))
-  }
-
-  const swipeHandlers = useSwipe({
-    onSwipeLeft: () => {
-      if (activeTab === 'roadbook' && selectedDay < itinerary.length - 1) {
-        handleNextDay()
-      }
-    },
-    onSwipeRight: () => {
-      if (activeTab === 'roadbook' && selectedDay > 0) {
-        handlePrevDay()
-      }
-    },
-  })
 
   return (
     <ImageCacheProvider itinerary={itinerary} currentDayIndex={safeDay}>
