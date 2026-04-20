@@ -233,6 +233,44 @@ function sheetToRows(sheet: Worksheet): RawRow[] {
   return rows
 }
 
+// ── Encoding helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Read a File as text with automatic encoding detection.
+ *
+ * Detection order:
+ * 1. UTF-8 BOM (EF BB BF)  → decode as UTF-8, skip the 3 BOM bytes
+ * 2. UTF-16 LE BOM (FF FE)  → decode as UTF-16LE
+ * 3. UTF-16 BE BOM (FE FF)  → decode as UTF-16BE
+ * 4. No BOM → try strict UTF-8; if invalid bytes are found fall back to
+ *    Windows-1252 (the most common legacy encoding for CSV files exported
+ *    from Excel on Windows).
+ */
+async function readTextWithEncoding(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer()
+  const bytes = new Uint8Array(buffer)
+
+  // UTF-8 BOM: EF BB BF
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return new TextDecoder('utf-8').decode(buffer.slice(3))
+  }
+  // UTF-16 LE BOM: FF FE
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return new TextDecoder('utf-16le').decode(buffer)
+  }
+  // UTF-16 BE BOM: FE FF
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return new TextDecoder('utf-16be').decode(buffer)
+  }
+
+  // No BOM: attempt strict UTF-8 first, then fall back to Windows-1252
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer)
+  } catch {
+    return new TextDecoder('windows-1252').decode(buffer)
+  }
+}
+
 // ── CSV helpers ───────────────────────────────────────────────────────────────
 
 function parseCsvLine(line: string): string[] {
@@ -361,9 +399,9 @@ export async function importFromCsv(files: File[]): Promise<ImportResult> {
     )
 
   const [daysText, activitiesText, transportsText] = await Promise.all([
-    daysFile.text(),
-    activitiesFile.text(),
-    transportsFile.text(),
+    readTextWithEncoding(daysFile),
+    readTextWithEncoding(activitiesFile),
+    readTextWithEncoding(transportsFile),
   ])
 
   const dayRows = parseCsvText(daysText).map(rowToDay)
