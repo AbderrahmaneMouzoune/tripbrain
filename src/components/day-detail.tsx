@@ -77,7 +77,7 @@ export function DayDetail({ day }: DayDetailProps) {
         isOpen={dayLightboxOpen}
         onClose={() => setDayLightboxOpen(false)}
       />
-      <div className="animate-fade-up flex flex-col gap-5">
+      <div className="flex flex-col gap-5">
         {/* Header — editorial style */}
         <div className="border-border/60 flex flex-col gap-1.5 border-b pb-4">
           <div className="space-x-1.5">
