@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useState, useEffect, useCallback, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { useTripData } from '@/hooks/use-trip-data'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
@@ -17,6 +17,7 @@ import { CacheStatusBadge } from '@/components/cache-status-badge'
 import { MapOverlay } from '@/components/map-overlay'
 import { cn } from '@/lib/utils'
 import { AppIcon } from '@/components/app-icon'
+import { DemoBanner } from '@/components/demo-banner'
 
 function getTripCountdown(
   tripStartDate: Date,
@@ -68,18 +69,29 @@ function HomePageContent() {
   } = useTripData()
 
   const searchParams = useSearchParams()
+  const router = useRouter()
 
   const [selectedDay, setSelectedDay] = useState(0)
   const [activeTab, setActiveTab] = useState<'roadbook' | 'documents'>(
     'roadbook',
   )
   const [isMapOpen, setIsMapOpen] = useState(false)
+  const [isDemo, setIsDemo] = useState(false)
 
   useEffect(() => {
     if (!hasData && !isLoading && searchParams.get('demo') === 'true') {
       loadMockData()
+      setIsDemo(true)
+    } else if (hasData && searchParams.get('demo') === 'true') {
+      setIsDemo(true)
     }
   }, [hasData, isLoading, searchParams, loadMockData])
+
+  const handleQuitDemo = useCallback(async () => {
+    await clearData()
+    setIsDemo(false)
+    router.replace('/')
+  }, [clearData, router])
 
   useEffect(() => {
     if (hasData) {
@@ -132,6 +144,9 @@ function HomePageContent() {
         </div>
 
         <div className="relative z-10">
+          {/* Demo banner */}
+          {isDemo && <DemoBanner onQuitDemo={handleQuitDemo} />}
+
           {/* Header */}
           <header
             className="bg-card/85 border-border/60 sticky top-0 z-50 border-b backdrop-blur-xl"
