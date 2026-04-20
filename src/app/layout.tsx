@@ -24,7 +24,8 @@ const _geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'TripBrain',
-  description: 'Planifiez et consultez votre itineraire de voyage avec TripBrain',
+  description:
+    'Planifiez et consultez votre itineraire de voyage avec TripBrain',
   manifest: '/manifest.json',
   themeColor: '#2268c7',
   appleWebApp: {
@@ -40,20 +41,6 @@ export const metadata: Metadata = {
     viewportFit: 'cover',
   },
   icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
     apple: '/apple-icon.png',
   },
 }
