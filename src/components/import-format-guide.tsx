@@ -25,9 +25,17 @@ import {
   HelpCircle,
   FileSpreadsheet,
   Table,
+  Braces,
   Lightbulb,
   TriangleAlert,
 } from 'lucide-react'
+import type { TripData } from '@/hooks/use-trip-data'
+import type {
+  DayItinerary,
+  Activity,
+  Transport,
+  Accommodation,
+} from '@/lib/itinerary-data'
 
 // ── Column definitions ────────────────────────────────────────────────────────
 
@@ -869,6 +877,238 @@ function ColumnAccordion() {
   )
 }
 
+// ── JSON template ─────────────────────────────────────────────────────────────
+
+const JSON_TEMPLATE: TripData = {
+  tripStartDate: '2026-06-01',
+  tripEndDate: '2026-06-03',
+  itinerary: [
+    {
+      id: 'day-1',
+      date: '2026-06-01',
+      dayNumber: 1,
+      city: 'Paris',
+      title: 'Arrivée à Paris',
+      coordinates: [48.8566, 2.3522],
+      highlights: ['Tour Eiffel', 'Champs-Élysées', 'Montmartre'],
+      foodRecommendations: ['Brasserie Lipp', 'Café de Flore'],
+      walkingDistance: '8km',
+      notes: 'Journée de découverte - rythme tranquille',
+      packingTips: ['Baskets confortables', 'Imperméable léger'],
+      dayType: 'arrival',
+      tips: ['Éviter les taxis depuis CDG', 'Prendre le RER B'],
+      accommodation: {
+        id: 'acc-1',
+        name: 'Hôtel des Arts Montmartre',
+        address: '5 rue Tholozé 75018 Paris',
+        bookingUrl: 'https://hotel-arts.example.com',
+        checkIn: '2026-06-01',
+        checkOut: '2026-06-03',
+        price: 180,
+        currency: 'EUR',
+        bookingReference: 'HDM-2026-001',
+        status: 'booked',
+      } satisfies Accommodation,
+      activities: [
+        {
+          id: 'act-1',
+          name: 'Montée Tour Eiffel 2e étage',
+          type: 'visit',
+          duration: '3h',
+          description: 'Vue panoramique sur Paris depuis le 2e étage',
+          coordinates: [48.8584, 2.2945],
+          address: 'Champ de Mars 75007 Paris',
+          bookingUrl: 'https://ticket.toureiffel.paris',
+          reservationRequired: true,
+          price: 32,
+          currency: 'EUR',
+          rating: 4.8,
+          tags: ['monument', 'vue', 'incontournable'],
+          status: 'planned',
+          tips: "Réserver 2 semaines à l'avance",
+          openAt: '09:30-23:45',
+        },
+        {
+          id: 'act-2',
+          name: 'Arc de Triomphe et Champs-Élysées',
+          type: 'experience',
+          duration: '2h',
+          description: 'Promenade sur la plus belle avenue du monde',
+          coordinates: [48.8738, 2.295],
+          address: 'Place Charles de Gaulle 75008 Paris',
+          bookingUrl: 'https://arc-de-triomphe.monuments-nationaux.fr',
+          reservationRequired: false,
+          price: 13,
+          currency: 'EUR',
+          rating: 4.6,
+          tags: ['monument', 'promenade'],
+          status: 'planned',
+          tips: 'Coucher de soleil depuis le sommet',
+          openAt: '10:00-22:30',
+        },
+      ] satisfies Activity[],
+      transport: {
+        id: 'tr-1',
+        type: 'train',
+        from: 'Aéroport CDG',
+        to: 'Paris Gare du Nord',
+        details: 'RER B direction Saint-Rémy-lès-Chevreuse',
+        departureAddress: 'Terminal 2 CDG',
+        departureTime: '14:30',
+        arrivalTime: '15:10',
+        duration: '40min',
+        provider: 'RATP',
+        price: 11,
+        currency: 'EUR',
+        status: 'planned',
+        notes: 'Ticket aux distributeurs automatiques en arrivée',
+      } satisfies Transport,
+    },
+    {
+      id: 'day-2',
+      date: '2026-06-02',
+      dayNumber: 2,
+      city: 'Paris',
+      title: 'Musées et Montmartre',
+      coordinates: [48.8837, 2.3367],
+      highlights: ['Sacré-Cœur', "Musée d'Orsay", 'Place du Tertre'],
+      foodRecommendations: ['Crêperie Bretonne', 'Le Consulat'],
+      walkingDistance: '12km',
+      notes: "Réserver le musée en ligne à l'avance",
+      packingTips: ["Bouteille d'eau", 'Chapeau de soleil'],
+      dayType: 'sightseeing',
+      tips: ['Arriver tôt au Sacré-Cœur', 'Éviter la haute saison'],
+      accommodation: {
+        id: 'acc-1',
+        name: 'Hôtel des Arts Montmartre',
+        address: '5 rue Tholozé 75018 Paris',
+        bookingUrl: 'https://hotel-arts.example.com',
+        checkIn: '2026-06-01',
+        checkOut: '2026-06-03',
+        price: 180,
+        currency: 'EUR',
+        bookingReference: 'HDM-2026-001',
+        status: 'booked',
+      } satisfies Accommodation,
+      activities: [
+        {
+          id: 'act-3',
+          name: "Musée d'Orsay - Impressionnisme",
+          type: 'visit',
+          duration: '4h',
+          description: "La plus grande collection d'impressionnisme au monde",
+          coordinates: [48.86, 2.3266],
+          address: "1 Rue de la Légion d'Honneur 75007 Paris",
+          bookingUrl: 'https://www.musee-orsay.fr',
+          reservationRequired: true,
+          price: 16,
+          currency: 'EUR',
+          rating: 4.9,
+          tags: ['musée', 'art', 'impressionnisme'],
+          status: 'planned',
+          tips: 'Gratuit le 1er dimanche du mois',
+          openAt: '09:30-18:00',
+        },
+        {
+          id: 'act-4',
+          name: 'Sacré-Cœur et Montmartre',
+          type: 'visit',
+          duration: '2h',
+          description: 'Basilique emblématique et quartier artiste',
+          coordinates: [48.8867, 2.3431],
+          address: '35 Rue du Chevalier de la Barre 75018 Paris',
+          reservationRequired: false,
+          price: 0,
+          currency: 'EUR',
+          rating: 4.7,
+          tags: ['monument', 'basilique', 'panorama'],
+          status: 'planned',
+          tips: 'Arriver tôt pour éviter la foule',
+          openAt: '06:00-22:30',
+        },
+      ] satisfies Activity[],
+    },
+    {
+      id: 'day-3',
+      date: '2026-06-03',
+      dayNumber: 3,
+      city: 'Lyon',
+      title: 'Route vers Lyon et gastronomie',
+      coordinates: [45.764, 4.8357],
+      highlights: ['Vieux-Lyon', 'Fourvière', 'Traboules'],
+      foodRecommendations: ['Bouchon Lyonnais', 'Mère Brazier'],
+      walkingDistance: '6km',
+      notes: "Arrivée en début d'après-midi - soirée libre",
+      packingTips: ['Sac à dos léger'],
+      dayType: 'travel',
+      tips: ["Réserver le TGV à l'avance", 'Acheter une baguette gare de Lyon'],
+      accommodation: {
+        id: 'acc-2',
+        name: 'Hôtel Le Royal Lyon',
+        address: '20 Place Bellecour 69002 Lyon',
+        bookingUrl: 'https://le-royal.example.com',
+        checkIn: '2026-06-03',
+        checkOut: '2026-06-05',
+        price: 220,
+        currency: 'EUR',
+        bookingReference: 'LRL-2026-042',
+        status: 'booked',
+      } satisfies Accommodation,
+      activities: [
+        {
+          id: 'act-5',
+          name: 'Vieux-Lyon et Traboules',
+          type: 'experience',
+          duration: '3h',
+          description: 'Ruelles médiévales et passages secrets',
+          coordinates: [45.7601, 4.827],
+          address: 'Vieux-Lyon 69005 Lyon',
+          bookingUrl: 'https://visiterlyon.example.com',
+          reservationRequired: false,
+          price: 8,
+          currency: 'EUR',
+          rating: 4.5,
+          tags: ['vieux-lyon', 'traboules', 'patrimoine'],
+          status: 'planned',
+          tips: 'Prendre un guide local',
+          openAt: '09:00-20:00',
+        },
+      ] satisfies Activity[],
+      transport: {
+        id: 'tr-2',
+        type: 'train',
+        from: 'Paris Gare de Lyon',
+        to: 'Lyon Part-Dieu',
+        details: 'TGV INOUI direct',
+        departureAddress: 'Place Louis Armand 75012 Paris',
+        departureTime: '09:00',
+        arrivalTime: '10:58',
+        duration: '1h58',
+        provider: 'SNCF',
+        bookingUrl: 'https://www.sncf-connect.com',
+        bookingReference: 'TGV-2026-XY9',
+        price: 65,
+        currency: 'EUR',
+        seat: '42C',
+        gate: 'Voie 6',
+        status: 'booked',
+        notes: 'Voiture 5 côté fenêtre',
+      } satisfies Transport,
+    },
+  ] satisfies DayItinerary[],
+}
+
+function downloadJsonTemplate() {
+  const json = JSON.stringify(JSON_TEMPLATE, null, 2)
+  const blob = new Blob([json], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'tripbrain-template.json'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // ── Template config ───────────────────────────────────────────────────────────
 
 const CSV_TEMPLATES: {
@@ -892,11 +1132,13 @@ const CSV_TEMPLATES: {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function ImportFormatGuide() {
-  const [activeTab, setActiveTab] = useState<'xlsx' | 'csv'>('xlsx')
+  const [activeTab, setActiveTab] = useState<'xlsx' | 'csv' | 'json'>('xlsx')
   const [xlsxLoading, setXlsxLoading] = useState(false)
   const [xlsxError, setXlsxError] = useState(false)
   const [allLoading, setAllLoading] = useState(false)
   const [allError, setAllError] = useState(false)
+  const [jsonLoading, setJsonLoading] = useState(false)
+  const [jsonError, setJsonError] = useState(false)
 
   const handleXlsxDownload = async () => {
     setXlsxLoading(true)
@@ -921,6 +1163,18 @@ export function ImportFormatGuide() {
       setAllError(true)
     } finally {
       setAllLoading(false)
+    }
+  }
+
+  const handleJsonDownload = () => {
+    setJsonLoading(true)
+    setJsonError(false)
+    try {
+      downloadJsonTemplate()
+    } catch {
+      setJsonError(true)
+    } finally {
+      setJsonLoading(false)
     }
   }
 
@@ -950,17 +1204,21 @@ export function ImportFormatGuide() {
         {/* ── Format tabs + scrollable content ── */}
         <Tabs
           value={activeTab}
-          onValueChange={(v) => setActiveTab(v as 'xlsx' | 'csv')}
+          onValueChange={(v) => setActiveTab(v as 'xlsx' | 'csv' | 'json')}
           className="flex min-h-0 flex-1 flex-col gap-0"
         >
-          <TabsList className="mx-auto mt-4 mb-0 grid shrink-0 grid-cols-2 rounded-none border-b px-5">
+          <TabsList className="mx-auto mt-4 mb-0 grid shrink-0 grid-cols-3 rounded-none border-b px-5">
             <TabsTrigger value="xlsx" className="gap-1.5 text-xs">
               <FileSpreadsheet className="h-3.5 w-3.5" />
-              Excel (.xlsx)
+              Excel
             </TabsTrigger>
             <TabsTrigger value="csv" className="gap-1.5 text-xs">
               <Table className="h-3.5 w-3.5" />
-              CSV (3 fichiers)
+              CSV
+            </TabsTrigger>
+            <TabsTrigger value="json" className="gap-1.5 text-xs">
+              <Braces className="h-3.5 w-3.5" />
+              JSON
             </TabsTrigger>
           </TabsList>
 
@@ -1159,11 +1417,885 @@ export function ImportFormatGuide() {
               <ColumnAccordion />
             </div>
           </TabsContent>
+
+          {/* ── JSON tab ── */}
+          <TabsContent
+            value="json"
+            className="mt-0 min-h-0 flex-1 overflow-y-auto px-5 py-4"
+          >
+            <div className="space-y-4">
+              {/* Conseils */}
+              <Alert variant="info">
+                <Lightbulb className="h-4 w-4" />
+                <AlertTitle>Conseils avant de commencer</AlertTitle>
+                <AlertDescription>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    <li>
+                      Un seul fichier{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        .json
+                      </code>{' '}
+                      contenant l&apos;intégralité du voyage.
+                    </li>
+                    <li>
+                      Structure racine :{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        {'{ itinerary, tripStartDate, tripEndDate }'}
+                      </code>
+                    </li>
+                    <li>
+                      Les clés sont en <strong>camelCase</strong> — ex :{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        dayNumber
+                      </code>
+                      ,{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        bookingUrl
+                      </code>
+                      .
+                    </li>
+                    <li>
+                      Les coordonnées sont un tableau{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        [lat, lng]
+                      </code>{' '}
+                      de nombres.
+                    </li>
+                    <li>
+                      Les listes (highlights, tags…) sont des tableaux JSON
+                      classiques.
+                    </li>
+                    <li>
+                      Activités et transport sont imbriqués dans chaque jour
+                      (pas de{' '}
+                      <code className="bg-muted rounded px-1 text-[11px]">
+                        day_id
+                      </code>
+                      ).
+                    </li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
+
+              {/* Erreurs fréquentes */}
+              <Alert variant="destructive">
+                <TriangleAlert className="h-4 w-4" />
+                <AlertTitle>Erreurs fréquentes</AlertTitle>
+                <AlertDescription>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    <li>
+                      Clé{' '}
+                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                        itinerary
+                      </code>{' '}
+                      manquante ou pas un tableau.
+                    </li>
+                    <li>
+                      Dates{' '}
+                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                        tripStartDate
+                      </code>{' '}
+                      /{' '}
+                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                        tripEndDate
+                      </code>{' '}
+                      manquantes.
+                    </li>
+                    <li>
+                      Coordonnées en string{' '}
+                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                        &quot;48.85|2.35&quot;
+                      </code>{' '}
+                      au lieu d&apos;un tableau{' '}
+                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                        [48.85, 2.35]
+                      </code>
+                      .
+                    </li>
+                    <li>
+                      Prix en string{' '}
+                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                        &quot;120&quot;
+                      </code>{' '}
+                      au lieu d&apos;un nombre{' '}
+                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                        120
+                      </code>
+                      .
+                    </li>
+                    <li>
+                      Utiliser{' '}
+                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                        snake_case
+                      </code>{' '}
+                      au lieu de{' '}
+                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                        camelCase
+                      </code>{' '}
+                      (ex :{' '}
+                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                        day_number
+                      </code>{' '}
+                      → doit être{' '}
+                      <code className="bg-destructive/10 rounded px-1 text-[11px]">
+                        dayNumber
+                      </code>
+                      ).
+                    </li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
+
+              <Separator />
+
+              {/* Structure JSON */}
+              <Accordion type="multiple">
+                <AccordionItem value="json-structure">
+                  <AccordionTrigger className="text-sm font-medium">
+                    Structure du fichier
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <pre className="bg-muted overflow-x-auto rounded-md p-3 font-mono text-[11px] leading-relaxed">
+                      {`{
+  "tripStartDate": "2026-06-01",
+  "tripEndDate": "2026-06-03",
+  "itinerary": [
+    {
+      "id": "day-1",
+      "date": "2026-06-01",
+      "dayNumber": 1,
+      "city": "Paris",
+      "title": "Arrivée à Paris",
+      "coordinates": [48.8566, 2.3522],
+      "highlights": ["Tour Eiffel", "…"],
+      "activities": [ { … } ],
+      "transport": { … },
+      "accommodation": { … }
+    }
+  ]
+}`}
+                    </pre>
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="json-day">
+                  <AccordionTrigger className="text-sm font-medium">
+                    Propriétés d&apos;un jour
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <ul className="text-muted-foreground space-y-1 text-xs">
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          id
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — Identifiant unique
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          date
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — Date ISO 8601
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          city
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — Ville
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          title
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — Titre de la journée
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          coordinates
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — <code className="text-[10px]">[lat, lng]</code>
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          activities
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — Tableau d&apos;activités
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          dayNumber
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — N° du jour
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          highlights
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Tableau de points forts
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          foodRecommendations
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Tableau de restos
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          walkingDistance
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Distance de marche
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          notes
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Notes libres
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          packingTips
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Conseils bagages
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          dayType
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — arrival | sightseeing | travel | rest
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          tips
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Tableau de conseils
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          transport
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Objet transport
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          accommodation
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Objet hébergement
+                      </li>
+                    </ul>
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="json-activity">
+                  <AccordionTrigger className="text-sm font-medium">
+                    Propriétés d&apos;une activité
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <ul className="text-muted-foreground space-y-1 text-xs">
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          id
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — Identifiant unique
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          name
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — Nom
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          type
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — visit | food | transport | experience | shopping
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          duration
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Durée libre
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          description
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Description
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          coordinates
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — <code className="text-[10px]">[lat, lng]</code>
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          address
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Adresse
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          bookingUrl
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — URL de réservation
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          reservationRequired
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Booléen
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          price
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Nombre
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          currency
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Devise
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          rating
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Note 0-5
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          tags
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Tableau de tags
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          status
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — planned | done | skipped
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          tips
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Conseil (string)
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          openAt
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Horaires
+                      </li>
+                    </ul>
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="json-transport">
+                  <AccordionTrigger className="text-sm font-medium">
+                    Propriétés d&apos;un transport
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <ul className="text-muted-foreground space-y-1 text-xs">
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          id
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — Identifiant unique
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          type
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — train | car | plane | bus
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          from
+                        </code>{' '}
+                        /{' '}
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          to
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Départ / Arrivée
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          details
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Détails
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          departureAddress
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Adresse départ
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          departureTime
+                        </code>{' '}
+                        /{' '}
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          arrivalTime
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Horaires
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          duration
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Durée
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          provider
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Compagnie
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          bookingUrl
+                        </code>{' '}
+                        /{' '}
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          bookingReference
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Réservation
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          price
+                        </code>{' '}
+                        /{' '}
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          currency
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Prix
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          seat
+                        </code>{' '}
+                        /{' '}
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          gate
+                        </code>{' '}
+                        /{' '}
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          terminal
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          status
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — planned | booked | checked-in | completed
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          notes
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Notes libres
+                      </li>
+                    </ul>
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="json-accommodation">
+                  <AccordionTrigger className="text-sm font-medium">
+                    Propriétés d&apos;un hébergement
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <ul className="text-muted-foreground space-y-1 text-xs">
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          id
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — Identifiant unique
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          name
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — Nom
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          address
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — Adresse
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          bookingUrl
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — URL de réservation
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          checkIn
+                        </code>{' '}
+                        /{' '}
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          checkOut
+                        </code>{' '}
+                        <Badge
+                          variant="default"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          requis
+                        </Badge>{' '}
+                        — Dates
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          price
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Nombre
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          currency
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Devise
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          bookingReference
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — Référence
+                      </li>
+                      <li>
+                        <code className="bg-muted rounded px-1 text-[11px]">
+                          status
+                        </code>{' '}
+                        <Badge
+                          variant="secondary"
+                          className="h-4 px-1.5 py-0 text-[10px]"
+                        >
+                          optionnel
+                        </Badge>{' '}
+                        — planned | booked | checked-in | completed
+                      </li>
+                    </ul>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </div>
+          </TabsContent>
         </Tabs>
 
         {/* ── Sticky footer — download buttons ── */}
         <div className="bg-background shrink-0 space-y-2 border-t px-5 py-3">
-          {activeTab === 'xlsx' ? (
+          {activeTab === 'xlsx' && (
             <Button
               className="w-full gap-2"
               onClick={handleXlsxDownload}
@@ -1176,7 +2308,8 @@ export function ImportFormatGuide() {
                   ? 'Erreur — réessayer'
                   : 'Télécharger le modèle Excel (.xlsx)'}
             </Button>
-          ) : (
+          )}
+          {activeTab === 'csv' && (
             <>
               <div className="flex flex-wrap gap-2">
                 {CSV_TEMPLATES.map(({ name, headers, rows }) => (
@@ -1205,6 +2338,20 @@ export function ImportFormatGuide() {
                     : `Tout télécharger (${CSV_TEMPLATES.length} csv)`}
               </Button>
             </>
+          )}
+          {activeTab === 'json' && (
+            <Button
+              className="w-full gap-2"
+              onClick={handleJsonDownload}
+              disabled={jsonLoading}
+            >
+              <Download className="h-4 w-4" />
+              {jsonLoading
+                ? 'Génération…'
+                : jsonError
+                  ? 'Erreur — réessayer'
+                  : 'Télécharger le modèle JSON (.json)'}
+            </Button>
           )}
         </div>
       </DialogContent>
