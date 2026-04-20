@@ -1,20 +1,15 @@
-const CACHE_NAME = 'uzbekistan-trip-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png'
-];
+const CACHE_NAME = 'tripbrain-v1'
+const STATIC_ASSETS = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png']
 
 // Install event - cache static assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
-  self.skipWaiting();
-});
+      return cache.addAll(STATIC_ASSETS)
+    }),
+  )
+  self.skipWaiting()
+})
 
 // Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
@@ -23,17 +18,17 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         cacheNames
           .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    })
-  );
-  self.clients.claim();
-});
+          .map((name) => caches.delete(name)),
+      )
+    }),
+  )
+  self.clients.claim()
+})
 
 // Fetch event - serve from cache, fallback to network
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
-  if (event.request.method !== 'GET') return;
+  if (event.request.method !== 'GET') return
 
   // Skip cross-origin requests
   if (!event.request.url.startsWith(self.location.origin)) {
@@ -43,16 +38,16 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => {
           return fetch(event.request)
             .then((response) => {
-              cache.put(event.request, response.clone());
-              return response;
+              cache.put(event.request, response.clone())
+              return response
             })
             .catch(() => {
-              return cache.match(event.request);
-            });
-        })
-      );
+              return cache.match(event.request)
+            })
+        }),
+      )
     }
-    return;
+    return
   }
 
   event.respondWith(
@@ -60,29 +55,31 @@ self.addEventListener('fetch', (event) => {
       if (cachedResponse) {
         // Return cached response and fetch update in background
         event.waitUntil(
-          fetch(event.request).then((response) => {
-            if (response.ok) {
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(event.request, response);
-              });
-            }
-          }).catch(() => {})
-        );
-        return cachedResponse;
+          fetch(event.request)
+            .then((response) => {
+              if (response.ok) {
+                caches.open(CACHE_NAME).then((cache) => {
+                  cache.put(event.request, response)
+                })
+              }
+            })
+            .catch(() => {}),
+        )
+        return cachedResponse
       }
 
       // Not in cache, fetch from network
       return fetch(event.request).then((response) => {
-        if (!response.ok) return response;
+        if (!response.ok) return response
 
         // Cache successful responses
-        const responseToCache = response.clone();
+        const responseToCache = response.clone()
         caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
+          cache.put(event.request, responseToCache)
+        })
 
-        return response;
-      });
-    })
-  );
-});
+        return response
+      })
+    }),
+  )
+})

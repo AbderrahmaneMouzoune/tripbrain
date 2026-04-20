@@ -57,10 +57,13 @@ export function TransportCard({ transport }: TransportCardProps) {
   const Icon = getTransportIcon(transport.type)
   const hasRoute = Boolean(transport.from && transport.to)
 
-  // Prefer departureAddress over from-name for the pickup map link
-  const pickupQuery = transport.departureAddress ?? transport.from
-  const transportPickupUrl = pickupQuery
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pickupQuery)}`
+  // For car: link to arrival destination; for others: link to departure address
+  const mapQuery =
+    transport.type === 'car'
+      ? transport.to
+      : (transport.departureAddress ?? transport.from)
+  const transportPickupUrl = mapQuery
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}`
     : null
 
   return (
@@ -113,7 +116,7 @@ export function TransportCard({ transport }: TransportCardProps) {
                   rel="noopener noreferrer"
                 >
                   <Navigation className="h-3 w-3" strokeWidth={1.5} />
-                  Point de départ
+                  {transport.type === 'car' ? "Point d'arrivée" : 'Point de départ'}
                 </a>
               </Button>
             )}

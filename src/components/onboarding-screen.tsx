@@ -1,9 +1,10 @@
 'use client'
 
-import { useRef, useState } from 'react'
-import { Compass, Upload, PlayCircle, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AppIcon } from '@/components/app-icon'
+import { AlertCircle, PlayCircle, Upload } from 'lucide-react'
+import { useRef, useState } from 'react'
 import { ImportFormatGuide } from '@/components/import-format-guide'
 
 interface OnboardingScreenProps {
@@ -123,15 +124,7 @@ export function OnboardingScreen({
       <div className="relative z-10 w-full max-w-3xl space-y-5">
         {/* Logo / brand */}
         <div className="flex flex-col items-center gap-2">
-          <div className="relative h-16 w-16 shrink-0">
-            <div className="bg-primary absolute inset-0 rotate-6 rounded-2xl opacity-20" />
-            <div className="bg-primary relative flex h-16 w-16 items-center justify-center rounded-2xl shadow-sm">
-              <Compass
-                className="text-primary-foreground h-8 w-8"
-                strokeWidth={1.5}
-              />
-            </div>
-          </div>
+          <AppIcon size="lg" />
           <div className="text-center">
             <h1 className="text-foreground font-display text-2xl font-bold tracking-[0.08em] uppercase">
               TripBrain
