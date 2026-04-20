@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTripData } from '@/hooks/use-trip-data'
+import { useSwipe } from '@/hooks/use-swipe'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
 import { ShareDialog } from '@/components/share-dialog'
@@ -71,6 +72,9 @@ function HomePageContent() {
   const searchParams = useSearchParams()
 
   const [selectedDay, setSelectedDay] = useState(0)
+  const [swipeDirection, setSwipeDirection] = useState<
+    'left' | 'right' | 'idle' | null
+  >(null)
   const [activeTab, setActiveTab] = useState<'roadbook' | 'documents'>(
     'roadbook',
   )
@@ -87,6 +91,29 @@ function HomePageContent() {
       setSelectedDay(getCurrentDayIndex())
     }
   }, [hasData, getCurrentDayIndex])
+
+  const handlePrevDay = () => {
+    setSwipeDirection('right')
+    setSelectedDay((prev) => Math.max(0, prev - 1))
+  }
+
+  const handleNextDay = () => {
+    setSwipeDirection('left')
+    setSelectedDay((prev) => Math.min(itinerary.length - 1, prev + 1))
+  }
+
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: () => {
+      if (activeTab === 'roadbook' && selectedDay < itinerary.length - 1) {
+        handleNextDay()
+      }
+    },
+    onSwipeRight: () => {
+      if (activeTab === 'roadbook' && selectedDay > 0) {
+        handlePrevDay()
+      }
+    },
+  })
 
   if (isLoading) {
     return (
@@ -113,14 +140,6 @@ function HomePageContent() {
   const countdown = getTripCountdown(tripStartDate, tripEndDate)
   const safeDay = Math.min(selectedDay, itinerary.length - 1)
   const currentDay = itinerary[safeDay]
-
-  const handlePrevDay = () => {
-    setSelectedDay((prev) => Math.max(0, prev - 1))
-  }
-
-  const handleNextDay = () => {
-    setSelectedDay((prev) => Math.min(itinerary.length - 1, prev + 1))
-  }
 
   return (
     <ImageCacheProvider itinerary={itinerary} currentDayIndex={safeDay}>
@@ -182,7 +201,10 @@ function HomePageContent() {
                 itinerary={itinerary}
                 selectedDay={selectedDay}
                 onSelectDay={(index) => {
-                  setSelectedDay(index)
+                  if (index !== selectedDay) {
+                    setSwipeDirection(index > selectedDay ? 'left' : 'right')
+                    setSelectedDay(index)
+                  }
                   if (activeTab === 'documents') {
                     setActiveTab('roadbook')
                   }
@@ -192,7 +214,11 @@ function HomePageContent() {
           </section>
 
           {/* Main Content */}
-          <div id="main-content" className="mx-auto max-w-4xl px-4 py-6">
+          <div
+            id="main-content"
+            className="mx-auto max-w-4xl px-4 py-6"
+            {...swipeHandlers}
+          >
             {/* Navigation + tabs bar */}
             <div className="mb-6 flex items-center justify-between">
               {activeTab === 'documents' ? (
@@ -253,7 +279,17 @@ function HomePageContent() {
 
             {/* Content */}
             {activeTab === 'roadbook' ? (
-              <DayDetail day={currentDay} />
+              <div
+                key={safeDay}
+                className={cn({
+                  'animate-slide-from-right': swipeDirection === 'right',
+                  'animate-slide-from-left': swipeDirection === 'left',
+                  'animate-fade-up': swipeDirection === null,
+                })}
+                onAnimationEnd={() => setSwipeDirection('idle')}
+              >
+                <DayDetail day={currentDay} />
+              </div>
             ) : (
               <DocumentsView />
             )}
