@@ -8,6 +8,7 @@ const DB_NAME = 'tripbrain'
 const DB_VERSION = 1
 const STORE_NAME = 'tripData'
 const DATA_KEY = 'current'
+const DEMO_KEY = 'tripbrain-demo'
 
 export interface TripData {
   itinerary: DayItinerary[]
@@ -45,9 +46,12 @@ export function useTripData() {
         : new Date(),
     [itinerary],
   )
+  const [isDemo, setIsDemo] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
+      setIsDemo(localStorage.getItem(DEMO_KEY) === 'true')
+
       const db = await openDB()
       const tx = db.transaction(STORE_NAME, 'readonly')
       const store = tx.objectStore(STORE_NAME)
@@ -92,8 +96,10 @@ export function useTripData() {
   const loadMockData = useCallback(async () => {
     const data: TripData = { itinerary: mockItinerary }
     await saveData(data)
+    localStorage.setItem(DEMO_KEY, 'true')
     setItinerary(mockItinerary)
     setHasData(true)
+    setIsDemo(true)
   }, [saveData])
 
   const importData = useCallback(
@@ -155,8 +161,10 @@ export function useTripData() {
       tx.onerror = () => reject(tx.error)
     })
 
+    localStorage.removeItem(DEMO_KEY)
     setItinerary([])
     setHasData(false)
+    setIsDemo(false)
   }, [])
 
   const getCurrentDayIndex = useCallback((): number => {
@@ -184,6 +192,7 @@ export function useTripData() {
   return {
     isLoading,
     hasData,
+    isDemo,
     itinerary,
     tripStartDate,
     tripEndDate,

@@ -17,6 +17,7 @@ import { CacheStatusBadge } from '@/components/cache-status-badge'
 import { MapOverlay } from '@/components/map-overlay'
 import { cn } from '@/lib/utils'
 import { AppIcon } from '@/components/app-icon'
+import { DemoBanner } from '@/components/demo-banner'
 
 function getTripCountdown(
   tripStartDate: Date,
@@ -57,6 +58,7 @@ function HomePageContent() {
   const {
     isLoading,
     hasData,
+    isDemo,
     itinerary,
     tripStartDate,
     tripEndDate,
@@ -154,6 +156,16 @@ function HomePageContent() {
         </div>
 
         <div className="relative z-10">
+          {/* Demo banner */}
+          {isDemo && (
+            <DemoBanner
+              onQuitDemo={() => {
+                clearData()
+                window.history.replaceState(null, '', window.location.pathname)
+              }}
+            />
+          )}
+
           {/* Header */}
           <header
             className="bg-card/85 border-border/60 sticky top-0 z-50 border-b backdrop-blur-xl"
