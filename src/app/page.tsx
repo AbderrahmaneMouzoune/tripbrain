@@ -135,7 +135,14 @@ function HomePageContent() {
 
         <div className="relative z-10">
           {/* Demo banner */}
-          {isDemo && <DemoBanner onQuitDemo={clearData} />}
+          {isDemo && (
+            <DemoBanner
+              onQuitDemo={() => {
+                clearData()
+                window.history.replaceState(null, '', window.location.pathname)
+              }}
+            />
+          )}
 
           {/* Header */}
           <header
