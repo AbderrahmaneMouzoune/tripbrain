@@ -3,10 +3,10 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTripData } from '@/hooks/use-trip-data'
+import { useSwipe } from '@/hooks/use-swipe'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
 import { ShareDialog } from '@/components/share-dialog'
-import { DataManager } from '@/components/data-manager'
 import { OnboardingScreen } from '@/components/onboarding-screen'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -64,6 +64,8 @@ function HomePageContent() {
     tripEndDate,
     loadMockData,
     importData,
+    importXlsxData,
+    importCsvData,
     exportData,
     clearData,
     getCurrentDayIndex,
@@ -72,6 +74,9 @@ function HomePageContent() {
   const searchParams = useSearchParams()
 
   const [selectedDay, setSelectedDay] = useState(0)
+  const [swipeDirection, setSwipeDirection] = useState<
+    'left' | 'right' | 'idle' | null
+  >(null)
   const [activeTab, setActiveTab] = useState<'roadbook' | 'documents'>(
     'roadbook',
   )
@@ -89,6 +94,29 @@ function HomePageContent() {
     }
   }, [hasData, getCurrentDayIndex])
 
+  const handlePrevDay = () => {
+    setSwipeDirection('right')
+    setSelectedDay((prev) => Math.max(0, prev - 1))
+  }
+
+  const handleNextDay = () => {
+    setSwipeDirection('left')
+    setSelectedDay((prev) => Math.min(itinerary.length - 1, prev + 1))
+  }
+
+  const swipeHandlers = useSwipe({
+    onSwipeLeft: () => {
+      if (activeTab === 'roadbook' && selectedDay < itinerary.length - 1) {
+        handleNextDay()
+      }
+    },
+    onSwipeRight: () => {
+      if (activeTab === 'roadbook' && selectedDay > 0) {
+        handlePrevDay()
+      }
+    },
+  })
+
   if (isLoading) {
     return (
       <div className="bg-background flex min-h-screen items-center justify-center">
@@ -104,6 +132,8 @@ function HomePageContent() {
     return (
       <OnboardingScreen
         onImportFile={importData}
+        onImportXlsx={importXlsxData}
+        onImportCsv={importCsvData}
         onUseMockData={loadMockData}
       />
     )
@@ -113,14 +143,6 @@ function HomePageContent() {
   const safeDay = Math.min(selectedDay, itinerary.length - 1)
   const currentDay = itinerary[safeDay]
 
-  const handlePrevDay = () => {
-    setSelectedDay((prev) => Math.max(0, prev - 1))
-  }
-
-  const handleNextDay = () => {
-    setSelectedDay((prev) => Math.min(itinerary.length - 1, prev + 1))
-  }
-
   return (
     <ImageCacheProvider itinerary={itinerary} currentDayIndex={safeDay}>
       <main className="bg-background relative min-h-screen overflow-x-clip">
@@ -128,9 +150,9 @@ function HomePageContent() {
           aria-hidden
           className="pointer-events-none absolute inset-0 overflow-hidden"
         >
-          <div className="animate-sticker-float bg-primary/12 border-primary/30 absolute top-8 -left-8 h-24 w-24 rotate-12 rounded-2xl border-2" />
-          <div className="animate-sticker-bounce bg-secondary/16 border-secondary/35 absolute top-16 right-3 h-20 w-20 -rotate-12 rounded-full border-2" />
-          <div className="animate-sticker-float bg-accent/14 border-accent/35 absolute top-72 right-10 h-16 w-16 rotate-6 rounded-xl border-2 [animation-delay:180ms]" />
+          <div className="animate-sticker-float bg-primary/10 border-primary/15 shadow-primary/10 absolute top-8 -left-8 h-24 w-24 rotate-12 rounded-2xl border shadow-sm" />
+          <div className="animate-sticker-bounce bg-secondary/10 border-secondary/15 shadow-secondary/10 absolute top-16 right-3 h-20 w-20 -rotate-12 rounded-full border shadow-sm" />
+          <div className="animate-sticker-float bg-accent/10 border-accent/15 shadow-accent/10 absolute top-72 right-10 h-16 w-16 rotate-6 rounded-xl border shadow-sm [animation-delay:180ms]" />
         </div>
 
         <div className="relative z-10">
@@ -170,14 +192,14 @@ function HomePageContent() {
                 </div>
                 <div className="flex items-center gap-1">
                   <CacheStatusBadge />
-                  <DataManager
-                    onExport={exportData}
-                    onImport={importData}
-                    onClear={clearData}
-                  />
                   <ShareDialog
                     itinerary={itinerary}
                     selectedDay={selectedDay}
+                    onExport={exportData}
+                    onImport={importData}
+                    onImportXlsx={importXlsxData}
+                    onImportCsv={importCsvData}
+                    onClear={clearData}
                   />
                 </div>
               </div>
@@ -191,7 +213,10 @@ function HomePageContent() {
                 itinerary={itinerary}
                 selectedDay={selectedDay}
                 onSelectDay={(index) => {
-                  setSelectedDay(index)
+                  if (index !== selectedDay) {
+                    setSwipeDirection(index > selectedDay ? 'left' : 'right')
+                    setSelectedDay(index)
+                  }
                   if (activeTab === 'documents') {
                     setActiveTab('roadbook')
                   }
@@ -201,7 +226,11 @@ function HomePageContent() {
           </section>
 
           {/* Main Content */}
-          <div id="main-content" className="mx-auto max-w-4xl px-4 py-6">
+          <div
+            id="main-content"
+            className="mx-auto max-w-4xl px-4 py-6"
+            {...swipeHandlers}
+          >
             {/* Navigation + tabs bar */}
             <div className="mb-6 flex items-center justify-between">
               {activeTab === 'documents' ? (
@@ -262,7 +291,17 @@ function HomePageContent() {
 
             {/* Content */}
             {activeTab === 'roadbook' ? (
-              <DayDetail day={currentDay} />
+              <div
+                key={safeDay}
+                className={cn({
+                  'animate-slide-from-right': swipeDirection === 'right',
+                  'animate-slide-from-left': swipeDirection === 'left',
+                  'animate-fade-up': swipeDirection === null,
+                })}
+                onAnimationEnd={() => setSwipeDirection('idle')}
+              >
+                <DayDetail day={currentDay} />
+              </div>
             ) : (
               <DocumentsView />
             )}

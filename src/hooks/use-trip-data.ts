@@ -1,12 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { DayItinerary } from '@/lib/itinerary-data'
-import {
-  itinerary as mockItinerary,
-  tripStartDate as mockStartDate,
-  tripEndDate as mockEndDate,
-} from '@/lib/itinerary-data'
+import { itinerary as mockItinerary } from '@/lib/itinerary-data'
 
 const DB_NAME = 'tripbrain'
 const DB_VERSION = 1
@@ -16,8 +12,6 @@ const DEMO_KEY = 'tripbrain-demo'
 
 export interface TripData {
   itinerary: DayItinerary[]
-  tripStartDate: string
-  tripEndDate: string
 }
 
 function openDB(): Promise<IDBDatabase> {
@@ -40,8 +34,18 @@ export function useTripData() {
   const [isLoading, setIsLoading] = useState(true)
   const [hasData, setHasData] = useState(false)
   const [itinerary, setItinerary] = useState<DayItinerary[]>([])
-  const [tripStartDate, setTripStartDate] = useState<Date>(new Date())
-  const [tripEndDate, setTripEndDate] = useState<Date>(new Date())
+
+  const tripStartDate = useMemo(
+    () => (itinerary.length > 0 ? new Date(itinerary[0].date) : new Date()),
+    [itinerary],
+  )
+  const tripEndDate = useMemo(
+    () =>
+      itinerary.length > 0
+        ? new Date(itinerary[itinerary.length - 1].date)
+        : new Date(),
+    [itinerary],
+  )
   const [isDemo, setIsDemo] = useState(false)
 
   const loadData = useCallback(async () => {
@@ -58,8 +62,6 @@ export function useTripData() {
           const data = request.result as TripData | undefined
           if (data && data.itinerary?.length > 0) {
             setItinerary(data.itinerary)
-            setTripStartDate(new Date(data.tripStartDate))
-            setTripEndDate(new Date(data.tripEndDate))
             setHasData(true)
           }
           setIsLoading(false)
@@ -92,16 +94,10 @@ export function useTripData() {
   }, [])
 
   const loadMockData = useCallback(async () => {
-    const data: TripData = {
-      itinerary: mockItinerary,
-      tripStartDate: mockStartDate.toISOString().split('T')[0],
-      tripEndDate: mockEndDate.toISOString().split('T')[0],
-    }
+    const data: TripData = { itinerary: mockItinerary }
     await saveData(data)
     localStorage.setItem(DEMO_KEY, 'true')
     setItinerary(mockItinerary)
-    setTripStartDate(mockStartDate)
-    setTripEndDate(mockEndDate)
     setHasData(true)
     setIsDemo(true)
   }, [saveData])
@@ -113,24 +109,37 @@ export function useTripData() {
       if (!parsed.itinerary || !Array.isArray(parsed.itinerary)) {
         throw new Error('Format invalide : tableau itinerary manquant')
       }
-      if (!parsed.tripStartDate || !parsed.tripEndDate) {
-        throw new Error('Format invalide : dates du voyage manquantes')
-      }
-      await saveData(parsed)
+      await saveData({ itinerary: parsed.itinerary })
       setItinerary(parsed.itinerary)
-      setTripStartDate(new Date(parsed.tripStartDate))
-      setTripEndDate(new Date(parsed.tripEndDate))
+      setHasData(true)
+    },
+    [saveData],
+  )
+
+  const importXlsxData = useCallback(
+    async (file: File) => {
+      const { importFromXlsx } = await import('@/lib/importItinerary')
+      const result = await importFromXlsx(file)
+      await saveData({ itinerary: result.itinerary })
+      setItinerary(result.itinerary)
+      setHasData(true)
+    },
+    [saveData],
+  )
+
+  const importCsvData = useCallback(
+    async (files: File[]) => {
+      const { importFromCsv } = await import('@/lib/importItinerary')
+      const result = await importFromCsv(files)
+      await saveData({ itinerary: result.itinerary })
+      setItinerary(result.itinerary)
       setHasData(true)
     },
     [saveData],
   )
 
   const exportData = useCallback(() => {
-    const data: TripData = {
-      itinerary,
-      tripStartDate: tripStartDate.toISOString().split('T')[0],
-      tripEndDate: tripEndDate.toISOString().split('T')[0],
-    }
+    const data: TripData = { itinerary }
     const json = JSON.stringify(data, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -139,7 +148,7 @@ export function useTripData() {
     a.download = 'tripbrain-data.json'
     a.click()
     URL.revokeObjectURL(url)
-  }, [itinerary, tripStartDate, tripEndDate])
+  }, [itinerary])
 
   const clearData = useCallback(async () => {
     const db = await openDB()
@@ -189,6 +198,8 @@ export function useTripData() {
     tripEndDate,
     loadMockData,
     importData,
+    importXlsxData,
+    importCsvData,
     exportData,
     clearData,
     getCurrentDayIndex,
