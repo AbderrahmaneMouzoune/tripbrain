@@ -1,5 +1,20 @@
 # Copilot Instructions — TripBrain
 
+## Project Overview
+
+TripBrain is a **client-only Next.js 16 PWA** — a personal travel companion that displays a day-by-day itinerary with a roadbook, interactive map, documents, and offline support. There is no backend; all data lives in IndexedDB.
+
+## Tech Stack
+
+- **Runtime**: Bun (not npm)
+- **Framework**: Next.js 16 (App Router, fully client-rendered)
+- **Language**: TypeScript (strict mode)
+- **UI**: React 19, shadcn/ui (new-york style), Tailwind CSS v4, @tabler/icons-react icons
+- **State**: IndexedDB (3 databases: tripbrain, tripbrain-images, tripbrain-documents)
+- **Map**: Leaflet
+- **Testing**: Vitest with `globals: true`
+- **Formatting**: Prettier — single quotes, no semicolons, 2-space indent, Tailwind class sorting
+
 ## Build, Test, Lint
 
 ```bash
@@ -13,8 +28,6 @@ bun run test:watch     # vitest in watch mode
 ```
 
 ## Architecture
-
-TripBrain is a **client-only Next.js 16 PWA** (no API routes, no server-side data fetching). It serves as a personal travel companion that displays a day-by-day itinerary with a roadbook, interactive map, documents, and offline support.
 
 ### Data flow
 
@@ -39,7 +52,7 @@ The app is a single route (`src/app/page.tsx`). It shows:
 - **shadcn/ui** (new-york style) with components in `src/components/ui/`
 - **Tailwind CSS v4** with `@tailwindcss/postcss` (no `tailwind.config` file — config is in `globals.css`)
 - Design tokens use **oklch** color space defined as CSS custom properties
-- Icons from **lucide-react**
+- Icons from **@tabler/icons-react**
 - `cn()` utility from `src/lib/utils.ts` for class merging (clsx + tailwind-merge)
 
 ## Conventions
@@ -51,3 +64,18 @@ The app is a single route (`src/app/page.tsx`). It shows:
 - **Tests**: Vitest with `globals: true` (no need to import `describe`/`it`/`expect`). Tests live in `src/lib/__tests__/`.
 - **Import format**: Multi-value fields use `|` as separator. Coordinates are `lat|lng`. Activities/Transports link to Days via `day_id`.
 - **IndexedDB pattern**: Each domain has its own database. Direct `indexedDB.open()` calls wrapped in Promises — no ORM.
+
+## Workflow
+
+- Branch naming: `feature/`, `fix/`, `chore/` prefixes
+- Commit style: conventional commits (`feat:`, `fix:`, `chore:`, `docs:`)
+- PR conventions: descriptive title, link related issues
+
+## Detailed Guidelines
+
+- TypeScript & React: `.github/instructions/typescript-react.instructions.md`
+- Testing: `.github/instructions/testing.instructions.md`
+- Security: `.github/instructions/security.instructions.md`
+- Documentation: `.github/instructions/documentation.instructions.md`
+- Performance: `.github/instructions/performance.instructions.md`
+- Code review: `.github/instructions/code-review.instructions.md`
