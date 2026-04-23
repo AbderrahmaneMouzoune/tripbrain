@@ -41,6 +41,14 @@ const ACTIVITY_COLOR: Record<Activity['type'], string> = {
   shopping: '#F59E0B',
 }
 
+const ACTIVITY_BG_CLASS: Record<Activity['type'], string> = {
+  visit: 'bg-violet-500',
+  transport: 'bg-blue-500',
+  food: 'bg-red-500',
+  experience: 'bg-emerald-500',
+  shopping: 'bg-amber-500',
+}
+
 // ── activity type → emoji ─────────────────────────────────────────────────────
 
 const ACTIVITY_EMOJI: Record<Activity['type'], string> = {
@@ -196,7 +204,7 @@ export function MapOverlay({
       if (cancelled || !mapRef.current || mapInstanceRef.current) return
 
       const initialCoords: [number, number] =
-        (itinerary[selectedDay]?.coordinates as [number, number]) ?? [40.5, 65]
+        itinerary[selectedDay]?.coordinates ?? [40.5, 65]
 
       const map = L.map(mapRef.current, {
         center: initialCoords,
@@ -256,7 +264,7 @@ export function MapOverlay({
         polylineRef.current = null
         clearMarkers(dayMarkersRef.current)
 
-        const coords = itinerary.map((d) => d.coordinates as [number, number])
+        const coords = itinerary.map((d) => d.coordinates)
 
         // Dashed blue polyline through every day in order
         polylineRef.current = L.polyline(coords, {
@@ -278,7 +286,7 @@ export function MapOverlay({
             iconSize: [pinSize, pinSize],
             iconAnchor: [pinSize / 2, pinSize / 2],
           })
-          const marker = L.marker(day.coordinates as [number, number], {
+          const marker = L.marker(day.coordinates, {
             icon,
           }).addTo(map)
 
@@ -305,7 +313,9 @@ export function MapOverlay({
         })
 
         // fitBounds to all day coordinates
-        if (coords.length > 0) {
+        if (coords.length === 1) {
+          map.setView(coords[0], 10, { animate: true })
+        } else if (coords.length > 1) {
           map.fitBounds(L.latLngBounds(coords), { padding: [48, 48] })
         }
       } else {
@@ -335,14 +345,14 @@ export function MapOverlay({
             iconSize: [42, 42],
             iconAnchor: [21, 21],
           })
-          const marker = L.marker(day.coordinates as [number, number], {
+          const marker = L.marker(day.coordinates, {
             icon,
           }).addTo(map)
           marker.bindPopup(
             `<strong style="font-family:system-ui,sans-serif;">${escHtml(day.city)}</strong>`,
           )
           activityMarkersRef.current.push(marker)
-          map.setView(day.coordinates as [number, number], 13, {
+          map.setView(day.coordinates, 13, {
             animate: true,
           })
           return
@@ -379,7 +389,7 @@ export function MapOverlay({
             iconSize: [42, 42],
             iconAnchor: [21, 21],
           })
-          const marker = L.marker(day.coordinates as [number, number], {
+          const marker = L.marker(day.coordinates, {
             icon,
           }).addTo(map)
           marker.bindPopup(
@@ -406,7 +416,7 @@ export function MapOverlay({
           (a) => a.coordinates,
         )
         if (activitiesWithCoords.length <= 1) {
-          allCoords.push(day.coordinates as [number, number])
+          allCoords.push(day.coordinates)
         }
 
         if (allCoords.length === 1) {
@@ -421,7 +431,7 @@ export function MapOverlay({
     return () => {
       cancelled = true
     }
-  }, [isLoaded, viewMode, activeDay, itinerary])
+  }, [isLoaded, viewMode, activeDay, itinerary, onSelectDay])
 
   // ── auto-scroll active chip into view (global view) ───────────────────────
 
@@ -662,19 +672,20 @@ export function MapOverlay({
             {/* Row 3: activity list (max 3) */}
             {shownActivities.length > 0 && (
               <ul className="flex flex-col px-3 py-1.5">
-                {shownActivities.map((activity, i) => {
+                {shownActivities.map((activity) => {
                   const emoji = ACTIVITY_EMOJI[activity.type] ?? '📍'
-                  const color = ACTIVITY_COLOR[activity.type] ?? '#6B7280'
                   const label = ACTIVITY_LABEL[activity.type] ?? activity.type
                   return (
-                    <li key={activity.id ?? i} className="flex items-center gap-2 py-0.5">
+                    <li key={activity.id} className="flex items-center gap-2 py-0.5">
                       <span className="text-sm leading-none">{emoji}</span>
                       <span className="text-foreground min-w-0 flex-1 truncate text-xs">
                         {activity.name}
                       </span>
                       <span
-                        className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold text-white"
-                        style={{ backgroundColor: color }}
+                        className={cn(
+                          'shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold text-white',
+                          ACTIVITY_BG_CLASS[activity.type],
+                        )}
                       >
                         {label}
                       </span>
