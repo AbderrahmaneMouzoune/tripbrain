@@ -1,10 +1,19 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { type DayItinerary } from '@/lib/itinerary-data'
+import type {
+  Map as LeafletMap,
+  Marker as LeafletMarker,
+  Polyline as LeafletPolyline,
+} from 'leaflet'
+import type { Activity, DayItinerary } from '@/lib/itinerary-data'
 import { Button } from '@/components/ui/button'
-import { MapDayPreviewCard } from '@/components/map-day-preview-card'
-import { X, MapPin, ChevronLeft, ChevronRight } from 'lucide-react'
+import { IconMap2, IconMapPin, IconX } from '@tabler/icons-react'
+import { cn } from '@/lib/utils'
+
+// ── types ─────────────────────────────────────────────────────────────────────
+
+type ViewMode = 'global' | 'day'
 
 interface MapOverlayProps {
   itinerary: DayItinerary[]
@@ -13,29 +22,50 @@ interface MapOverlayProps {
   onClose: () => void
 }
 
-function startOfDay(date: Date | string): Date {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  return d
+// ── activity type → pin colour ────────────────────────────────────────────────
+
+const ACTIVITY_COLOR: Record<Activity['type'], string> = {
+  visit: '#8B5CF6',
+  transport: '#3B82F6',
+  food: '#EF4444',
+  experience: '#10B981',
+  shopping: '#F59E0B',
 }
 
-function buildMarkerHtml(isActive: boolean, isPast: boolean): string {
-  const size = isActive ? 36 : 28
-  const iconSize = isActive ? 18 : 13
-  const bg = isActive
-    ? 'var(--color-primary, #8B5A2B)'
-    : isPast
-      ? '#9CA3AF'
-      : '#D4A574'
-  const border = isActive ? 'rgba(0,0,0,0.25)' : '#fff'
+// ── pin HTML builders ─────────────────────────────────────────────────────────
 
-  return `<div style="width:${size}px;height:${size}px;background:${bg};border:3px solid ${border};border-radius:50%;box-shadow:0 2px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;transition:all .25s ease;">
-    <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2">
-      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-      <circle cx="12" cy="10" r="3"/>
-    </svg>
-  </div>`
+function buildDayPinHtml(dayNum: number, isActive: boolean): string {
+  const size = isActive ? 38 : 30
+  const bg = isActive ? '#F97316' : '#ffffff'
+  const textColor = isActive ? '#ffffff' : '#111827'
+  const fontSize = isActive ? 14 : 11
+  return (
+    `<div style="width:${size}px;height:${size}px;background:${bg};` +
+    `border:2.5px solid #F97316;border-radius:50%;` +
+    `box-shadow:0 2px 8px rgba(0,0,0,.28);display:flex;align-items:center;` +
+    `justify-content:center;font-family:system-ui,sans-serif;font-weight:700;` +
+    `font-size:${fontSize}px;color:${textColor};">${dayNum}</div>`
+  )
 }
+
+function buildActivityPinHtml(label: string, color: string): string {
+  return (
+    `<div style="width:30px;height:30px;background:${color};` +
+    `border:2.5px solid rgba(255,255,255,.9);border-radius:50%;` +
+    `box-shadow:0 2px 8px rgba(0,0,0,.3);display:flex;align-items:center;` +
+    `justify-content:center;font-family:system-ui,sans-serif;font-weight:700;` +
+    `font-size:11px;color:#fff;">${label}</div>`
+  )
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+function clearMarkers(markers: LeafletMarker[]): void {
+  markers.forEach((m) => m.remove())
+  markers.length = 0
+}
+
+// ── component ─────────────────────────────────────────────────────────────────
 
 export function MapOverlay({
   itinerary,
@@ -44,75 +74,35 @@ export function MapOverlay({
   onClose,
 }: MapOverlayProps) {
   const mapRef = useRef<HTMLDivElement>(null)
-  const mapInstanceRef = useRef<L.Map | null>(null)
-  const markersRef = useRef<L.Marker[]>([])
+  const mapInstanceRef = useRef<LeafletMap | null>(null)
+  const dayMarkersRef = useRef<LeafletMarker[]>([])
+  const activityMarkersRef = useRef<LeafletMarker[]>([])
+  const polylineRef = useRef<LeafletPolyline | null>(null)
+  const chipListRef = useRef<HTMLDivElement>(null)
+
   const [isLoaded, setIsLoaded] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('global')
   const [activeDay, setActiveDay] = useState(selectedDay)
-  const cardListRef = useRef<HTMLDivElement>(null)
 
-  // One map marker per consecutive same-city block; track endIndex for active state
-  const uniqueDays = itinerary.reduce<
-    { day: DayItinerary; index: number; endIndex: number }[]
-  >((acc, day, index) => {
-    const last = acc[acc.length - 1]
-    if (!last || last.day.city !== day.city) {
-      acc.push({ day, index, endIndex: index })
-    } else {
-      last.endIndex = index
-    }
-    return acc
-  }, [])
+  // ── init: create the Leaflet map once on mount ────────────────────────────
 
-  const handleSelectDay = (index: number) => {
-    setActiveDay(index)
-    onSelectDay(index)
-  }
-
-  const handleViewMore = (index: number) => {
-    handleSelectDay(index)
-    onClose()
-
-    requestAnimationFrame(() => {
-      document.getElementById('main-content')?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      })
-    })
-  }
-
-  // Scroll the active city card into view
-  useEffect(() => {
-    if (!cardListRef.current) return
-    const activeCard = cardListRef.current.querySelector<HTMLElement>(
-      '[data-active="true"]',
-    )
-    if (activeCard) {
-      activeCard.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
-    }
-  }, [activeDay])
-
-  // Build / destroy map
   useEffect(() => {
     if (typeof window === 'undefined' || !mapRef.current) return
 
-    const loadLeaflet = async () => {
+    let cancelled = false
+
+    const init = async () => {
       const L = (await import('leaflet')).default
       await import('leaflet/dist/leaflet.css')
 
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove()
-        mapInstanceRef.current = null
-        markersRef.current = []
-      }
+      if (cancelled || !mapRef.current || mapInstanceRef.current) return
 
-      const initialDay = itinerary[activeDay]
-      const center: [number, number] = initialDay
-        ? (initialDay.coordinates as [number, number])
-        : [40.5, 65]
+      const initialCoords: [number, number] =
+        (itinerary[selectedDay]?.coordinates as [number, number]) ?? [40.5, 65]
 
-      const map = L.map(mapRef.current!, {
-        center,
-        zoom: 7,
+      const map = L.map(mapRef.current, {
+        center: initialCoords,
+        zoom: 5,
         zoomControl: false,
         scrollWheelZoom: true,
       })
@@ -127,200 +117,329 @@ export function MapOverlay({
 
       mapInstanceRef.current = map
 
-      const createIcon = (isActive: boolean, isPast: boolean) =>
-        L.divIcon({
-          className: '',
-          html: buildMarkerHtml(isActive, isPast),
-          iconSize: [isActive ? 36 : 28, isActive ? 36 : 28],
-          iconAnchor: [isActive ? 18 : 14, isActive ? 18 : 14],
-        })
-
-      const today = startOfDay(new Date())
-
-      uniqueDays.forEach(({ day, index, endIndex }) => {
-        const isPast = startOfDay(day.date) < today
-        const isActive = activeDay >= index && activeDay <= endIndex
-
-        const marker = L.marker(day.coordinates as [number, number], {
-          icon: createIcon(isActive, isPast),
-        }).addTo(map)
-
-        marker.bindPopup(
-          `<div style="min-width:140px;font-family:sans-serif;">
-            <strong style="font-size:13px;">${day.city}</strong><br/>
-            <span style="color:#666;font-size:11px;">Jour ${day.dayNumber} · ${new Date(day.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
-          </div>`,
-        )
-
-        marker.on('click', () => handleSelectDay(index))
-        markersRef.current.push(marker)
-      })
-
-      // Route polyline (all days, not just unique)
-      L.polyline(
-        itinerary.map((d) => d.coordinates as [number, number]),
-        { color: '#8B5A2B', weight: 2.5, opacity: 0.55, dashArray: '8 8' },
-      ).addTo(map)
-
-      setIsLoaded(true)
+      if (!cancelled) setIsLoaded(true)
     }
 
-    loadLeaflet()
+    init()
 
     return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove()
-        mapInstanceRef.current = null
-      }
-      markersRef.current = []
+      cancelled = true
+      mapInstanceRef.current?.remove()
+      mapInstanceRef.current = null
+      dayMarkersRef.current = []
+      activityMarkersRef.current = []
+      polylineRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itinerary])
+  }, [])
 
-  // Pan map + refresh icons when active day changes
+  // ── redraw layers whenever viewMode or activeDay changes ──────────────────
+
   useEffect(() => {
-    if (!mapInstanceRef.current || !isLoaded) return
+    if (!isLoaded) return
 
-    const loadLeaflet = async () => {
+    const map = mapInstanceRef.current
+    if (!map) return
+
+    const run = async () => {
       const L = (await import('leaflet')).default
-      const today = startOfDay(new Date())
 
-      const targetDay = itinerary[activeDay]
-      if (targetDay) {
-        mapInstanceRef.current?.panTo(targetDay.coordinates as [number, number], {
-          animate: true,
-          duration: 0.6,
-        })
-      }
+      if (viewMode === 'global') {
+        // ── global view: dashed polyline + one numbered pin per day ──────────
 
-      markersRef.current.forEach((marker, i) => {
-        const { day, index, endIndex } = uniqueDays[i] ?? {}
-        if (!day) return
-        const isPast = startOfDay(day.date) < today
-        const isActive = activeDay >= index && activeDay <= endIndex
+        clearMarkers(activityMarkersRef.current)
+        polylineRef.current?.remove()
+        polylineRef.current = null
+        clearMarkers(dayMarkersRef.current)
 
-        marker.setIcon(
-          L.divIcon({
+        const coords = itinerary.map((d) => d.coordinates as [number, number])
+
+        // Dashed blue polyline through every day in order
+        polylineRef.current = L.polyline(coords, {
+          color: '#3B82F6',
+          weight: 2,
+          opacity: 0.85,
+          dashArray: '8 8',
+        }).addTo(map)
+
+        // One circular numbered pin per day
+        itinerary.forEach((day, i) => {
+          const isActive = i === activeDay
+          const icon = L.divIcon({
             className: '',
-            html: buildMarkerHtml(isActive, isPast),
-            iconSize: [isActive ? 36 : 28, isActive ? 36 : 28],
-            iconAnchor: [isActive ? 18 : 14, isActive ? 18 : 14],
-          }),
+            html: buildDayPinHtml(day.dayNumber, isActive),
+            iconSize: [isActive ? 38 : 30, isActive ? 38 : 30],
+            iconAnchor: [isActive ? 19 : 15, isActive ? 19 : 15],
+          })
+          const marker = L.marker(day.coordinates as [number, number], {
+            icon,
+          }).addTo(map)
+
+          const dateLabel = new Date(day.date).toLocaleDateString('fr-FR', {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short',
+          })
+          marker.bindPopup(
+            `<div style="min-width:130px;font-family:system-ui,sans-serif;">` +
+              `<strong style="font-size:13px;">Jour ${day.dayNumber} · ${day.city}</strong><br/>` +
+              `<span style="color:#666;font-size:11px;">${dateLabel}</span>` +
+              `</div>`,
+          )
+
+          // Clicking a day pin switches to day view for that day
+          marker.on('click', () => {
+            setActiveDay(i)
+            onSelectDay(i)
+            setViewMode('day')
+          })
+
+          dayMarkersRef.current.push(marker)
+        })
+
+        // fitBounds to all day coordinates
+        if (coords.length > 0) {
+          map.fitBounds(L.latLngBounds(coords), { padding: [48, 48] })
+        }
+      } else {
+        // ── day view: activity pins for the active day ────────────────────────
+
+        clearMarkers(dayMarkersRef.current)
+        polylineRef.current?.remove()
+        polylineRef.current = null
+        clearMarkers(activityMarkersRef.current)
+
+        const day = itinerary[activeDay]
+        if (!day) return
+
+        const activitiesWithCoords = day.activities.filter(
+          (a): a is Activity & { coordinates: [number, number] } =>
+            Array.isArray(a.coordinates) && a.coordinates.length === 2,
         )
-      })
+
+        // No activity coordinates — show the day pin and zoom to it
+        if (activitiesWithCoords.length === 0) {
+          const icon = L.divIcon({
+            className: '',
+            html: buildDayPinHtml(day.dayNumber, true),
+            iconSize: [38, 38],
+            iconAnchor: [19, 19],
+          })
+          const marker = L.marker(day.coordinates as [number, number], {
+            icon,
+          }).addTo(map)
+          marker.bindPopup(
+            `<strong style="font-family:system-ui,sans-serif;">${day.city}</strong>`,
+          )
+          activityMarkersRef.current.push(marker)
+          map.setView(day.coordinates as [number, number], 13, {
+            animate: true,
+          })
+          return
+        }
+
+        // Add one coloured pin per activity that has coordinates
+        activitiesWithCoords.forEach((activity, i) => {
+          const color = ACTIVITY_COLOR[activity.type] ?? '#6B7280'
+          const icon = L.divIcon({
+            className: '',
+            html: buildActivityPinHtml(String(i + 1), color),
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+          })
+          const marker = L.marker(activity.coordinates, { icon }).addTo(map)
+          marker.bindPopup(
+            `<div style="min-width:140px;font-family:system-ui,sans-serif;">` +
+              `<strong style="font-size:13px;">${activity.name}</strong>` +
+              (activity.duration
+                ? `<br/><span style="color:#666;font-size:11px;">${activity.duration}</span>`
+                : '') +
+              `</div>`,
+          )
+          activityMarkersRef.current.push(marker)
+        })
+
+        // When only one activity exists, also show the day coordinate pin for context
+        if (activitiesWithCoords.length <= 1) {
+          const icon = L.divIcon({
+            className: '',
+            html: buildDayPinHtml(day.dayNumber, true),
+            iconSize: [38, 38],
+            iconAnchor: [19, 19],
+          })
+          const marker = L.marker(day.coordinates as [number, number], {
+            icon,
+          }).addTo(map)
+          marker.bindPopup(
+            `<strong style="font-family:system-ui,sans-serif;">${day.city}</strong>`,
+          )
+          activityMarkersRef.current.push(marker)
+        }
+
+        // Collect all coordinates for bounds calculation
+        const allCoords: [number, number][] = activitiesWithCoords.map(
+          (a) => a.coordinates,
+        )
+        if (activitiesWithCoords.length <= 1) {
+          allCoords.push(day.coordinates as [number, number])
+        }
+
+        if (allCoords.length === 1) {
+          map.setView(allCoords[0], 13, { animate: true })
+        } else {
+          map.fitBounds(L.latLngBounds(allCoords), { padding: [48, 48] })
+        }
+      }
     }
 
-    loadLeaflet()
+    run()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDay, isLoaded])
+  }, [isLoaded, viewMode, activeDay])
 
-  const currentDay = itinerary[activeDay]
-  const today = startOfDay(new Date())
+  // ── auto-scroll active chip into view ─────────────────────────────────────
+
+  useEffect(() => {
+    if (!chipListRef.current) return
+    const chip = chipListRef.current.querySelector<HTMLElement>(
+      '[data-active="true"]',
+    )
+    chip?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+  }, [activeDay])
+
+  // ── event handlers ─────────────────────────────────────────────────────────
+
+  const handleSelectDay = (index: number) => {
+    setActiveDay(index)
+    onSelectDay(index)
+  }
+
+  const handleChipClick = (index: number) => {
+    handleSelectDay(index)
+    setViewMode('day')
+  }
+
+  // ── render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col"
-      style={{ background: '#f3f4f6' }}
-    >
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: '#f3f4f6' }}>
       {/* Top bar */}
-      <div className="bg-card/90 border-border/60 absolute top-0 right-0 left-0 z-10 flex items-center justify-between border-b px-4 py-3 backdrop-blur-md"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
+      <header
+        className="bg-card/90 border-border/60 z-10 shrink-0 border-b backdrop-blur-md"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <span className="text-foreground font-semibold text-sm">Carte du voyage</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose}
-          className="hover:bg-muted/70 h-8 w-8 rounded-full"
-          aria-label="Fermer la carte"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
+        {/* Title + close button row */}
+        <div className="flex items-center justify-between px-4 py-2">
+          <span className="text-foreground text-sm font-semibold">
+            Carte du voyage
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="hover:bg-muted/70 h-8 w-8 rounded-full"
+            aria-label="Fermer la carte"
+          >
+            <IconX className="h-4 w-4" />
+          </Button>
+        </div>
 
-      {/* Map */}
-      <div className="flex-1 pt-14" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 56px)' }}>
+        {/* View mode toggle tabs */}
+        <div className="flex justify-center gap-2 px-4 pb-3">
+          <button
+            type="button"
+            onClick={() => setViewMode('global')}
+            className={cn(
+              'flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
+              viewMode === 'global'
+                ? 'bg-blue-500 text-white shadow-sm'
+                : 'border-border bg-muted text-muted-foreground border',
+            )}
+          >
+            <IconMap2 className="h-3.5 w-3.5" />
+            Itinéraire
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('day')}
+            className={cn(
+              'flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
+              viewMode === 'day'
+                ? 'bg-blue-500 text-white shadow-sm'
+                : 'border-border bg-muted text-muted-foreground border',
+            )}
+          >
+            <IconMapPin className="h-3.5 w-3.5" />
+            Jour {activeDay + 1}
+          </button>
+        </div>
+      </header>
+
+      {/* Map area — fills all remaining space between header and footer */}
+      <div className="relative min-h-0 flex-1">
         <div ref={mapRef} className="h-full w-full" />
         {!isLoaded && (
-          <div className="bg-muted/50 absolute inset-0 flex items-center justify-center">
+          <div className="bg-muted/50 pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="text-muted-foreground flex items-center gap-2">
-              <MapPin className="h-5 w-5 animate-pulse" />
+              <IconMapPin className="h-5 w-5 animate-pulse" />
               <span className="text-sm">Chargement de la carte…</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Bottom city cards panel */}
-      <div
-        className="bg-card/90 border-border/40 border-t backdrop-blur-md"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}
+      {/* Bottom panel */}
+      <footer
+        className="bg-card/90 border-border/40 z-10 shrink-0 border-t backdrop-blur-md"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        {/* Active day summary */}
-        {currentDay && (
-          <div className="flex items-center justify-between border-b border-border/30 px-4 py-2">
-            <div className="min-w-0">
-              <p className="text-foreground truncate text-sm font-semibold">
-                Jour {currentDay.dayNumber} · {currentDay.city}
-              </p>
-              <p className="text-muted-foreground truncate text-xs">
-                {new Date(currentDay.date).toLocaleDateString('fr-FR', {
-                  weekday: 'short',
-                  day: 'numeric',
-                  month: 'long',
-                })}
-              </p>
-            </div>
-            <div className="flex items-center gap-1 ml-2 shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                disabled={activeDay === 0}
-                onClick={() => handleSelectDay(Math.max(0, activeDay - 1))}
-                aria-label="Jour précédent"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                disabled={activeDay === itinerary.length - 1}
-                onClick={() =>
-                  handleSelectDay(Math.min(itinerary.length - 1, activeDay + 1))
-                }
-                aria-label="Jour suivant"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
+        {/* Info hint */}
+        <p className="text-muted-foreground px-4 pt-2.5 pb-1 text-center text-[10px] font-medium tracking-widest">
+          {itinerary.length} JOURS · TAP UN MARQUEUR POUR ZOOMER
+        </p>
 
-        {/* Horizontal city scroll */}
+        {/* Horizontal scrollable day chip selector */}
         <div
-          ref={cardListRef}
-          className="flex gap-2 overflow-x-auto px-4 py-3 scrollbar-none"
+          ref={chipListRef}
+          className="flex gap-2 overflow-x-auto px-4 py-2 [scrollbar-width:none]"
           style={{ scrollSnapType: 'x mandatory' }}
         >
           {itinerary.map((day, index) => {
             const isActive = activeDay === index
-            const isPast = startOfDay(day.date) < today
-
             return (
-              <MapDayPreviewCard
+              <button
                 key={index}
-                day={day}
-                isActive={isActive}
-                isPast={isPast}
-                onSelect={() => handleSelectDay(index)}
-                onViewMore={() => handleViewMore(index)}
-              />
+                type="button"
+                data-active={isActive ? 'true' : 'false'}
+                onClick={() => handleChipClick(index)}
+                style={{ scrollSnapAlign: 'center' }}
+                className={cn(
+                  'flex shrink-0 flex-col items-center rounded-xl border px-3 py-2 transition-colors',
+                  isActive
+                    ? 'border-blue-500 bg-white shadow-sm'
+                    : 'border-border bg-muted/50 hover:bg-muted',
+                )}
+              >
+                <span
+                  className={cn(
+                    'text-sm font-bold leading-none',
+                    isActive ? 'text-orange-500' : 'text-muted-foreground',
+                  )}
+                >
+                  {day.dayNumber}
+                </span>
+                <span
+                  className={cn(
+                    'mt-1 max-w-[64px] truncate text-[10px] leading-none',
+                    isActive ? 'text-foreground' : 'text-muted-foreground',
+                  )}
+                >
+                  {day.city}
+                </span>
+              </button>
             )
           })}
         </div>
-      </div>
+      </footer>
     </div>
   )
 }
