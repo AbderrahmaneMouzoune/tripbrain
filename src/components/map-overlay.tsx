@@ -60,6 +60,14 @@ function buildActivityPinHtml(label: string, color: string): string {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
 function clearMarkers(markers: LeafletMarker[]): void {
   markers.forEach((m) => m.remove())
   markers.length = 0
@@ -83,6 +91,12 @@ export function MapOverlay({
   const [isLoaded, setIsLoaded] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('global')
   const [activeDay, setActiveDay] = useState(selectedDay)
+
+  // ── sync activeDay when selectedDay prop changes ──────────────────────────
+
+  useEffect(() => {
+    setActiveDay(selectedDay)
+  }, [selectedDay])
 
   // ── init: create the Leaflet map once on mount ────────────────────────────
 
@@ -141,8 +155,11 @@ export function MapOverlay({
     const map = mapInstanceRef.current
     if (!map) return
 
+    let cancelled = false
+
     const run = async () => {
       const L = (await import('leaflet')).default
+      if (cancelled) return
 
       if (viewMode === 'global') {
         // ── global view: dashed polyline + one numbered pin per day ──────────
@@ -182,8 +199,8 @@ export function MapOverlay({
           })
           marker.bindPopup(
             `<div style="min-width:130px;font-family:system-ui,sans-serif;">` +
-              `<strong style="font-size:13px;">Jour ${day.dayNumber} · ${day.city}</strong><br/>` +
-              `<span style="color:#666;font-size:11px;">${dateLabel}</span>` +
+              `<strong style="font-size:13px;">Jour ${escHtml(String(day.dayNumber))} · ${escHtml(day.city)}</strong><br/>` +
+              `<span style="color:#666;font-size:11px;">${escHtml(dateLabel)}</span>` +
               `</div>`,
           )
 
@@ -229,7 +246,7 @@ export function MapOverlay({
             icon,
           }).addTo(map)
           marker.bindPopup(
-            `<strong style="font-family:system-ui,sans-serif;">${day.city}</strong>`,
+            `<strong style="font-family:system-ui,sans-serif;">${escHtml(day.city)}</strong>`,
           )
           activityMarkersRef.current.push(marker)
           map.setView(day.coordinates as [number, number], 13, {
@@ -250,9 +267,9 @@ export function MapOverlay({
           const marker = L.marker(activity.coordinates, { icon }).addTo(map)
           marker.bindPopup(
             `<div style="min-width:140px;font-family:system-ui,sans-serif;">` +
-              `<strong style="font-size:13px;">${activity.name}</strong>` +
+              `<strong style="font-size:13px;">${escHtml(activity.name)}</strong>` +
               (activity.duration
-                ? `<br/><span style="color:#666;font-size:11px;">${activity.duration}</span>`
+                ? `<br/><span style="color:#666;font-size:11px;">${escHtml(activity.duration)}</span>`
                 : '') +
               `</div>`,
           )
@@ -271,7 +288,7 @@ export function MapOverlay({
             icon,
           }).addTo(map)
           marker.bindPopup(
-            `<strong style="font-family:system-ui,sans-serif;">${day.city}</strong>`,
+            `<strong style="font-family:system-ui,sans-serif;">${escHtml(day.city)}</strong>`,
           )
           activityMarkersRef.current.push(marker)
         }
@@ -293,8 +310,10 @@ export function MapOverlay({
     }
 
     run()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, viewMode, activeDay])
+    return () => {
+      cancelled = true
+    }
+  }, [isLoaded, viewMode, activeDay, itinerary])
 
   // ── auto-scroll active chip into view ─────────────────────────────────────
 
@@ -321,7 +340,7 @@ export function MapOverlay({
   // ── render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col" style={{ background: '#f3f4f6' }}>
+    <div className="fixed inset-0 z-50 flex flex-col bg-gray-100">
       {/* Top bar */}
       <header
         className="bg-card/90 border-border/60 z-10 shrink-0 border-b backdrop-blur-md"
@@ -394,14 +413,13 @@ export function MapOverlay({
       >
         {/* Info hint */}
         <p className="text-muted-foreground px-4 pt-2.5 pb-1 text-center text-[10px] font-medium tracking-widest">
-          {itinerary.length} JOURS · TAP UN MARQUEUR POUR ZOOMER
+          {itinerary.length} JOURS · TOUCHEZ UN MARQUEUR POUR ZOOMER
         </p>
 
         {/* Horizontal scrollable day chip selector */}
         <div
           ref={chipListRef}
-          className="flex gap-2 overflow-x-auto px-4 py-2 [scrollbar-width:none]"
-          style={{ scrollSnapType: 'x mandatory' }}
+          className="flex gap-2 overflow-x-auto px-4 py-2 snap-x snap-mandatory [scrollbar-width:none]"
         >
           {itinerary.map((day, index) => {
             const isActive = activeDay === index
@@ -411,9 +429,8 @@ export function MapOverlay({
                 type="button"
                 data-active={isActive ? 'true' : 'false'}
                 onClick={() => handleChipClick(index)}
-                style={{ scrollSnapAlign: 'center' }}
                 className={cn(
-                  'flex shrink-0 flex-col items-center rounded-xl border px-3 py-2 transition-colors',
+                  'flex shrink-0 flex-col items-center rounded-xl border px-3 py-2 snap-center transition-colors',
                   isActive
                     ? 'border-blue-500 bg-white shadow-sm'
                     : 'border-border bg-muted/50 hover:bg-muted',
