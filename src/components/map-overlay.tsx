@@ -31,11 +31,19 @@ interface MapOverlayProps {
   onClose: () => void
 }
 
+// ── design-system colour tokens ───────────────────────────────────────────────
+// These hex values correspond to the CSS custom properties defined in globals.css.
+// Using named constants avoids scattering magic hex values throughout the file.
+
+const PIN_PRIMARY = '#3B82F6' // --primary  (electric blue)
+const PIN_SECONDARY = '#F97316' // --secondary (ignition orange)
+const PIN_PAST = '#9CA3AF' // muted gray for past-day markers
+
 // ── activity type → pin colour ────────────────────────────────────────────────
 
 const ACTIVITY_COLOR: Record<Activity['type'], string> = {
   visit: '#8B5CF6',
-  transport: '#3B82F6',
+  transport: PIN_PRIMARY,
   food: '#EF4444',
   experience: '#10B981',
   shopping: '#F59E0B',
@@ -43,7 +51,7 @@ const ACTIVITY_COLOR: Record<Activity['type'], string> = {
 
 const ACTIVITY_BG_CLASS: Record<Activity['type'], string> = {
   visit: 'bg-violet-500',
-  transport: 'bg-blue-500',
+  transport: 'bg-primary',
   food: 'bg-red-500',
   experience: 'bg-emerald-500',
   shopping: 'bg-amber-500',
@@ -109,28 +117,32 @@ function buildDayPinHtml(
 
   if (status === 'past') {
     size = isActive ? 38 : 32
-    bg = '#9CA3AF'
+    bg = PIN_PAST
     textColor = '#ffffff'
-    borderCss = isActive ? '2.5px solid #F97316' : '2.5px solid #9CA3AF'
+    borderCss = isActive
+      ? `2.5px solid ${PIN_SECONDARY}`
+      : `2.5px solid ${PIN_PAST}`
     shadowCss = isActive
-      ? '0 0 0 2px #F97316,0 2px 8px rgba(0,0,0,.28)'
+      ? `0 0 0 2px ${PIN_SECONDARY},0 2px 8px rgba(0,0,0,.28)`
       : '0 2px 8px rgba(0,0,0,.28)'
   } else if (status === 'today') {
     size = isActive ? 44 : 42
-    bg = '#3B82F6'
+    bg = PIN_PRIMARY
     textColor = '#ffffff'
-    borderCss = isActive ? '2.5px solid #F97316' : '2.5px solid #3B82F6'
+    borderCss = isActive
+      ? `2.5px solid ${PIN_SECONDARY}`
+      : `2.5px solid ${PIN_PRIMARY}`
     shadowCss = isActive
-      ? '0 0 0 2px #F97316,0 2px 8px rgba(0,0,0,.28)'
+      ? `0 0 0 2px ${PIN_SECONDARY},0 2px 8px rgba(0,0,0,.28)`
       : '0 2px 8px rgba(0,0,0,.28)'
   } else {
     // future
     size = isActive ? 38 : 32
-    bg = isActive ? '#F97316' : '#ffffff'
+    bg = isActive ? PIN_SECONDARY : '#ffffff'
     textColor = isActive ? '#ffffff' : '#111827'
-    borderCss = '2.5px solid #F97316'
+    borderCss = `2.5px solid ${PIN_SECONDARY}`
     shadowCss = isActive
-      ? '0 0 0 2px #F97316,0 2px 8px rgba(0,0,0,.28)'
+      ? `0 0 0 2px ${PIN_SECONDARY},0 2px 8px rgba(0,0,0,.28)`
       : '0 2px 8px rgba(0,0,0,.28)'
   }
 
@@ -266,9 +278,9 @@ export function MapOverlay({
 
         const coords = itinerary.map((d) => d.coordinates)
 
-        // Dashed blue polyline through every day in order
+        // Dashed polyline through every day in order
         polylineRef.current = L.polyline(coords, {
-          color: '#3B82F6',
+          color: PIN_PRIMARY,
           weight: 2,
           opacity: 0.85,
           dashArray: '8 8',
@@ -403,7 +415,7 @@ export function MapOverlay({
           activityPolylineRef.current = L.polyline(
             activitiesWithCoords.map((a) => a.coordinates),
             {
-              color: '#F97316',
+              color: PIN_SECONDARY,
               weight: 2,
               opacity: 0.7,
               dashArray: '6 6',
@@ -485,22 +497,19 @@ export function MapOverlay({
     : ''
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-gray-100">
+    <div className="bg-background fixed inset-0 z-50 flex flex-col">
       {/* Top bar */}
       <header
         className="bg-card/90 border-border/60 z-10 shrink-0 border-b backdrop-blur-md"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        {/* Title + close button row */}
-        <div className="flex items-center justify-between px-4 py-2">
-          <span className="text-foreground text-sm font-semibold">
-            Carte du voyage
-          </span>
+        {/* Close button row */}
+        <div className="flex justify-end px-4 py-2">
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             onClick={onClose}
-            className="hover:bg-muted/70 h-8 w-8 rounded-full"
+            className="hover:bg-muted/70 rounded-full"
             aria-label="Fermer la carte"
           >
             <IconX className="h-4 w-4" />
@@ -509,32 +518,32 @@ export function MapOverlay({
 
         {/* View mode toggle tabs */}
         <div className="flex justify-center gap-2 px-4 pb-3">
-          <button
-            type="button"
+          <Button
+            size="sm"
             onClick={() => setViewMode('global')}
             className={cn(
-              'flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
+              'rounded-full',
               viewMode === 'global'
-                ? 'bg-blue-500 text-white shadow-sm'
-                : 'border-border bg-muted text-muted-foreground border',
+                ? 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm'
+                : 'border-border bg-muted text-muted-foreground border hover:bg-muted/80',
             )}
           >
             <IconMap2 className="h-3.5 w-3.5" />
             Itinéraire
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            size="sm"
             onClick={() => setViewMode('day')}
             className={cn(
-              'flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
+              'rounded-full',
               viewMode === 'day'
-                ? 'bg-blue-500 text-white shadow-sm'
-                : 'border-border bg-muted text-muted-foreground border',
+                ? 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm'
+                : 'border-border bg-muted text-muted-foreground border hover:bg-muted/80',
             )}
           >
             <IconMapPin className="h-3.5 w-3.5" />
-            Jour {activeDay + 1}
-          </button>
+            Vue par jour · {activeDay + 1}
+          </Button>
         </div>
       </header>
 
@@ -579,14 +588,14 @@ export function MapOverlay({
                     className={cn(
                       'flex shrink-0 flex-col items-center rounded-xl border px-3 py-2 snap-center transition-colors',
                       isActive
-                        ? 'border-blue-500 bg-white shadow-sm'
+                        ? 'border-primary bg-card shadow-sm'
                         : 'border-border bg-muted/50 hover:bg-muted',
                     )}
                   >
                     <span
                       className={cn(
                         'text-sm font-bold leading-none',
-                        isActive ? 'text-orange-500' : 'text-muted-foreground',
+                        isActive ? 'text-secondary' : 'text-muted-foreground',
                       )}
                     >
                       {day.dayNumber}
@@ -609,40 +618,43 @@ export function MapOverlay({
           <div className="flex flex-col">
             {/* Row 1: back button + prev/next arrows */}
             <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setViewMode('global')}
-                className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-medium transition-colors"
+                className="text-muted-foreground h-auto gap-1 px-1 py-0.5 text-xs"
               >
                 <IconArrowLeft className="h-3.5 w-3.5" />
                 Retour à l&apos;itinéraire
-              </button>
+              </Button>
 
               <div className="flex items-center gap-1">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={handlePrevDay}
                   disabled={activeDay === 0}
-                  className="disabled:text-muted-foreground/40 text-muted-foreground hover:text-foreground flex items-center gap-0.5 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:pointer-events-none"
+                  className="text-muted-foreground h-auto gap-0.5 px-2 py-1 text-xs"
                   aria-label="Jour précédent"
                 >
                   <IconChevronLeft className="h-3.5 w-3.5" />
                   {activeDay > 0 && (
                     <span>Jour {itinerary[activeDay - 1]?.dayNumber}</span>
                   )}
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={handleNextDay}
                   disabled={activeDay === itinerary.length - 1}
-                  className="disabled:text-muted-foreground/40 text-muted-foreground hover:text-foreground flex items-center gap-0.5 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:pointer-events-none"
+                  className="text-muted-foreground h-auto gap-0.5 px-2 py-1 text-xs"
                   aria-label="Jour suivant"
                 >
                   {activeDay < itinerary.length - 1 && (
                     <span>Jour {itinerary[activeDay + 1]?.dayNumber}</span>
                   )}
                   <IconChevronRight className="h-3.5 w-3.5" />
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -706,17 +718,17 @@ export function MapOverlay({
 
             {/* Row 4: "Voir plus d'info" full-width button */}
             <div className="px-3 py-2">
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                className="w-full rounded-xl"
                 onClick={() => {
                   onSelectDay(activeDay)
                   onClose()
                 }}
-                className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 active:opacity-80"
               >
                 Voir plus d&apos;info
                 <IconArrowRight className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           </div>
         )}
