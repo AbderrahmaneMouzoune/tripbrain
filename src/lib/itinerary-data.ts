@@ -1445,9 +1445,20 @@ export const itinerary: DayItinerary[] = [
     transport: {
       id: 'tr-day13',
       type: 'plane',
-      from: 'Zhangjiajie',
-      to: 'Shanghai',
+      from: 'DYG Zhangjiajie Hehua Intl.',
+      to: 'PVG Shanghai Pudong Intl.',
+      details:
+        'Juneyao Airlines HO2200 | Snacks | Airbus A319/A320/A321 (Mid-sized)',
+      departureAddress:
+        'Zhangjiajie Hehua International Airport (DYG), Terminal 2, Zhangjiajie',
+      departureTime: '21:35',
+      arrivalTime: '23:40',
+      duration: '2h 5m',
+      provider: 'Juneyao Airlines',
+      terminal: 'T2',
       status: 'planned',
+      notes:
+        'May 23 | 2h 5m — All times are shown in local time. Vol écologique 🌿',
     },
   },
 
@@ -1674,6 +1685,7 @@ export const itinerary: DayItinerary[] = [
       departureTime: '08:00',
       arrivalTime: '10:15',
       duration: '2h15',
+      provider: 'Spring Airlines',
       bookingReference: 'BJSKYRR',
       terminal: 'T2',
       status: 'booked',
@@ -1899,6 +1911,7 @@ export const itinerary: DayItinerary[] = [
       departureTime: '11:15',
       arrivalTime: '13:20',
       duration: '2h 5m',
+      provider: 'Spring Airlines',
       bookingReference: 'BJSKYRQ',
       terminal: 'Départ T1 — Arrivée T2',
       status: 'booked',
