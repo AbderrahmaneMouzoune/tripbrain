@@ -1818,13 +1818,6 @@ export const itinerary: DayItinerary[] = [
         status: 'planned',
       },
     ],
-    transport: {
-      id: 'tr-day18',
-      type: 'plane',
-      from: 'Taipei',
-      to: 'Shanghai',
-      status: 'planned',
-    },
   },
 
   {
@@ -1886,6 +1879,22 @@ export const itinerary: DayItinerary[] = [
         status: 'planned',
       },
     ],
+    transport: {
+      id: 'tr-day19',
+      type: 'plane',
+      from: 'Taipei',
+      to: 'Shanghai',
+      details: 'Taipei to Shanghai — Thu, May 28 — 9C8952',
+      departureAddress: 'Taiwan Taoyuan International Airport T1',
+      departureTime: '11:15',
+      arrivalTime: '13:20',
+      duration: '2h 5m',
+      bookingReference: 'BJSKYRQ',
+      terminal: 'Départ T1 — Arrivée T2',
+      status: 'booked',
+      notes:
+        'Shanghai Pudong International Airport T2. Reserve free VIP lounge. Check in online.',
+    },
   },
 
   {
