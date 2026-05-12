@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest'
 import { compressToEncodedURIComponent } from 'lz-string'
 
 const QR_MAX_BYTES = 2900
@@ -11,9 +10,13 @@ describe('compression QR', () => {
     expect(byteCount).toBeLessThan(QR_MAX_BYTES)
   })
 
-  it('isTooLarge est vrai quand les octets dépassent QR_MAX_BYTES', () => {
-    const byteCount = 2901
-    expect(byteCount > QR_MAX_BYTES).toBe(true)
+  it('un payload volumineux dépasse la limite de 2900 octets et isTooLarge serait vrai', () => {
+    // Génère un JSON suffisamment grand pour dépasser la limite
+    const bigData = { days: Array(100).fill({ activities: Array(20).fill({ name: 'x'.repeat(50), description: 'y'.repeat(200) }) }) }
+    const json = JSON.stringify(bigData)
+    const compressed = compressToEncodedURIComponent(json)
+    const byteCount = new TextEncoder().encode(compressed).length
+    expect(byteCount).toBeGreaterThan(2900)
   })
 
   it('la compression réduit la taille des données JSON', () => {
