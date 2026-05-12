@@ -1,6 +1,7 @@
 'use client'
 
 import { ImportFormatGuide } from '@/components/import-format-guide'
+import { QrExportDialog } from '@/components/qr-export-dialog'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,7 +26,7 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { downloadICS } from '@/lib/calendar-export'
 import type { DayItinerary } from '@/lib/itinerary-data'
-import { IconFileExport, IconFileImport, IconTrash } from '@tabler/icons-react'
+import { IconFileExport, IconFileImport, IconQrcode, IconTrash } from '@tabler/icons-react'
 import {
   AlertCircle,
   CalendarDays,
@@ -159,7 +160,7 @@ export function ShareDialog({
               </div>
             )}
 
-            {/* Export */}
+            {/* Export JSON */}
             <Button
               variant="outline"
               className="border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3"
@@ -180,6 +181,29 @@ export function ShareDialog({
                 </p>
               </div>
             </Button>
+
+            {/* Export QR Code */}
+            <QrExportDialog
+              itinerary={itinerary}
+              trigger={
+                <Button
+                  variant="outline"
+                  className="border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3"
+                >
+                  <span className="bg-primary/10 text-primary inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+                    <IconQrcode className="h-4 w-4" />
+                  </span>
+                  <div className="text-left">
+                    <p className="text-foreground text-sm font-medium">
+                      Exporter en QR Code
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      Générer un QR code à scanner sur un autre appareil
+                    </p>
+                  </div>
+                </Button>
+              }
+            />
 
             {/* Import */}
             <Button
