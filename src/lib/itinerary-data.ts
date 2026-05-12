@@ -327,7 +327,7 @@ export const itinerary: DayItinerary[] = [
       provider: 'China Railway',
       price: 244,
       currency: 'CNY',
-      status: 'booked',
+      status: 'planned',
     },
   },
 
@@ -466,7 +466,7 @@ export const itinerary: DayItinerary[] = [
       provider: 'China Railway',
       price: 274,
       currency: 'CNY',
-      status: 'booked',
+      status: 'planned',
     },
   },
 
@@ -771,24 +771,6 @@ export const itinerary: DayItinerary[] = [
         status: 'planned',
       },
     ],
-    transport: {
-      id: 'tr-day6',
-      type: 'plane',
-      from: 'PKX Beijing Daxing Intl.',
-      to: 'XIY Xi’an Xianyang Intl.',
-      details:
-        'China Southern Airlines CZ8823 | Meal | Boeing 737-900ER (Mid-sized)',
-      departureAddress: 'Beijing Daxing International Airport (PKX), Beijing',
-      departureTime: '13:00',
-      arrivalTime: '15:10',
-      duration: '2h 10m',
-      provider: 'China Southern Airlines',
-      terminal: 'T5',
-      price: 680,
-      currency: 'CNY',
-      status: 'booked',
-      notes: 'May 16 | 2h 10m — All times are shown in local time',
-    },
   },
 
   {
@@ -893,6 +875,24 @@ export const itinerary: DayItinerary[] = [
         status: 'planned',
       },
     ],
+    transport: {
+      id: 'tr-day7',
+      type: 'plane',
+      from: 'PKX Beijing Daxing Intl.',
+      to: 'XIY Xi’an Xianyang Intl.',
+      details:
+        'China Southern Airlines CZ8823 | Meal | Boeing 737-900ER (Mid-sized)',
+      departureAddress: 'Beijing Daxing International Airport (PKX), Beijing',
+      departureTime: '13:00',
+      arrivalTime: '15:10',
+      duration: '2h 10m',
+      provider: 'China Southern Airlines',
+      terminal: 'T5',
+      price: 680,
+      currency: 'CNY',
+      status: 'booked',
+      notes: 'May 16 | 2h 10m — All times are shown in local time',
+    },
   },
 
   {
@@ -1008,7 +1008,7 @@ export const itinerary: DayItinerary[] = [
       provider: 'China Railway',
       price: 315,
       currency: 'CNY',
-      status: 'booked',
+      status: 'planned',
     },
   },
 
@@ -1442,24 +1442,6 @@ export const itinerary: DayItinerary[] = [
         status: 'planned',
       },
     ],
-    transport: {
-      id: 'tr-day13',
-      type: 'plane',
-      from: 'DYG Zhangjiajie Hehua Intl.',
-      to: 'PVG Shanghai Pudong Intl.',
-      details:
-        'Juneyao Airlines HO2200 | Snacks | Airbus A319/A320/A321 (Mid-sized)',
-      departureAddress:
-        'Zhangjiajie Hehua International Airport (DYG), Terminal 2, Zhangjiajie',
-      departureTime: '21:35',
-      arrivalTime: '23:40',
-      duration: '2h 5m',
-      provider: 'Juneyao Airlines',
-      terminal: 'T2',
-      status: 'planned',
-      notes:
-        'May 23 | 2h 5m — All times are shown in local time. Vol écologique 🌿',
-    },
   },
 
   {
@@ -1532,6 +1514,24 @@ export const itinerary: DayItinerary[] = [
         status: 'planned',
       },
     ],
+    transport: {
+      id: 'tr-day14',
+      type: 'plane',
+      from: 'DYG Zhangjiajie Hehua Intl.',
+      to: 'PVG Shanghai Pudong Intl.',
+      details:
+        'Juneyao Airlines HO2200 | Snacks | Airbus A319/A320/A321 (Mid-sized)',
+      departureAddress:
+        'Zhangjiajie Hehua International Airport (DYG), Terminal 2, Zhangjiajie',
+      departureTime: '21:35',
+      arrivalTime: '23:40',
+      duration: '2h 5m',
+      provider: 'Juneyao Airlines',
+      terminal: 'T2',
+      status: 'planned',
+      notes:
+        'May 23 | 2h 5m — All times are shown in local time. Vol écologique 🌿',
+    },
   },
 
   {
