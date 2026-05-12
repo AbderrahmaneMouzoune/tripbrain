@@ -7,7 +7,6 @@ import { useSwipe } from '@/hooks/use-swipe'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
 import { ShareDialog } from '@/components/share-dialog'
-import { QrExportDialog } from '@/components/qr-export-dialog'
 import { OnboardingScreen } from '@/components/onboarding-screen'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -193,7 +192,6 @@ function HomePageContent() {
                 </div>
                 <div className="flex items-center gap-1">
                   <CacheStatusBadge />
-                  <QrExportDialog itinerary={itinerary} />
                   <ShareDialog
                     itinerary={itinerary}
                     selectedDay={selectedDay}

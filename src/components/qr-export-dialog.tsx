@@ -1,8 +1,8 @@
 'use client'
 
 import { useRef, useMemo, useState } from 'react'
-import { QRCodeCanvas } from 'qrcode.react'
-import LZString from 'lz-string'
+import dynamic from 'next/dynamic'
+import { compressToEncodedURIComponent } from 'lz-string'
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 import {
   IconQrcode,
   IconDownload,
@@ -20,6 +19,16 @@ import {
   IconCircleCheck,
 } from '@tabler/icons-react'
 import type { DayItinerary } from '@/lib/itinerary-data'
+
+const QRCodeCanvas = dynamic(
+  () => import('qrcode.react').then((m) => ({ default: m.QRCodeCanvas })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-[256px] w-[256px] animate-pulse rounded-xl bg-muted" />
+    ),
+  },
+)
 
 /** Maximum byte length of compressed payload that a QR code can reliably hold */
 const QR_MAX_BYTES = 2900
@@ -36,7 +45,7 @@ export function QrExportDialog({ itinerary, trigger }: QrExportDialogProps) {
 
   const { compressed, byteCount, isTooLarge } = useMemo(() => {
     const json = JSON.stringify({ itinerary })
-    const compressed = LZString.compressToEncodedURIComponent(json)
+    const compressed = compressToEncodedURIComponent(json)
     const byteCount = new TextEncoder().encode(compressed).length
     return { compressed, byteCount, isTooLarge: byteCount > QR_MAX_BYTES }
   }, [itinerary])
@@ -97,24 +106,26 @@ export function QrExportDialog({ itinerary, trigger }: QrExportDialogProps) {
           )}
 
           {/* QR code canvas */}
-          <div
-            className={cn(
-              'rounded-xl border p-3 shadow-sm',
-              isTooLarge && 'opacity-50',
-            )}
-          >
-            <QRCodeCanvas
-              ref={canvasRef}
-              value={compressed}
-              size={240}
-              level="M"
-              marginSize={1}
-            />
-          </div>
+          {isTooLarge ? (
+            <div className="flex h-[256px] w-[256px] items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5 text-destructive/60 text-xs text-center p-4">
+              Données trop volumineuses pour générer un QR code
+            </div>
+          ) : (
+            <div className="rounded-xl border p-3 shadow-sm">
+              <QRCodeCanvas
+                ref={canvasRef}
+                value={compressed}
+                size={240}
+                level="M"
+                marginSize={1}
+              />
+            </div>
+          )}
 
           {/* Download button */}
           <Button
             onClick={handleDownload}
+            disabled={isTooLarge}
             variant={isTooLarge ? 'outline' : 'default'}
             className="w-full gap-2"
           >
