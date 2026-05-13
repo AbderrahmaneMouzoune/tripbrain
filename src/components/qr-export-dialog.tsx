@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,12 +12,18 @@ import {
 } from '@/components/ui/dialog'
 import {
   IconAlertTriangle,
+  IconCloudUpload,
   IconDownload,
   IconQrcode,
   IconRefresh,
 } from '@tabler/icons-react'
 import type { DayItinerary } from '@/lib/itinerary-data'
-import { exportItineraryQR } from '@/lib/qr-export'
+import {
+  QR_INLINE_LIMIT,
+  compressItinerary,
+  getInlineQrUrl,
+  uploadItinerary,
+} from '@/lib/qr-export'
 
 interface QrExportDialogProps {
   itinerary: DayItinerary[]
@@ -26,9 +32,10 @@ interface QrExportDialogProps {
 }
 
 type State =
-  | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'success'; qrValue: string }
+  | { status: 'ready'; qrValue: string }
+  | { status: 'needs-upload' }
+  | { status: 'uploading' }
   | { status: 'error'; message: string }
 
 export function QrExportDialog({
@@ -36,20 +43,47 @@ export function QrExportDialog({
   open,
   onOpenChange,
 }: QrExportDialogProps) {
-  const [state, setState] = useState<State>({ status: 'idle' })
+  const [state, setState] = useState<State>({ status: 'loading' })
+  const [revision, setRevision] = useState(0)
 
-  const generate = useCallback(async () => {
+  // À l'ouverture, vérifie si l'inline suffit ou si un upload est nécessaire.
+  // Si les données tiennent dans le QR, le code est généré directement.
+  useEffect(() => {
+    if (!open) return
+
     setState({ status: 'loading' })
+
+    compressItinerary(itinerary)
+      .then((compressed) => {
+        if (compressed.length <= QR_INLINE_LIMIT) {
+          setState({ status: 'ready', qrValue: getInlineQrUrl(compressed) })
+        } else {
+          setState({ status: 'needs-upload' })
+        }
+      })
+      .catch((err) => {
+        setState({
+          status: 'error',
+          message:
+            err instanceof Error
+              ? err.message
+              : 'Erreur lors de la compression',
+        })
+      })
+  }, [open, itinerary, revision])
+
+  const handleUpload = useCallback(async () => {
+    setState({ status: 'uploading' })
     try {
-      const qrValue = await exportItineraryQR(itinerary)
-      setState({ status: 'success', qrValue })
+      const url = await uploadItinerary(itinerary)
+      setState({ status: 'ready', qrValue: url })
     } catch (err) {
       setState({
         status: 'error',
         message:
           err instanceof Error
             ? err.message
-            : 'Erreur lors de la génération du QR code',
+            : 'Erreur lors du téléversement',
       })
     }
   }, [itinerary])
@@ -68,15 +102,8 @@ export function QrExportDialog({
     document.body.removeChild(a)
   }, [])
 
-  const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen) {
-      setState({ status: 'idle' })
-    }
-    onOpenChange(newOpen)
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -89,29 +116,36 @@ export function QrExportDialog({
         </DialogHeader>
 
         <div className="flex flex-col items-center gap-4 py-2">
-          {state.status === 'idle' && (
-            <>
-              <p className="text-muted-foreground text-center text-sm">
-                Générez un QR code pour partager votre itinéraire. Les petits
-                itinéraires sont intégrés directement dans le code.
-              </p>
-              <Button onClick={generate} className="w-full gap-2">
-                <IconQrcode className="h-4 w-4" />
-                Générer le QR Code
-              </Button>
-            </>
-          )}
-
-          {state.status === 'loading' && (
+          {(state.status === 'loading' || state.status === 'uploading') && (
             <div className="flex flex-col items-center gap-3 py-4">
               <div className="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
               <p className="text-muted-foreground text-sm">
-                Génération en cours…
+                {state.status === 'loading'
+                  ? 'Analyse de l\u2019itinéraire\u2026'
+                  : 'Téléversement en cours\u2026'}
               </p>
             </div>
           )}
 
-          {state.status === 'success' && (
+          {state.status === 'needs-upload' && (
+            <>
+              <div className="bg-warning/10 text-warning flex w-full items-start gap-2 rounded-lg px-4 py-3 text-sm">
+                <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  Votre itinéraire est trop volumineux pour être intégré
+                  directement dans un QR code. Les données seront téléversées
+                  sur le web dans une URL temporaire valide{' '}
+                  <strong>10&nbsp;minutes</strong>.
+                </span>
+              </div>
+              <Button onClick={handleUpload} className="w-full gap-2">
+                <IconCloudUpload className="h-4 w-4" />
+                Téléverser et générer le QR Code
+              </Button>
+            </>
+          )}
+
+          {state.status === 'ready' && (
             <>
               <div className="rounded-lg bg-white p-3 shadow-sm">
                 <QRCodeCanvas
@@ -128,7 +162,7 @@ export function QrExportDialog({
               <div className="flex w-full gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => setState({ status: 'idle' })}
+                  onClick={() => setRevision((r) => r + 1)}
                   className="flex-1 gap-2"
                 >
                   <IconRefresh className="h-4 w-4" />
@@ -150,7 +184,7 @@ export function QrExportDialog({
               </div>
               <Button
                 variant="outline"
-                onClick={() => setState({ status: 'idle' })}
+                onClick={() => setRevision((r) => r + 1)}
                 className="w-full gap-2"
               >
                 <IconRefresh className="h-4 w-4" />

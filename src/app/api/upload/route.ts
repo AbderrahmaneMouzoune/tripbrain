@@ -1,26 +1,43 @@
-// Stub API route for large-itinerary uploads.
-// Required env vars: UPLOAD_API_KEY, UPLOAD_BUCKET_URL
-// Status codes: 503 = not configured (env vars missing), 501 = configured but not yet implemented.
-// Configure these env vars to enable actual R2/S3 storage for large itineraries.
+// Route API pour l'upload d'itinéraires volumineux vers Cloudflare R2.
+// Variables d'environnement requises :
+//   R2_ACCOUNT_ID        – Identifiant de compte Cloudflare
+//   R2_ACCESS_KEY_ID     – Clé d'accès R2
+//   R2_SECRET_ACCESS_KEY – Clé secrète R2
+//   R2_BUCKET_NAME       – Nom du bucket R2
+//   R2_PUBLIC_URL        – URL publique du bucket (ex: https://pub-xxx.r2.dev)
 
-import { NextResponse } from 'next/server'
+import { route, type Router } from '@better-upload/server'
+import { toRouteHandler } from '@better-upload/server/adapters/next'
+import { cloudflare } from '@better-upload/server/clients'
 
-export async function POST(_request: Request) {
-  // Check if upload is configured
-  if (!process.env.UPLOAD_API_KEY || !process.env.UPLOAD_BUCKET_URL) {
-    return NextResponse.json(
-      {
-        error:
-          "L'itinéraire est trop volumineux pour un QR code inline et l'upload n'est pas configuré. " +
-          'Configurez UPLOAD_API_KEY et UPLOAD_BUCKET_URL pour activer cette fonctionnalité.',
+const router: Router = {
+  client: cloudflare({
+    accountId: process.env.R2_ACCOUNT_ID!,
+    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+  }),
+  bucketName: process.env.R2_BUCKET_NAME!,
+  routes: {
+    json: route({
+      fileTypes: ['application/json'],
+      maxFileSize: 1024 * 1024, // 1 Mo max
+      signedUrlExpiresIn: 600, // URL d'upload valide 10 minutes
+      onBeforeUpload: async ({ file }) => {
+        return {
+          objectInfo: {
+            key: `exports/${Date.now()}-${file.name}`,
+          },
+        }
       },
-      { status: 503 },
-    )
-  }
-
-  // TODO: implement actual R2/S3 upload when env vars are set
-  return NextResponse.json(
-    { error: 'Upload non implémenté côté serveur.' },
-    { status: 501 },
-  )
+      onAfterSignedUrl: async ({ file }) => {
+        const key = file.objectInfo.key
+        return {
+          // URL publique retournée au client pour générer le QR code
+          metadata: { url: `${process.env.R2_PUBLIC_URL}/${key}` },
+        }
+      },
+    }),
+  },
 }
+
+export const { POST } = toRouteHandler(router)

@@ -1,5 +1,16 @@
-import { compressItinerary, exportItineraryQR } from '@/lib/qr-export'
+import {
+  compressItinerary,
+  exportItineraryQR,
+  getInlineQrUrl,
+  QR_INLINE_LIMIT,
+  uploadItinerary,
+} from '@/lib/qr-export'
 import type { DayItinerary } from '@/lib/itinerary-data'
+import { uploadFile } from '@better-upload/client'
+
+vi.mock('@better-upload/client', () => ({
+  uploadFile: vi.fn(),
+}))
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -54,112 +65,123 @@ function makeLargeItinerary(count: number): DayItinerary[] {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 afterEach(() => {
-  vi.unstubAllGlobals()
+  vi.clearAllMocks()
 })
 
 describe('compressItinerary', () => {
-  it("retourne une chaîne non vide pour un itinéraire d'un seul jour", async () => {
+  it('should return a non-empty string for a single-day itinerary', async () => {
     const result = await compressItinerary([oneDay])
     expect(typeof result).toBe('string')
     expect(result.length).toBeGreaterThan(0)
   })
 
-  it("ne lève pas d'erreur pour un itinéraire vide", async () => {
+  it('should not throw for an empty itinerary', async () => {
     await expect(compressItinerary([])).resolves.toBeDefined()
   })
 })
 
-describe('exportItineraryQR — chemin inline', () => {
-  it('retourne une URI commençant par tripbrain://v1/ quand les données tiennent en inline (≤ 2 000 chars)', async () => {
-    const uri = await exportItineraryQR([oneDay])
-    expect(uri).toMatch(/^tripbrain:\/\/v1\//)
-  })
-
-  it('intègre le payload compressé directement dans la URI', async () => {
-    const compressed = await compressItinerary([oneDay])
-    const uri = await exportItineraryQR([oneDay])
-    expect(uri).toBe(`tripbrain://v1/${compressed}`)
+describe('getInlineQrUrl', () => {
+  it('should return a URL containing /?import= with the compressed payload', () => {
+    const url = getInlineQrUrl('abc123')
+    expect(url).toContain('/?import=abc123')
   })
 })
 
-describe('exportItineraryQR — chemin upload', () => {
-  it('le grand itinéraire (30 jours) dépasse bien 2 000 caractères après compression', async () => {
-    const compressed = await compressItinerary(makeLargeItinerary(30))
-    expect(compressed.length).toBeGreaterThan(2000)
+describe('exportItineraryQR — inline path', () => {
+  it('should return a URL containing /?import= when data fits within 2000 chars', async () => {
+    const uri = await exportItineraryQR([oneDay])
+    expect(uri).toContain('/?import=')
   })
 
-  it('appelle fetch quand les données compressées dépassent 2 000 caractères', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ url: 'https://example.com/trip/abc123' }),
+  it('should embed the compressed payload directly in the URL', async () => {
+    const compressed = await compressItinerary([oneDay])
+    const uri = await exportItineraryQR([oneDay])
+    expect(uri).toBe(`/?import=${compressed}`)
+  })
+})
+
+describe('exportItineraryQR — upload path', () => {
+  it('should exceed 2000 characters when compressing a 30-day itinerary', async () => {
+    const compressed = await compressItinerary(makeLargeItinerary(30))
+    expect(compressed.length).toBeGreaterThan(QR_INLINE_LIMIT)
+  })
+
+  it('should call uploadFile when compressed data exceeds the inline limit', async () => {
+    vi.mocked(uploadFile).mockResolvedValue({
+      metadata: { url: 'https://pub.example.com/exports/1234-itinerary.json' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      file: {} as any,
     })
-    vi.stubGlobal('fetch', fetchMock)
 
     await exportItineraryQR(makeLargeItinerary(30))
 
-    expect(fetchMock).toHaveBeenCalledOnce()
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/upload',
-      expect.objectContaining({ method: 'POST' }),
+    expect(uploadFile).toHaveBeenCalledOnce()
+    expect(uploadFile).toHaveBeenCalledWith(
+      expect.objectContaining({ route: 'json' }),
     )
   })
 
-  it("retourne l'URL du serveur après un upload réussi", async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ url: 'https://cdn.example.com/trip/xyz' }),
-      }),
-    )
+  it('should return the URL from upload metadata after a successful upload', async () => {
+    vi.mocked(uploadFile).mockResolvedValue({
+      metadata: { url: 'https://cdn.example.com/trip/xyz' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      file: {} as any,
+    })
 
     const result = await exportItineraryQR(makeLargeItinerary(30))
     expect(result).toBe('https://cdn.example.com/trip/xyz')
   })
 
-  it('lève une erreur avec le message du serveur en cas de réponse non-OK', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-        json: async () => ({ error: 'Upload non implémenté côté serveur.' }),
-      }),
-    )
+  it('should throw when upload metadata does not contain a URL string', async () => {
+    vi.mocked(uploadFile).mockResolvedValue({
+      metadata: {},
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      file: {} as any,
+    })
 
     await expect(exportItineraryQR(makeLargeItinerary(30))).rejects.toThrow(
-      'Upload non implémenté côté serveur.',
+      'URL de partage invalide',
     )
   })
 
-  it('lève "Erreur inconnue" quand le corps de la réponse d\'erreur ne peut pas être analysé comme JSON', async () => {
-    // response.json() throws → .catch(() => ({ error: 'Erreur inconnue' })) kicks in
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-        json: async () => {
-          throw new SyntaxError('not json')
-        },
-      }),
-    )
+  it('should propagate the error when uploadFile rejects', async () => {
+    vi.mocked(uploadFile).mockRejectedValue(new Error('Network error'))
 
     await expect(exportItineraryQR(makeLargeItinerary(30))).rejects.toThrow(
-      'Erreur inconnue',
+      'Network error',
     )
   })
+})
 
-  it('lève "Téléversement échoué" quand la réponse d\'erreur ne contient pas de champ error', async () => {
-    // response.json() resolves with {} → err.error is undefined → fallback message
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: false,
-        json: async () => ({}),
+describe('uploadItinerary', () => {
+  it('should call uploadFile with the json route and a JSON file', async () => {
+    vi.mocked(uploadFile).mockResolvedValue({
+      metadata: { url: 'https://pub.example.com/exports/1234-itinerary.json' },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      file: {} as any,
+    })
+
+    const url = await uploadItinerary([oneDay])
+
+    expect(uploadFile).toHaveBeenCalledOnce()
+    expect(uploadFile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        route: 'json',
+        file: expect.objectContaining({ name: 'itinerary.json' }),
       }),
     )
+    expect(url).toBe('https://pub.example.com/exports/1234-itinerary.json')
+  })
 
-    await expect(exportItineraryQR(makeLargeItinerary(30))).rejects.toThrow(
-      'Téléversement échoué',
+  it('should throw when the upload result contains no URL in metadata', async () => {
+    vi.mocked(uploadFile).mockResolvedValue({
+      metadata: { someOtherField: 42 },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      file: {} as any,
+    })
+
+    await expect(uploadItinerary([oneDay])).rejects.toThrow(
+      'URL de partage invalide',
     )
   })
 })
