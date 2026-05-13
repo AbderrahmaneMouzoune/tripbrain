@@ -25,7 +25,13 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { downloadICS } from '@/lib/calendar-export'
 import type { DayItinerary } from '@/lib/itinerary-data'
-import { IconFileExport, IconFileImport, IconTrash } from '@tabler/icons-react'
+import { QrExportDialog } from '@/components/qr-export-dialog'
+import {
+  IconFileExport,
+  IconFileImport,
+  IconQrcode,
+  IconTrash,
+} from '@tabler/icons-react'
 import {
   AlertCircle,
   CalendarDays,
@@ -57,6 +63,7 @@ export function ShareDialog({
   onClear,
 }: ShareDialogProps) {
   const [open, setOpen] = useState(false)
+  const [qrOpen, setQrOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadingImport, setLoadingImport] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -121,7 +128,8 @@ export function ShareDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
           <Button variant="ghost" size="icon" title="Partager & données">
@@ -159,7 +167,7 @@ export function ShareDialog({
               </div>
             )}
 
-            {/* Export */}
+            {/* Export JSON */}
             <Button
               variant="outline"
               className="border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3"
@@ -177,6 +185,28 @@ export function ShareDialog({
                 </p>
                 <p className="text-muted-foreground text-xs">
                   Télécharger un fichier JSON de sauvegarde
+                </p>
+              </div>
+            </Button>
+
+            {/* Export QR code */}
+            <Button
+              variant="outline"
+              className="border-border h-auto w-full justify-start gap-3 py-3"
+              onClick={() => {
+                setOpen(false)
+                setQrOpen(true)
+              }}
+            >
+              <span className="bg-primary/10 text-primary inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+                <IconQrcode className="h-4 w-4" />
+              </span>
+              <div className="text-left">
+                <p className="text-foreground text-sm font-medium">
+                  Exporter en QR Code
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  Générer un QR code pour partager l&apos;itinéraire
                 </p>
               </div>
             </Button>
@@ -295,5 +325,12 @@ export function ShareDialog({
         </Tabs>
       </DialogContent>
     </Dialog>
+
+    <QrExportDialog
+      itinerary={itinerary}
+      open={qrOpen}
+      onOpenChange={setQrOpen}
+    />
+    </>
   )
 }

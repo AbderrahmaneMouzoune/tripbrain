@@ -1,0 +1,148 @@
+import { compressItinerary, exportItineraryQR } from '@/lib/qr-export'
+import type { DayItinerary } from '@/lib/itinerary-data'
+
+// ── Fixtures ──────────────────────────────────────────────────────────────────
+
+/** One minimal day — compresses well under 2 000 chars (inline path). */
+const oneDay: DayItinerary = {
+  id: 'day-1',
+  date: '2025-01-01',
+  dayNumber: 1,
+  city: 'Paris',
+  title: 'Arrivée à Paris',
+  activities: [],
+  coordinates: [48.8566, 2.3522],
+}
+
+/**
+ * Build N days with enough varied content so the compressed base64url output
+ * reliably exceeds the 2 000-char inline limit (upload path).
+ * Empirically: 30 days with 3 activities each ≈ 2 828 chars.
+ */
+function makeLargeItinerary(count: number): DayItinerary[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: `day-${i + 1}`,
+    date: '2025-01-01',
+    dayNumber: i + 1,
+    city: `Ville-${i + 1}`,
+    title: `Visite de la ville numéro ${i + 1} avec des activités intéressantes`,
+    notes: `Notes du jour ${i + 1} : beaucoup de choses à faire et à voir dans cette ville.`,
+    activities: [
+      {
+        id: `act-${i}-0`,
+        name: `Musée ${i + 1}`,
+        type: 'visit' as const,
+        description: `Description longue de l'activité ${i + 1}-0 pour tester la compression deflate`,
+      },
+      {
+        id: `act-${i}-1`,
+        name: `Restaurant ${i + 1}`,
+        type: 'food' as const,
+        description: `Description longue de l'activité ${i + 1}-1 avec des informations spécifiques`,
+      },
+      {
+        id: `act-${i}-2`,
+        name: `Transport ${i + 1}`,
+        type: 'transport' as const,
+        description: `Description longue de l'activité ${i + 1}-2 incluant les meilleures pratiques`,
+      },
+    ],
+    coordinates: [48.8 + i * 0.01, 2.3 + i * 0.01] as [number, number],
+  }))
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
+
+describe('compressItinerary', () => {
+  it('returns a non-empty string for a valid single-day itinerary', async () => {
+    const result = await compressItinerary([oneDay])
+    expect(typeof result).toBe('string')
+    expect(result.length).toBeGreaterThan(0)
+  })
+
+  it('does not throw for an empty itinerary', async () => {
+    await expect(compressItinerary([])).resolves.toBeDefined()
+  })
+})
+
+describe('exportItineraryQR — inline path', () => {
+  it('returns a URI starting with tripbrain://v1/ when data fits inline (≤ 2 000 chars)', async () => {
+    const uri = await exportItineraryQR([oneDay])
+    expect(uri).toMatch(/^tripbrain:\/\/v1\//)
+  })
+
+  it('embeds the compressed payload directly in the URI', async () => {
+    const compressed = await compressItinerary([oneDay])
+    const uri = await exportItineraryQR([oneDay])
+    expect(uri).toBe(`tripbrain://v1/${compressed}`)
+  })
+})
+
+describe('exportItineraryQR — upload path', () => {
+  it('calls fetch when compressed data exceeds 2 000 chars', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ url: 'https://example.com/trip/abc123' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await exportItineraryQR(makeLargeItinerary(30))
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/upload',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('returns the URL from the server on successful upload', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ url: 'https://cdn.example.com/trip/xyz' }),
+    }))
+
+    const result = await exportItineraryQR(makeLargeItinerary(30))
+    expect(result).toBe('https://cdn.example.com/trip/xyz')
+  })
+
+  it('throws with the server error message on non-OK response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: 'Upload non implémenté côté serveur.' }),
+    }))
+
+    await expect(exportItineraryQR(makeLargeItinerary(30))).rejects.toThrow(
+      'Upload non implémenté côté serveur.',
+    )
+  })
+
+  it('throws "Erreur inconnue" when the error response body cannot be parsed as JSON', async () => {
+    // response.json() throws → .catch(() => ({ error: 'Erreur inconnue' })) kicks in
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => {
+        throw new SyntaxError('not json')
+      },
+    }))
+
+    await expect(exportItineraryQR(makeLargeItinerary(30))).rejects.toThrow(
+      'Erreur inconnue',
+    )
+  })
+
+  it('throws "Téléversement échoué" when the error response has no error field', async () => {
+    // response.json() resolves with {} → err.error is undefined → fallback message
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({}),
+    }))
+
+    await expect(exportItineraryQR(makeLargeItinerary(30))).rejects.toThrow(
+      'Téléversement échoué',
+    )
+  })
+})
