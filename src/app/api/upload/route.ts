@@ -1,11 +1,3 @@
-// Route API pour l'upload d'itinéraires volumineux vers Cloudflare R2.
-// Variables d'environnement requises :
-//   R2_ACCOUNT_ID        – Identifiant de compte Cloudflare
-//   R2_ACCESS_KEY_ID     – Clé d'accès R2
-//   R2_SECRET_ACCESS_KEY – Clé secrète R2
-//   R2_BUCKET_NAME       – Nom du bucket R2
-//   R2_PUBLIC_URL        – URL publique du bucket (ex: https://pub-xxx.r2.dev)
-
 import { route, type Router } from '@better-upload/server'
 import { toRouteHandler } from '@better-upload/server/adapters/next'
 import { cloudflare } from '@better-upload/server/clients'
