@@ -11,20 +11,30 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { IconTrash } from '@tabler/icons-react'
+import type { VariantProps } from 'class-variance-authority'
+
+type ButtonVariant = NonNullable<
+  VariantProps<typeof buttonVariants>['variant']
+>
 
 interface ResetConfirmDialogProps {
   onConfirm: () => Promise<void>
+  actionVariant?: ButtonVariant
 }
 
-export function ResetConfirmDialog({ onConfirm }: ResetConfirmDialogProps) {
+export function ResetConfirmDialog({
+  onConfirm,
+  actionVariant = 'destructive',
+}: ResetConfirmDialogProps) {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
         <Button
           variant="outline"
-          className="border-border h-auto w-full justify-start gap-3 py-3"
+          className="h-auto w-full justify-start gap-3 py-3"
         >
           <span className="bg-destructive text-destructive-foreground inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
             <IconTrash className="h-4 w-4" stroke={1.9} />
@@ -48,7 +58,7 @@ export function ResetConfirmDialog({ onConfirm }: ResetConfirmDialogProps) {
         <AlertDialogFooter>
           <AlertDialogCancel>Annuler</AlertDialogCancel>
           <AlertDialogAction
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className={cn(buttonVariants({ variant: actionVariant }))}
             onClick={onConfirm}
           >
             Réinitialiser

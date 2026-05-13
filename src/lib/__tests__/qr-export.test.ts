@@ -117,7 +117,7 @@ describe('exportItineraryQR — upload path', () => {
 
     expect(uploadFile).toHaveBeenCalledOnce()
     expect(uploadFile).toHaveBeenCalledWith(
-      expect.objectContaining({ route: 'json' }),
+      expect.objectContaining({ route: 'itinerary-export' }),
     )
   })
 
@@ -154,26 +154,27 @@ describe('exportItineraryQR — upload path', () => {
 })
 
 describe('uploadItinerary', () => {
-  it('should call uploadFile with the json route and a JSON file', async () => {
+  it('should call uploadFile with the itinerary-export route and a JSON file', async () => {
     vi.mocked(uploadFile).mockResolvedValue({
       metadata: { url: 'https://pub.example.com/exports/1234-itinerary.json' },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       file: {} as any,
     })
 
-    const url = await uploadItinerary([oneDay])
+    const compressed = await compressItinerary([oneDay])
+    const url = await uploadItinerary(compressed)
 
     expect(uploadFile).toHaveBeenCalledOnce()
     expect(uploadFile).toHaveBeenCalledWith(
       expect.objectContaining({
-        route: 'json',
+        route: 'itinerary-export',
         file: expect.objectContaining({ name: 'itinerary.json' }),
       }),
     )
     expect(url).toBe('https://pub.example.com/exports/1234-itinerary.json')
   })
 
-  it('should upload the itinerary compressed with the same msgpack+deflate pipeline as the inline path', async () => {
+  it('should upload a JSON file containing the compressed payload', async () => {
     let capturedFile: File | undefined
     vi.mocked(uploadFile).mockImplementation(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -188,7 +189,7 @@ describe('uploadItinerary', () => {
     )
 
     const compressed = await compressItinerary([oneDay])
-    await uploadItinerary([oneDay])
+    await uploadItinerary(compressed)
 
     const content = JSON.parse(await capturedFile!.text())
     expect(content.data).toBe(compressed)
@@ -201,7 +202,8 @@ describe('uploadItinerary', () => {
       file: {} as any,
     })
 
-    await expect(uploadItinerary([oneDay])).rejects.toThrow(
+    const compressed = await compressItinerary([oneDay])
+    await expect(uploadItinerary(compressed)).rejects.toThrow(
       'URL de partage invalide',
     )
   })

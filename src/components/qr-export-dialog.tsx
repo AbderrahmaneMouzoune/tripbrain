@@ -35,7 +35,7 @@ interface QrExportDialogProps {
 type QrExportState =
   | { status: 'loading' }
   | { status: 'ready'; qrValue: string }
-  | { status: 'needs-upload' }
+  | { status: 'needs-upload'; compressed: string }
   | { status: 'uploading' }
   | { status: 'error'; message: string }
 
@@ -59,7 +59,7 @@ export function QrExportDialog({
         if (compressed.length <= QR_INLINE_LIMIT) {
           setState({ status: 'ready', qrValue: getInlineQrUrl(compressed) })
         } else {
-          setState({ status: 'needs-upload' })
+          setState({ status: 'needs-upload', compressed })
         }
       })
       .catch((err) => {
@@ -74,9 +74,11 @@ export function QrExportDialog({
   }, [open, itinerary, revision])
 
   const handleUpload = useCallback(async () => {
+    if (state.status !== 'needs-upload') return
+    const { compressed } = state
     setState({ status: 'uploading' })
     try {
-      const url = await uploadItinerary(itinerary)
+      const url = await uploadItinerary(compressed)
       setState({ status: 'ready', qrValue: url })
     } catch (err) {
       setState({
@@ -87,7 +89,7 @@ export function QrExportDialog({
             : 'Erreur lors du téléversement',
       })
     }
-  }, [itinerary])
+  }, [state])
 
   const handleDownload = useCallback(() => {
     const canvas = document.querySelector(

@@ -36,21 +36,17 @@ export function getInlineQrUrl(compressed: string): string {
 }
 
 /**
- * Uploade l'itinéraire vers R2 via better-upload et retourne l'URL publique.
- * Les données sont compressées avec le même pipeline que le chemin inline
- * (msgpack + deflate + base64url) avant l'upload.
+ * Uploade les données compressées vers R2 via better-upload et retourne l'URL publique.
+ * Accepte le même paramètre que getInlineQrUrl — la compression n'est faite qu'une seule fois.
  */
-export async function uploadItinerary(
-  itinerary: DayItinerary[],
-): Promise<string> {
-  const compressed = await compressItinerary(itinerary)
+export async function uploadItinerary(compressed: string): Promise<string> {
   const payload = JSON.stringify({ data: compressed })
   const blob = new Blob([payload], { type: 'application/json' })
   const file = new File([blob], 'itinerary.json', {
     type: 'application/json',
   })
 
-  const result = await uploadFile({ route: 'json', file })
+  const result = await uploadFile({ route: 'itinerary-export', file })
 
   const url = result.metadata.url
   if (typeof url !== 'string') {
@@ -63,6 +59,7 @@ export async function uploadItinerary(
  * Exporte l'itinéraire en valeur QR code :
  * - inline si les données compressées tiennent sous QR_INLINE_LIMIT chars
  * - sinon, upload vers R2 et retour de l'URL publique
+ * La compression n'est effectuée qu'une seule fois dans les deux cas.
  */
 export async function exportItineraryQR(
   itinerary: DayItinerary[],
@@ -73,5 +70,5 @@ export async function exportItineraryQR(
     return getInlineQrUrl(compressed)
   }
 
-  return uploadItinerary(itinerary)
+  return uploadItinerary(compressed)
 }

@@ -18,7 +18,7 @@ const router: Router = {
   }),
   bucketName: process.env.R2_BUCKET_NAME!,
   routes: {
-    json: route({
+    'itinerary-export': route({
       fileTypes: ['application/json'],
       maxFileSize: 1024 * 1024, // 1 Mo max
       signedUrlExpiresIn: 600, // URL d'upload valide 10 minutes
