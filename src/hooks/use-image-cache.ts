@@ -194,7 +194,10 @@ export function useImageCache(
     const localObjectUrls: string[] = []
 
     async function run() {
-      async function getBlobFromOpenDB(db: IDBDatabase, url: string): Promise<Blob | undefined> {
+      async function getBlobFromOpenDB(
+        db: IDBDatabase,
+        url: string,
+      ): Promise<Blob | undefined> {
         return new Promise((resolve, reject) => {
           const tx = db.transaction(IMAGE_STORE_NAME, 'readonly')
           const store = tx.objectStore(IMAGE_STORE_NAME)
@@ -205,7 +208,10 @@ export function useImageCache(
         })
       }
 
-      async function processReadQueue(db: IDBDatabase, queue: string[]): Promise<void> {
+      async function processReadQueue(
+        db: IDBDatabase,
+        queue: string[],
+      ): Promise<void> {
         if (cancelled || queue.length === 0) return
 
         const batch = queue.splice(0, CONCURRENCY)
@@ -220,7 +226,7 @@ export function useImageCache(
             } else {
               initStatuses[url] = 'pending'
             }
-          })
+          }),
         )
 
         return processReadQueue(db, queue)
@@ -282,11 +288,11 @@ export function useImageCache(
         URL.revokeObjectURL(objectUrl)
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  // `currentDayIndex` is intentionally excluded: it only sets initial download
-  // priority order. Including it would cancel all in-flight downloads and restart
-  // from scratch on every day navigation — wasteful overhead. Priority is captured
-  // via `currentDayRef.current` at the moment the itinerary first loads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `currentDayIndex` is intentionally excluded: it only sets initial download
+    // priority order. Including it would cancel all in-flight downloads and restart
+    // from scratch on every day navigation — wasteful overhead. Priority is captured
+    // via `currentDayRef.current` at the moment the itinerary first loads.
   }, [itinerary])
 
   // ── Retry effect ─────────────────────────────────────────────────────────────
@@ -345,7 +351,7 @@ export function useImageCache(
         URL.revokeObjectURL(objectUrl)
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryKey])
 
   const retryErrors = useCallback(() => {
@@ -396,7 +402,7 @@ export function useImageCache(
         URL.revokeObjectURL(objectUrl)
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [singleRetryTarget])
 
   const retrySingle = useCallback((url: string) => {

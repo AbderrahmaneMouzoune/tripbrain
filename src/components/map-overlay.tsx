@@ -215,8 +215,8 @@ export function MapOverlay({
 
       if (cancelled || !mapRef.current || mapInstanceRef.current) return
 
-      const initialCoords: [number, number] =
-        itinerary[selectedDay]?.coordinates ?? [40.5, 65]
+      const initialCoords: [number, number] = itinerary[selectedDay]
+        ?.coordinates ?? [40.5, 65]
 
       const map = L.map(mapRef.current, {
         center: initialCoords,
@@ -452,7 +452,11 @@ export function MapOverlay({
     const chip = chipListRef.current.querySelector<HTMLElement>(
       '[data-active="true"]',
     )
-    chip?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    chip?.scrollIntoView({
+      behavior: 'smooth',
+      inline: 'center',
+      block: 'nearest',
+    })
   }, [activeDay])
 
   // ── event handlers ─────────────────────────────────────────────────────────
@@ -483,10 +487,7 @@ export function MapOverlay({
 
   const currentDay = itinerary[activeDay]
   const shownActivities = currentDay?.activities.slice(0, 3) ?? []
-  const extraActivities = Math.max(
-    0,
-    (currentDay?.activities.length ?? 0) - 3,
-  )
+  const extraActivities = Math.max(0, (currentDay?.activities.length ?? 0) - 3)
 
   const shortDateLabel = currentDay
     ? new Date(currentDay.date).toLocaleDateString('fr-FR', {
@@ -525,7 +526,7 @@ export function MapOverlay({
               'rounded-full',
               viewMode === 'global'
                 ? 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm'
-                : 'border-border bg-muted text-muted-foreground border hover:bg-muted/80',
+                : 'border-border bg-muted text-muted-foreground hover:bg-muted/80 border',
             )}
           >
             <IconMap2 className="h-3.5 w-3.5" />
@@ -538,7 +539,7 @@ export function MapOverlay({
               'rounded-full',
               viewMode === 'day'
                 ? 'bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm'
-                : 'border-border bg-muted text-muted-foreground border hover:bg-muted/80',
+                : 'border-border bg-muted text-muted-foreground hover:bg-muted/80 border',
             )}
           >
             <IconMapPin className="h-3.5 w-3.5" />
@@ -575,7 +576,7 @@ export function MapOverlay({
             {/* Horizontal scrollable day chip selector */}
             <div
               ref={chipListRef}
-              className="flex gap-2 overflow-x-auto px-4 py-2 snap-x snap-mandatory [scrollbar-width:none]"
+              className="flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 py-2 [scrollbar-width:none]"
             >
               {itinerary.map((day, index) => {
                 const isActive = activeDay === index
@@ -586,7 +587,7 @@ export function MapOverlay({
                     data-active={isActive ? 'true' : 'false'}
                     onClick={() => handleChipClick(index)}
                     className={cn(
-                      'flex shrink-0 flex-col items-center rounded-xl border px-3 py-2 snap-center transition-colors',
+                      'flex shrink-0 snap-center flex-col items-center rounded-xl border px-3 py-2 transition-colors',
                       isActive
                         ? 'border-primary bg-card shadow-sm'
                         : 'border-border bg-muted/50 hover:bg-muted',
@@ -594,7 +595,7 @@ export function MapOverlay({
                   >
                     <span
                       className={cn(
-                        'text-sm font-bold leading-none',
+                        'text-sm leading-none font-bold',
                         isActive ? 'text-secondary' : 'text-muted-foreground',
                       )}
                     >
@@ -665,7 +666,7 @@ export function MapOverlay({
             {currentDay && (
               <div className="flex items-start justify-between px-3 py-2">
                 <div className="min-w-0 flex-1">
-                  <p className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
+                  <p className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">
                     Jour {currentDay.dayNumber} · {currentDay.city}
                   </p>
                   <p className="text-foreground mt-0.5 truncate text-sm font-semibold">
@@ -688,7 +689,10 @@ export function MapOverlay({
                   const emoji = ACTIVITY_EMOJI[activity.type] ?? '📍'
                   const label = ACTIVITY_LABEL[activity.type] ?? activity.type
                   return (
-                    <li key={activity.id} className="flex items-center gap-2 py-0.5">
+                    <li
+                      key={activity.id}
+                      className="flex items-center gap-2 py-0.5"
+                    >
                       <span className="text-sm leading-none">{emoji}</span>
                       <span className="text-foreground min-w-0 flex-1 truncate text-xs">
                         {activity.name}
@@ -706,7 +710,8 @@ export function MapOverlay({
                 })}
                 {extraActivities > 0 && (
                   <li className="text-muted-foreground py-0.5 text-[10px]">
-                    +{extraActivities} autre{extraActivities > 1 ? 's' : ''} activité
+                    +{extraActivities} autre{extraActivities > 1 ? 's' : ''}{' '}
+                    activité
                     {extraActivities > 1 ? 's' : ''}
                   </li>
                 )}

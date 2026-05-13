@@ -5,7 +5,7 @@
 
 import { NextResponse } from 'next/server'
 
-export async function POST() {
+export async function POST(_request: Request) {
   // Check if upload is configured
   if (!process.env.UPLOAD_API_KEY || !process.env.UPLOAD_BUCKET_URL) {
     return NextResponse.json(

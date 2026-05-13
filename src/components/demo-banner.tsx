@@ -9,7 +9,7 @@ interface DemoBannerProps {
 
 export function DemoBanner({ onQuitDemo }: DemoBannerProps) {
   return (
-    <div className="bg-amber-500/15 border-amber-500/40 text-amber-900 dark:text-amber-200 border-b px-4 py-2">
+    <div className="border-b border-amber-500/40 bg-amber-500/15 px-4 py-2 text-amber-900 dark:text-amber-200">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -21,7 +21,7 @@ export function DemoBanner({ onQuitDemo }: DemoBannerProps) {
           variant="outline"
           size="sm"
           onClick={onQuitDemo}
-          className="border-amber-500/50 hover:bg-amber-500/20 text-amber-900 dark:text-amber-200 h-7 shrink-0 gap-1 text-xs"
+          className="h-7 shrink-0 gap-1 border-amber-500/50 text-xs text-amber-900 hover:bg-amber-500/20 dark:text-amber-200"
         >
           <X className="h-3.5 w-3.5" />
           <span className="hidden sm:inline">Quitter la démo</span>

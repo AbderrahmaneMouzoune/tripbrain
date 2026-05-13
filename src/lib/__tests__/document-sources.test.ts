@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  SOURCE_CATEGORIES,
-  CATEGORY_COLOR_CLASSES,
-} from '../document-sources'
+import { SOURCE_CATEGORIES, CATEGORY_COLOR_CLASSES } from '../document-sources'
 
 describe('SOURCE_CATEGORIES', () => {
   it('is a non-empty array', () => {
@@ -51,7 +48,9 @@ describe('SOURCE_CATEGORIES', () => {
   })
 
   it('includes a Réservations category', () => {
-    const reservations = SOURCE_CATEGORIES.find((c) => c.label === 'Réservations')
+    const reservations = SOURCE_CATEGORIES.find(
+      (c) => c.label === 'Réservations',
+    )
     expect(reservations).toBeDefined()
   })
 
@@ -61,7 +60,9 @@ describe('SOURCE_CATEGORIES', () => {
   })
 
   it('source names are unique across all categories', () => {
-    const allNames = SOURCE_CATEGORIES.flatMap((c) => c.items.map((s) => s.name))
+    const allNames = SOURCE_CATEGORIES.flatMap((c) =>
+      c.items.map((s) => s.name),
+    )
     const uniqueNames = new Set(allNames)
     expect(uniqueNames.size).toBe(allNames.length)
   })

@@ -61,10 +61,17 @@ function ImageRowActions({
   onRetry: (url: string) => void
 }) {
   if (status === 'cached') {
-    return <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" strokeWidth={1.75} />
+    return (
+      <CheckCircle2
+        className="h-4 w-4 shrink-0 text-emerald-500"
+        strokeWidth={1.75}
+      />
+    )
   }
   if (status === 'downloading' || status === 'pending') {
-    return <RefreshCw className="text-muted-foreground h-4 w-4 shrink-0 animate-spin" />
+    return (
+      <RefreshCw className="text-muted-foreground h-4 w-4 shrink-0 animate-spin" />
+    )
   }
   return (
     <Button
@@ -103,7 +110,8 @@ export function CacheStatusBadge() {
   const allCached = stats.cached === stats.total && stats.error === 0
   // Only show the error state when no download is in progress
   const hasErrors = stats.error > 0 && !isActive
-  const progress = stats.total > 0 ? Math.round((stats.cached / stats.total) * 100) : 0
+  const progress =
+    stats.total > 0 ? Math.round((stats.cached / stats.total) * 100) : 0
 
   // Keep the retrying spinner on until the retry actually finishes.
   // Phase 1 (isActive=true)  → record that downloads started.
@@ -152,7 +160,7 @@ export function CacheStatusBadge() {
       <Button
         variant="ghost"
         size="icon"
-        className="text-emerald-500 hover:text-emerald-500 h-8 w-8"
+        className="h-8 w-8 text-emerald-500 hover:text-emerald-500"
         aria-label="Images disponibles hors ligne"
       >
         <WifiOff className="h-4 w-4" strokeWidth={1.75} />
@@ -161,7 +169,10 @@ export function CacheStatusBadge() {
     popoverContent = (
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" strokeWidth={1.75} />
+          <CheckCircle2
+            className="h-4 w-4 shrink-0 text-emerald-500"
+            strokeWidth={1.75}
+          />
           <p className="text-sm font-semibold">Images disponibles hors ligne</p>
         </div>
         <p className="text-muted-foreground text-xs leading-relaxed">
@@ -187,7 +198,10 @@ export function CacheStatusBadge() {
     popoverContent = (
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <CloudDownload className="text-muted-foreground h-4 w-4 shrink-0 animate-pulse" strokeWidth={1.75} />
+          <CloudDownload
+            className="text-muted-foreground h-4 w-4 shrink-0 animate-pulse"
+            strokeWidth={1.75}
+          />
           <p className="text-sm font-semibold">Mise en cache des images…</p>
         </div>
         <p className="text-muted-foreground text-xs leading-relaxed">
@@ -210,7 +224,7 @@ export function CacheStatusBadge() {
       <Button
         variant="ghost"
         size="icon"
-        className="text-amber-500 hover:text-amber-500 h-8 w-8"
+        className="h-8 w-8 text-amber-500 hover:text-amber-500"
         aria-label={`${stats.error} image(s) non disponibles hors ligne`}
       >
         <AlertCircle className="h-4 w-4" strokeWidth={1.75} />
@@ -219,19 +233,23 @@ export function CacheStatusBadge() {
     popoverContent = (
       <div className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" strokeWidth={1.75} />
+          <AlertCircle
+            className="h-4 w-4 shrink-0 text-amber-500"
+            strokeWidth={1.75}
+          />
           <p className="text-sm font-semibold">Mise en cache partielle</p>
         </div>
         <p className="text-muted-foreground text-xs leading-relaxed">
-          {stats.error} image{stats.error > 1 ? 's' : ''} n&apos;ont pas pu
-          être téléchargées. Elles s&apos;afficheront si vous êtes connecté.
+          {stats.error} image{stats.error > 1 ? 's' : ''} n&apos;ont pas pu être
+          téléchargées. Elles s&apos;afficheront si vous êtes connecté.
         </p>
         <div className="flex flex-col gap-1.5">
           <Progress value={progress} className="h-1.5" />
           <p className="text-muted-foreground text-xs">
             {stats.cached} / {stats.total} images en cache
             <span className="text-amber-500">
-              {' '}— {stats.error} erreur{stats.error > 1 ? 's' : ''}
+              {' '}
+              — {stats.error} erreur{stats.error > 1 ? 's' : ''}
             </span>
           </p>
         </div>
@@ -282,16 +300,19 @@ export function CacheStatusBadge() {
           <DialogContent className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-xl">
             <DialogHeader className="border-b px-6 py-4">
               <DialogTitle className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" strokeWidth={1.75} />
+                <AlertCircle
+                  className="h-4 w-4 shrink-0 text-amber-500"
+                  strokeWidth={1.75}
+                />
                 Images non disponibles
               </DialogTitle>
               <DialogDescription>
-                {stats.error} image{stats.error > 1 ? 's' : ''} n&apos;ont pas pu être
-                téléchargées. Vérifiez votre connexion, puis réessayez.
+                {stats.error} image{stats.error > 1 ? 's' : ''} n&apos;ont pas
+                pu être téléchargées. Vérifiez votre connexion, puis réessayez.
               </DialogDescription>
             </DialogHeader>
 
-            <ul className="flex-1 overflow-y-auto divide-y px-6">
+            <ul className="flex-1 divide-y overflow-y-auto px-6">
               {dialogUrls.map((url) => {
                 const status = statuses[url] ?? 'error'
                 return (
@@ -331,7 +352,9 @@ export function CacheStatusBadge() {
                   retryErrors()
                 }}
               >
-                <RefreshCw className={`h-4 w-4 ${retrying ? 'animate-spin' : ''}`} />
+                <RefreshCw
+                  className={`h-4 w-4 ${retrying ? 'animate-spin' : ''}`}
+                />
                 {retrying ? 'Reprise…' : 'Réessayer tout'}
               </Button>
             </DialogFooter>

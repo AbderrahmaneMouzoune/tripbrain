@@ -14,19 +14,20 @@ function toBase64Url(bytes: Uint8Array): string {
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i])
   }
-  return btoa(binary)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '')
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
 
-export async function compressItinerary(itinerary: DayItinerary[]): Promise<string> {
+export async function compressItinerary(
+  itinerary: DayItinerary[],
+): Promise<string> {
   const packed = encode(itinerary)
   const compressed = deflateSync(packed, { level: 9 })
   return toBase64Url(compressed)
 }
 
-export async function exportItineraryQR(itinerary: DayItinerary[]): Promise<string> {
+export async function exportItineraryQR(
+  itinerary: DayItinerary[],
+): Promise<string> {
   const compressed = await compressItinerary(itinerary)
 
   if (compressed.length <= QR_INLINE_LIMIT) {
@@ -42,10 +43,19 @@ export async function exportItineraryQR(itinerary: DayItinerary[]): Promise<stri
   })
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Erreur inconnue' }))
+    const err = await response
+      .json()
+      .catch(() => ({ error: 'Erreur inconnue' }))
     throw new Error(err.error || 'Téléversement échoué')
   }
 
-  const result = await response.json()
-  return result.url
+  const result: unknown = await response.json()
+  if (
+    typeof result !== 'object' ||
+    result === null ||
+    typeof (result as Record<string, unknown>).url !== 'string'
+  ) {
+    throw new Error('Réponse serveur invalide')
+  }
+  return (result as { url: string }).url
 }

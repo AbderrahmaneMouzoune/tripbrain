@@ -58,32 +58,37 @@ afterEach(() => {
 })
 
 describe('compressItinerary', () => {
-  it('returns a non-empty string for a valid single-day itinerary', async () => {
+  it("retourne une chaîne non vide pour un itinéraire d'un seul jour", async () => {
     const result = await compressItinerary([oneDay])
     expect(typeof result).toBe('string')
     expect(result.length).toBeGreaterThan(0)
   })
 
-  it('does not throw for an empty itinerary', async () => {
+  it("ne lève pas d'erreur pour un itinéraire vide", async () => {
     await expect(compressItinerary([])).resolves.toBeDefined()
   })
 })
 
-describe('exportItineraryQR — inline path', () => {
-  it('returns a URI starting with tripbrain://v1/ when data fits inline (≤ 2 000 chars)', async () => {
+describe('exportItineraryQR — chemin inline', () => {
+  it('retourne une URI commençant par tripbrain://v1/ quand les données tiennent en inline (≤ 2 000 chars)', async () => {
     const uri = await exportItineraryQR([oneDay])
     expect(uri).toMatch(/^tripbrain:\/\/v1\//)
   })
 
-  it('embeds the compressed payload directly in the URI', async () => {
+  it('intègre le payload compressé directement dans la URI', async () => {
     const compressed = await compressItinerary([oneDay])
     const uri = await exportItineraryQR([oneDay])
     expect(uri).toBe(`tripbrain://v1/${compressed}`)
   })
 })
 
-describe('exportItineraryQR — upload path', () => {
-  it('calls fetch when compressed data exceeds 2 000 chars', async () => {
+describe('exportItineraryQR — chemin upload', () => {
+  it('le grand itinéraire (30 jours) dépasse bien 2 000 caractères après compression', async () => {
+    const compressed = await compressItinerary(makeLargeItinerary(30))
+    expect(compressed.length).toBeGreaterThan(2000)
+  })
+
+  it('appelle fetch quand les données compressées dépassent 2 000 caractères', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ url: 'https://example.com/trip/abc123' }),
@@ -99,47 +104,59 @@ describe('exportItineraryQR — upload path', () => {
     )
   })
 
-  it('returns the URL from the server on successful upload', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ url: 'https://cdn.example.com/trip/xyz' }),
-    }))
+  it("retourne l'URL du serveur après un upload réussi", async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ url: 'https://cdn.example.com/trip/xyz' }),
+      }),
+    )
 
     const result = await exportItineraryQR(makeLargeItinerary(30))
     expect(result).toBe('https://cdn.example.com/trip/xyz')
   })
 
-  it('throws with the server error message on non-OK response', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      json: async () => ({ error: 'Upload non implémenté côté serveur.' }),
-    }))
+  it('lève une erreur avec le message du serveur en cas de réponse non-OK', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'Upload non implémenté côté serveur.' }),
+      }),
+    )
 
     await expect(exportItineraryQR(makeLargeItinerary(30))).rejects.toThrow(
       'Upload non implémenté côté serveur.',
     )
   })
 
-  it('throws "Erreur inconnue" when the error response body cannot be parsed as JSON', async () => {
+  it('lève "Erreur inconnue" quand le corps de la réponse d\'erreur ne peut pas être analysé comme JSON', async () => {
     // response.json() throws → .catch(() => ({ error: 'Erreur inconnue' })) kicks in
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      json: async () => {
-        throw new SyntaxError('not json')
-      },
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => {
+          throw new SyntaxError('not json')
+        },
+      }),
+    )
 
     await expect(exportItineraryQR(makeLargeItinerary(30))).rejects.toThrow(
       'Erreur inconnue',
     )
   })
 
-  it('throws "Téléversement échoué" when the error response has no error field', async () => {
+  it('lève "Téléversement échoué" quand la réponse d\'erreur ne contient pas de champ error', async () => {
     // response.json() resolves with {} → err.error is undefined → fallback message
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      json: async () => ({}),
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({}),
+      }),
+    )
 
     await expect(exportItineraryQR(makeLargeItinerary(30))).rejects.toThrow(
       'Téléversement échoué',

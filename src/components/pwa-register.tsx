@@ -11,7 +11,7 @@ export function PWARegister() {
         },
         (error) => {
           console.log('Service Worker registration failed:', error)
-        }
+        },
       )
     }
   }, [])

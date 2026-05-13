@@ -63,7 +63,9 @@ export function QrExportDialog({
     const a = document.createElement('a')
     a.href = url
     a.download = 'tripbrain-qrcode.png'
+    document.body.appendChild(a)
     a.click()
+    document.body.removeChild(a)
   }, [])
 
   const handleOpenChange = (newOpen: boolean) => {

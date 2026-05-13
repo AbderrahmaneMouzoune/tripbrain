@@ -16,7 +16,10 @@ export function createPwaIconImageResponse(size: number, iconRatio = 0.7) {
         background: PWA_ICON_BACKGROUND,
       }}
     >
-      <AppIconImage size={Math.round(size * iconRatio)} shadow={PWA_ICON_SHADOW} />
+      <AppIconImage
+        size={Math.round(size * iconRatio)}
+        shadow={PWA_ICON_SHADOW}
+      />
     </div>,
     {
       width: size,
