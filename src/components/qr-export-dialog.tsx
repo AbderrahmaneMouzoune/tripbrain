@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -31,7 +32,7 @@ interface QrExportDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-type State =
+type QrExportState =
   | { status: 'loading' }
   | { status: 'ready'; qrValue: string }
   | { status: 'needs-upload' }
@@ -43,7 +44,7 @@ export function QrExportDialog({
   open,
   onOpenChange,
 }: QrExportDialogProps) {
-  const [state, setState] = useState<State>({ status: 'loading' })
+  const [state, setState] = useState<QrExportState>({ status: 'loading' })
   const [revision, setRevision] = useState(0)
 
   // À l'ouverture, vérifie si l'inline suffit ou si un upload est nécessaire.
@@ -115,9 +116,10 @@ export function QrExportDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col items-center gap-4 py-2">
+        {/* min-h stable pour éviter le layout shift entre les états */}
+        <div className="flex min-h-[22rem] flex-col items-center justify-center gap-4 py-2">
           {(state.status === 'loading' || state.status === 'uploading') && (
-            <div className="flex flex-col items-center gap-3 py-4">
+            <div className="flex flex-col items-center gap-3">
               <div className="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
               <p className="text-muted-foreground text-sm">
                 {state.status === 'loading'
@@ -128,21 +130,21 @@ export function QrExportDialog({
           )}
 
           {state.status === 'needs-upload' && (
-            <>
-              <div className="bg-warning/10 text-warning flex w-full items-start gap-2 rounded-lg px-4 py-3 text-sm">
-                <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
+            <div className="flex w-full flex-col gap-4">
+              <Alert variant="warning">
+                <IconAlertTriangle className="h-4 w-4" />
+                <AlertDescription>
                   Votre itinéraire est trop volumineux pour être intégré
                   directement dans un QR code. Les données seront téléversées
                   sur le web dans une URL temporaire valide{' '}
                   <strong>10&nbsp;minutes</strong>.
-                </span>
-              </div>
+                </AlertDescription>
+              </Alert>
               <Button onClick={handleUpload} className="w-full gap-2">
                 <IconCloudUpload className="h-4 w-4" />
                 Téléverser et générer le QR Code
               </Button>
-            </>
+            </div>
           )}
 
           {state.status === 'ready' && (
@@ -177,11 +179,11 @@ export function QrExportDialog({
           )}
 
           {state.status === 'error' && (
-            <>
-              <div className="bg-destructive/10 text-destructive flex w-full items-start gap-2 rounded-lg px-4 py-3 text-sm">
-                <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{state.message}</span>
-              </div>
+            <div className="flex w-full flex-col gap-4">
+              <Alert variant="destructive">
+                <IconAlertTriangle className="h-4 w-4" />
+                <AlertDescription>{state.message}</AlertDescription>
+              </Alert>
               <Button
                 variant="outline"
                 onClick={() => setRevision((r) => r + 1)}
@@ -190,7 +192,7 @@ export function QrExportDialog({
                 <IconRefresh className="h-4 w-4" />
                 Réessayer
               </Button>
-            </>
+            </div>
           )}
         </div>
       </DialogContent>

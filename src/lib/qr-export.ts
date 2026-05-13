@@ -37,13 +37,15 @@ export function getInlineQrUrl(compressed: string): string {
 
 /**
  * Uploade l'itinéraire vers R2 via better-upload et retourne l'URL publique.
- * L'URL est valide tant que le fichier est présent dans le bucket.
+ * Les données sont compressées avec le même pipeline que le chemin inline
+ * (msgpack + deflate + base64url) avant l'upload.
  */
 export async function uploadItinerary(
   itinerary: DayItinerary[],
 ): Promise<string> {
-  const json = JSON.stringify(itinerary)
-  const blob = new Blob([json], { type: 'application/json' })
+  const compressed = await compressItinerary(itinerary)
+  const payload = JSON.stringify({ data: compressed })
+  const blob = new Blob([payload], { type: 'application/json' })
   const file = new File([blob], 'itinerary.json', {
     type: 'application/json',
   })

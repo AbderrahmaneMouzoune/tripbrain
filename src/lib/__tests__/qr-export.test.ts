@@ -173,6 +173,27 @@ describe('uploadItinerary', () => {
     expect(url).toBe('https://pub.example.com/exports/1234-itinerary.json')
   })
 
+  it('should upload the itinerary compressed with the same msgpack+deflate pipeline as the inline path', async () => {
+    let capturedFile: File | undefined
+    vi.mocked(uploadFile).mockImplementation(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async ({ file }: { route: string; file: File }) => {
+        capturedFile = file
+        return {
+          metadata: { url: 'https://pub.example.com/exports/1234.json' },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          file: {} as any,
+        }
+      },
+    )
+
+    const compressed = await compressItinerary([oneDay])
+    await uploadItinerary([oneDay])
+
+    const content = JSON.parse(await capturedFile!.text())
+    expect(content.data).toBe(compressed)
+  })
+
   it('should throw when the upload result contains no URL in metadata', async () => {
     vi.mocked(uploadFile).mockResolvedValue({
       metadata: { someOtherField: 42 },
