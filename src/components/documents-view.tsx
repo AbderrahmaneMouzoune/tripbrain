@@ -28,6 +28,7 @@ import {
   PackagePlus,
   Loader2,
 } from 'lucide-react'
+import { IconFilePlus } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -702,43 +703,54 @@ export function DocumentsView() {
 
       {/* Export / Import actions */}
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          disabled={files.length === 0 || exportProgress?.status === 'preparing'}
-          onClick={handleExportAll}
-        >
-          {exportProgress?.status === 'preparing' ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <PackageOpen className="h-4 w-4" />
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={files.length === 0 || exportProgress?.status === 'preparing'}
+            onClick={handleExportAll}
+          >
+            {exportProgress?.status === 'preparing' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <PackageOpen className="h-4 w-4" />
+            )}
+            Exporter tous mes documents
+          </Button>
+          {exportProgress?.status === 'done' && (
+            <span className="text-xs font-medium text-green-600 dark:text-green-400">
+              ✓ Export terminé
+            </span>
           )}
-          {exportProgress?.status === 'done'
-            ? 'Export terminé ✓'
-            : exportProgress?.status === 'preparing'
-              ? 'Export…'
-              : 'Exporter tous mes documents'}
-        </Button>
+        </div>
 
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          disabled={importProgress?.status === 'importing'}
-          onClick={() => importZipInputRef.current?.click()}
-        >
-          {importProgress?.status === 'importing' ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <PackagePlus className="h-4 w-4" />
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={importProgress?.status === 'importing'}
+            onClick={() => importZipInputRef.current?.click()}
+          >
+            {importProgress?.status === 'importing' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <PackagePlus className="h-4 w-4" />
+            )}
+            Importer des documents
+          </Button>
+          {importProgress?.status === 'done' && (
+            <span className="text-xs font-medium text-green-600 dark:text-green-400">
+              ✓ Import terminé
+            </span>
           )}
-          {importProgress?.status === 'importing'
-            ? importProgress.message
-            : importProgress?.status === 'done'
-              ? 'Import terminé ✓'
-              : 'Importer des documents'}
-        </Button>
+          {importProgress?.status === 'importing' && importProgress.message && (
+            <span className="text-muted-foreground text-xs">
+              {importProgress.message}
+            </span>
+          )}
+        </div>
 
         <input
           ref={importZipInputRef}
@@ -925,8 +937,41 @@ export function DocumentsView() {
                   <span className="sr-only">Vue liste</span>
                 </Button>
               </div>
+
+              {/* Add document */}
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <IconFilePlus className="h-4 w-4" />
+                <span className="sr-only">Ajouter des documents</span>
+              </Button>
             </div>
           </div>
+
+          {/* File list */}
+          {/* ---------------------------------------------------------------- */}
+          {/* Add more documents button                                         */}
+          {/* ---------------------------------------------------------------- */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed py-4 text-sm font-medium transition-all ${
+              isDragging
+                ? 'border-primary bg-primary/5 text-primary'
+                : 'border-border/50 text-muted-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary'
+            }`}
+          >
+            <PlusCircle className="h-4 w-4" />
+            {isDragging
+              ? 'Déposez vos fichiers ici'
+              : "Ajouter d'autres documents"}
+          </button>
 
           {/* File list */}
           {filteredAndSorted.length === 0 ? (
@@ -983,27 +1028,6 @@ export function DocumentsView() {
               ))}
             </div>
           )}
-
-          {/* ---------------------------------------------------------------- */}
-          {/* Add more documents button                                         */}
-          {/* ---------------------------------------------------------------- */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragEnter={handleDragEnter}
-            onDragLeave={handleDragLeave}
-            className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed py-4 text-sm font-medium transition-all ${
-              isDragging
-                ? 'border-primary bg-primary/5 text-primary'
-                : 'border-border/50 text-muted-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary'
-            }`}
-          >
-            <PlusCircle className="h-4 w-4" />
-            {isDragging
-              ? 'Déposez vos fichiers ici'
-              : "Ajouter d'autres documents"}
-          </button>
         </>
       )}
     </div>
