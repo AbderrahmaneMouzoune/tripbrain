@@ -104,7 +104,7 @@ export function QrExportDialog({
   const [stepIndex, setStepIndex] = useState(0)
 
   // Anime les étapes de chargement / téléversement — progression linéaire sans boucle :
-  // étape 1 après 150 ms, étape 2 après 200 ms supplémentaires, étape 3 jusqu'à la fin.
+  // étape 1 visible dès le départ, étape 2 à 150 ms, étape 3 à 350 ms (150 + 200) jusqu'à la fin.
   useEffect(() => {
     if (state.status !== 'loading' && state.status !== 'uploading') return
     setStepIndex(0)
@@ -182,14 +182,16 @@ export function QrExportDialog({
       <DialogContent className="sm:max-w-sm">
         {/* Bouton retour — ferme cette dialog et ré-ouvre la précédente */}
         {onNavBack && (
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             aria-label="Retour"
             onClick={handleNavBack}
-            className="ring-offset-background focus:ring-ring absolute top-4 left-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="absolute top-4 left-4 h-7 w-7 opacity-70 hover:opacity-100"
           >
-            <IconArrowLeft />
+            <IconArrowLeft className="h-4 w-4" />
             <span className="sr-only">Retour</span>
-          </button>
+          </Button>
         )}
 
         <DialogHeader className={onNavBack ? 'pl-6' : undefined}>
