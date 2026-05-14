@@ -145,6 +145,7 @@ export function ShareDialog({
         itinerary={itinerary}
         open={qrOpen}
         onOpenChange={setQrOpen}
+        onNavBack={() => setOpen(true)}
       />
     </>
   )

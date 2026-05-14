@@ -6,7 +6,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogHeader,
   DialogTitle,
@@ -14,10 +13,15 @@ import {
 import {
   IconAlertTriangle,
   IconArrowLeft,
+  IconBraces,
   IconCloudUpload,
   IconDownload,
+  IconLink,
+  IconPackage,
   IconQrcode,
   IconRefresh,
+  IconSearch,
+  IconServer,
 } from '@tabler/icons-react'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import {
@@ -30,16 +34,16 @@ import { cn } from '@/lib/utils'
 
 // Étapes affichées pendant la compression locale
 const LOADING_STEPS = [
-  'Analyse de l\u2019itinéraire\u2026',
-  'Encodage des données\u2026',
-  'Compression en cours\u2026',
+  { label: 'Analyse de l\u2019itinéraire\u2026', Icon: IconSearch },
+  { label: 'Encodage des données\u2026', Icon: IconBraces },
+  { label: 'Compression en cours\u2026', Icon: IconPackage },
 ]
 
 // Étapes affichées pendant le téléversement R2
 const UPLOADING_STEPS = [
-  'Connexion au serveur\u2026',
-  'Téléversement des données\u2026',
-  'Génération du lien de partage\u2026',
+  { label: 'Connexion au serveur\u2026', Icon: IconServer },
+  { label: 'Téléversement des données\u2026', Icon: IconCloudUpload },
+  { label: 'Génération du lien de partage\u2026', Icon: IconLink },
 ]
 
 /** Convertit une erreur inconnue en message explicite en français. */
@@ -50,11 +54,20 @@ function toFrenchError(err: unknown, context: 'upload' | 'compress'): string {
       : 'Erreur inconnue lors de la compression.'
   }
   const msg = err.message.toLowerCase()
+  const errType = (err as { type?: string }).type
+
   if (msg.includes('network') || msg.includes('failed to fetch')) {
     return 'Erreur réseau\u00a0: vérifiez votre connexion internet et réessayez.'
   }
-  if (msg.includes('failed to upload') || msg.includes('upload')) {
-    return 'Échec du téléversement. Vérifiez votre connexion et réessayez.'
+  if (
+    msg.includes('failed to upload') ||
+    msg.includes('upload file') ||
+    errType === 's3_upload'
+  ) {
+    return 'Impossible d\u2019envoyer les données vers le serveur de stockage. Vérifiez votre connexion et la configuration R2.'
+  }
+  if (msg.includes('no pre-signed') || msg.includes('pre-signed url')) {
+    return 'Erreur de configuration serveur\u00a0: aucune URL de téléversement n\u2019a été fournie. Vérifiez la configuration R2.'
   }
   if (msg.includes('url de partage invalide')) {
     return 'Le serveur n\u2019a pas retourné d\u2019URL valide. Réessayez dans quelques instants.'
@@ -69,6 +82,8 @@ interface QrExportDialogProps {
   itinerary: DayItinerary[]
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Appelé quand l'utilisateur veut revenir à la dialog précédente */
+  onNavBack?: () => void
 }
 
 type QrExportState =
@@ -82,21 +97,23 @@ export function QrExportDialog({
   itinerary,
   open,
   onOpenChange,
+  onNavBack,
 }: QrExportDialogProps) {
   const [state, setState] = useState<QrExportState>({ status: 'loading' })
   const [revision, setRevision] = useState(0)
   const [stepIndex, setStepIndex] = useState(0)
 
-  // Anime les étapes de chargement / téléversement
+  // Anime les étapes de chargement / téléversement — progression linéaire sans boucle :
+  // étape 1 après 150 ms, étape 2 après 200 ms supplémentaires, étape 3 jusqu'à la fin.
   useEffect(() => {
     if (state.status !== 'loading' && state.status !== 'uploading') return
-    const steps =
-      state.status === 'uploading' ? UPLOADING_STEPS : LOADING_STEPS
     setStepIndex(0)
-    const id = setInterval(() => {
-      setStepIndex((i) => (i + 1) % steps.length)
-    }, 1200)
-    return () => clearInterval(id)
+    const t1 = setTimeout(() => setStepIndex(1), 150)
+    const t2 = setTimeout(() => setStepIndex(2), 350)
+    return () => {
+      clearTimeout(t1)
+      clearTimeout(t2)
+    }
   }, [state.status])
 
   // À l'ouverture, vérifie si l'inline suffit ou si un upload est nécessaire.
@@ -145,26 +162,41 @@ export function QrExportDialog({
     document.body.removeChild(a)
   }, [])
 
+  const handleNavBack = useCallback(() => {
+    onOpenChange(false)
+    onNavBack?.()
+  }, [onOpenChange, onNavBack])
+
   const isLoading = state.status === 'loading' || state.status === 'uploading'
   const activeSteps =
     state.status === 'uploading' ? UPLOADING_STEPS : LOADING_STEPS
 
+  // Taille approximative en Ko du payload compressé (base64url)
+  const compressedSizeKb =
+    state.status === 'needs-upload'
+      ? (state.compressed.length / 1024).toFixed(1)
+      : null
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm" showCloseButton={false}>
-        <DialogHeader>
+      <DialogContent className="sm:max-w-sm">
+        {/* Bouton retour — ferme cette dialog et ré-ouvre la précédente */}
+        {onNavBack && (
+          <button
+            aria-label="Retour"
+            onClick={handleNavBack}
+            className="ring-offset-background focus:ring-ring absolute top-4 left-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+          >
+            <IconArrowLeft />
+            <span className="sr-only">Retour</span>
+          </button>
+        )}
+
+        <DialogHeader className={onNavBack ? 'pl-6' : undefined}>
           <DialogTitle className="flex items-center gap-2">
             <IconQrcode className="h-5 w-5" />
             Exporter en QR Code
           </DialogTitle>
-          {/* Bouton retour en haut à droite */}
-          <DialogClose
-            aria-label="Retour"
-            className="ring-offset-background focus:ring-ring absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
-          >
-            <IconArrowLeft />
-            <span className="sr-only">Retour</span>
-          </DialogClose>
         </DialogHeader>
 
         {/* Conteneur stable — min-h évite le layout shift entre les états */}
@@ -174,19 +206,22 @@ export function QrExportDialog({
             {isLoading && (
               <div className="flex flex-col items-center gap-4">
                 <div className="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
-                <div className="flex flex-col items-center gap-1">
-                  {activeSteps.map((step, i) => (
-                    <p
-                      key={step}
+                <div className="flex flex-col items-start gap-2">
+                  {activeSteps.map(({ label, Icon }, i) => (
+                    <div
+                      key={label}
                       className={cn(
-                        'text-sm transition-all duration-300',
-                        i === stepIndex
-                          ? 'text-foreground font-medium opacity-100'
-                          : 'text-muted-foreground opacity-40',
+                        'flex items-center gap-2 text-sm transition-all duration-300',
+                        i < stepIndex
+                          ? 'text-muted-foreground opacity-50'
+                          : i === stepIndex
+                            ? 'text-foreground font-medium opacity-100'
+                            : 'text-muted-foreground opacity-25',
                       )}
                     >
-                      {step}
-                    </p>
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span>{label}</span>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -196,9 +231,10 @@ export function QrExportDialog({
               <Alert variant="warning" className="w-full">
                 <IconAlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  Votre itinéraire est trop volumineux pour être intégré
-                  directement dans un QR code. Les données seront téléversées
-                  sur le web dans une URL temporaire valide{' '}
+                  Votre itinéraire compressé pèse{' '}
+                  <strong>{compressedSizeKb}&nbsp;Ko</strong>, ce qui dépasse
+                  la limite du QR code intégré. Les données seront téléversées
+                  dans une URL temporaire valide{' '}
                   <strong>10&nbsp;minutes</strong>.
                 </AlertDescription>
               </Alert>
