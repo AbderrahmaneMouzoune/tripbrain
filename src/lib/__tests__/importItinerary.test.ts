@@ -28,11 +28,33 @@ async function makeXlsxFile(
   } as unknown as File
 }
 
-/** Build a mock File with a text() method for CSV tests. */
-function makeCsvFile(name: string, content: string): File {
+/** Build a mock File with an arrayBuffer() method for CSV tests. */
+function makeCsvFile(name: string, content: string, encoding = 'utf-8'): File {
+  const encoder = new TextEncoder() // TextEncoder always produces UTF-8
+  let bytes: Uint8Array
+
+  if (encoding === 'utf-8-bom') {
+    const encoded = encoder.encode(content)
+    bytes = new Uint8Array(3 + encoded.length)
+    bytes[0] = 0xef
+    bytes[1] = 0xbb
+    bytes[2] = 0xbf
+    bytes.set(encoded, 3)
+  } else if (encoding === 'windows-1252') {
+    // Encode as windows-1252 by hand (ASCII range is identical; accented chars
+    // that appear in our test fixtures map 1-to-1 with their latin-1 codepoints)
+    bytes = new Uint8Array(content.length)
+    for (let i = 0; i < content.length; i++) {
+      bytes[i] = content.charCodeAt(i) & 0xff
+    }
+  } else {
+    bytes = encoder.encode(content)
+  }
+
+  const buffer = bytes.buffer as ArrayBuffer
   return {
     name,
-    text: async () => content,
+    arrayBuffer: async () => buffer,
   } as unknown as File
 }
 
@@ -307,6 +329,32 @@ describe('importFromCsv', () => {
       makeCsvFile('transports.csv', 'id,day_id,type'),
     ])
     expect(result.itinerary).toHaveLength(0)
+  })
+
+  it('handles UTF-8 BOM added by Excel', async () => {
+    const csv = `id,date,city,title\nday-1,2026-05-10,Paris,Arrivée`
+    const result = await importFromCsv([
+      makeCsvFile('days.csv', csv, 'utf-8-bom'),
+      makeCsvFile('activities.csv', 'id,day_id,name,type\n', 'utf-8-bom'),
+      makeCsvFile('transports.csv', 'id,day_id,type\n', 'utf-8-bom'),
+    ])
+    expect(result.itinerary).toHaveLength(1)
+    expect(result.itinerary[0].id).toBe('day-1')
+    expect(result.itinerary[0].city).toBe('Paris')
+    expect(result.itinerary[0].title).toBe('Arrivée')
+  })
+
+  it('handles Windows-1252 encoding (legacy Excel export)', async () => {
+    // Content contains accented characters encoded as windows-1252 bytes
+    const csv = `id,date,city,title\nday-1,2026-05-10,Lyon,Journ\xe9e \xe0 Lyon`
+    const result = await importFromCsv([
+      makeCsvFile('days.csv', csv, 'windows-1252'),
+      makeCsvFile('activities.csv', 'id,day_id,name,type\n'),
+      makeCsvFile('transports.csv', 'id,day_id,type\n'),
+    ])
+    expect(result.itinerary).toHaveLength(1)
+    expect(result.itinerary[0].city).toBe('Lyon')
+    expect(result.itinerary[0].title).toBe('Journée à Lyon')
   })
 })
 
