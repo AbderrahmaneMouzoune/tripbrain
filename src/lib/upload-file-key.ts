@@ -27,7 +27,8 @@ export function sanitizeUploadFileName(fileName: string): string {
 }
 
 export function generateUploadObjectKey(fileName: string, prefix = 'exports'): string {
-  const safePrefix = prefix.replace(EDGE_SLASH_REGEX, '') || 'exports'
+  const normalizedPrefix = prefix.replace(EDGE_SLASH_REGEX, '')
+  const safePrefix = normalizedPrefix.length > 0 ? normalizedPrefix : 'exports'
   const safeName = sanitizeUploadFileName(fileName)
   return `${safePrefix}/${nanoid()}-${safeName}`
 }
