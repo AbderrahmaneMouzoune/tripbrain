@@ -152,8 +152,7 @@ export function uniqueFileName(
   if (!existingNames.has(candidate)) return candidate
 
   const dotIndex = candidate.lastIndexOf('.')
-  const base =
-    dotIndex !== -1 ? candidate.slice(0, dotIndex) : candidate
+  const base = dotIndex !== -1 ? candidate.slice(0, dotIndex) : candidate
   const ext = dotIndex !== -1 ? candidate.slice(dotIndex) : ''
 
   let counter = 1

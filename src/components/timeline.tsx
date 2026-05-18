@@ -2,10 +2,7 @@
 
 import { useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
-import {
-  getDayStatus,
-  type DayItinerary,
-} from '@/lib/itinerary-data'
+import { getDayStatus, type DayItinerary } from '@/lib/itinerary-data'
 import { Train, Car, Plane, MapPin, Tent } from 'lucide-react'
 
 interface TimelineProps {
@@ -22,7 +19,11 @@ function getCityIcon(city: string, transport?: DayItinerary['transport']) {
   return MapPin
 }
 
-export function Timeline({ itinerary, selectedDay, onSelectDay }: TimelineProps) {
+export function Timeline({
+  itinerary,
+  selectedDay,
+  onSelectDay,
+}: TimelineProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const dayRefs = useRef<(HTMLButtonElement | null)[]>([])
 

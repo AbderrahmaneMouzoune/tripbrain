@@ -113,7 +113,7 @@ function DocumentSourcesDrawer({
                     className={`h-2 w-2 rounded-full ${colors.dot}`}
                     aria-hidden
                   />
-                  <p className="text-foreground text-xs font-semibold uppercase tracking-wider">
+                  <p className="text-foreground text-xs font-semibold tracking-wider uppercase">
                     {category.label}
                   </p>
                 </div>
@@ -123,7 +123,11 @@ function DocumentSourcesDrawer({
                     <button
                       key={source.name}
                       onClick={() =>
-                        window.open(source.fallback, '_blank', 'noopener,noreferrer')
+                        window.open(
+                          source.fallback,
+                          '_blank',
+                          'noopener,noreferrer',
+                        )
                       }
                       className="hover:border-primary/40 hover:bg-primary/5 group flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition-all"
                     >
@@ -135,7 +139,7 @@ function DocumentSourcesDrawer({
                         </span>
                         <ArrowUpRight className="text-muted-foreground group-hover:text-primary h-3.5 w-3.5 shrink-0 transition-colors" />
                       </div>
-                      <span className="text-foreground text-sm font-medium leading-tight">
+                      <span className="text-foreground text-sm leading-tight font-medium">
                         {source.name}
                       </span>
                     </button>
@@ -213,7 +217,9 @@ function DocumentsEmptyState({
         </div>
         <div>
           <p className="text-foreground font-medium">
-            {isDragging ? 'Déposez vos fichiers ici' : 'Dépose ton document ici'}
+            {isDragging
+              ? 'Déposez vos fichiers ici'
+              : 'Dépose ton document ici'}
           </p>
           <p className="text-muted-foreground mt-1 text-xs">
             ou clique pour parcourir · PDF, JPG, PNG — tous formats acceptés
@@ -229,7 +235,7 @@ function DocumentsEmptyState({
           </p>
 
           <div className="space-y-1">
-            <p className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wider">
+            <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-wider uppercase">
               Retrouve-le depuis une app
             </p>
             {allSources.map((source) => (
@@ -245,7 +251,7 @@ function DocumentsEmptyState({
                 >
                   {source.letter}
                 </span>
-                <span className="flex-1 min-w-0">
+                <span className="min-w-0 flex-1">
                   <span className="text-foreground block text-sm font-medium">
                     {source.name}
                   </span>
@@ -305,7 +311,7 @@ function getFileIcon(type: string, name: string) {
     return <FileText className="h-6 w-6 text-blue-400" />
   if (['zip', 'tar', 'gz', 'rar', '7z'].includes(ext))
     return <FileArchive className="h-6 w-6 text-yellow-500" />
-  return <File className="h-6 w-6 text-muted-foreground" />
+  return <File className="text-muted-foreground h-6 w-6" />
 }
 
 function getFileTypeBadge(type: string, name: string): string {
@@ -358,7 +364,7 @@ function FileCard({
         <AlertDialogHeader>
           <AlertDialogTitle>Supprimer ce document ?</AlertDialogTitle>
           <AlertDialogDescription>
-            <span className="font-medium text-foreground">{file.name}</span>{' '}
+            <span className="text-foreground font-medium">{file.name}</span>{' '}
             sera définitivement supprimé. Cette action est irréversible.
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -386,7 +392,12 @@ function FileCard({
               alt={file.name}
               className="h-10 w-10 cursor-pointer rounded-lg object-cover"
               onClick={() => onPreview(file)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPreview(file) } }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onPreview(file)
+                }
+              }}
               tabIndex={0}
               role="button"
               title="Aperçu"
@@ -405,7 +416,10 @@ function FileCard({
             {formatFileSize(file.size)} · {formatDate(file.addedAt)}
           </p>
         </div>
-        <Badge variant="outline" className="text-muted-foreground shrink-0 text-[10px]">
+        <Badge
+          variant="outline"
+          className="text-muted-foreground shrink-0 text-[10px]"
+        >
           {getFileTypeBadge(file.type, file.name)}
         </Badge>
         <div className="flex shrink-0 gap-1">
@@ -450,7 +464,16 @@ function FileCard({
       <div
         className={`bg-muted/40 relative flex h-32 items-center justify-center overflow-hidden ${previewable ? 'cursor-pointer' : ''}`}
         onClick={previewable ? () => onPreview(file) : undefined}
-        onKeyDown={previewable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPreview(file) } } : undefined}
+        onKeyDown={
+          previewable
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onPreview(file)
+                }
+              }
+            : undefined
+        }
         role={previewable ? 'button' : undefined}
         tabIndex={previewable ? 0 : undefined}
         title={previewable ? 'Cliquer pour prévisualiser' : undefined}
@@ -506,7 +529,7 @@ function FileCard({
         {/* Type badge */}
         <Badge
           variant="secondary"
-          className="absolute right-2 bottom-2 text-[10px] font-mono"
+          className="absolute right-2 bottom-2 font-mono text-[10px]"
         >
           {getFileTypeBadge(file.type, file.name)}
         </Badge>
@@ -514,7 +537,10 @@ function FileCard({
 
       {/* File info */}
       <div className="flex flex-col gap-0.5 p-3">
-        <p className="text-foreground truncate text-sm font-medium" title={file.name}>
+        <p
+          className="text-foreground truncate text-sm font-medium"
+          title={file.name}
+        >
           {file.name}
         </p>
         <p className="text-muted-foreground text-xs">
@@ -526,8 +552,15 @@ function FileCard({
 }
 
 export function DocumentsView() {
-  const { files, loading, addFiles, deleteFile, downloadFile, exportAll, importZip } =
-    useDocuments()
+  const {
+    files,
+    loading,
+    addFiles,
+    deleteFile,
+    downloadFile,
+    exportAll,
+    importZip,
+  } = useDocuments()
   const [isDragging, setIsDragging] = useState(false)
   const [search, setSearch] = useState('')
   const [sortField, setSortField] = useState<SortField>('addedAt')
@@ -546,8 +579,12 @@ export function DocumentsView() {
   // Track blob URLs opened for preview so we can revoke on unmount
   const openedPreviewUrlsRef = useRef<Set<string>>(new Set())
 
-  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null)
-  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null)
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(
+    null,
+  )
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(
+    null,
+  )
   const [importError, setImportError] = useState<string | null>(null)
 
   /** Duration (ms) to display success/error feedback before clearing it. */
@@ -640,7 +677,10 @@ export function DocumentsView() {
   )
 
   const handleExportAll = useCallback(async () => {
-    setExportProgress({ status: 'preparing', message: 'Préparation des documents…' })
+    setExportProgress({
+      status: 'preparing',
+      message: 'Préparation des documents…',
+    })
     try {
       await exportAll((p) => setExportProgress(p))
     } finally {
@@ -655,12 +695,18 @@ export function DocumentsView() {
       if (importZipInputRef.current) importZipInputRef.current.value = ''
 
       setImportError(null)
-      setImportProgress({ status: 'importing', current: 0, total: 0, message: 'Import en cours…' })
+      setImportProgress({
+        status: 'importing',
+        current: 0,
+        total: 0,
+        message: 'Import en cours…',
+      })
       try {
         await importZip(zipFile, (p) => setImportProgress(p))
         setTimeout(() => setImportProgress(null), FEEDBACK_DISPLAY_DURATION)
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erreur lors de l'import"
+        const msg =
+          err instanceof Error ? err.message : "Erreur lors de l'import"
         setImportError(msg)
         setImportProgress(null)
         setTimeout(() => setImportError(null), FEEDBACK_DISPLAY_DURATION * 2)
@@ -696,10 +742,7 @@ export function DocumentsView() {
         aria-label="Ajouter des fichiers"
       />
 
-      <DocumentSourcesDrawer
-        open={sourcesOpen}
-        onOpenChange={setSourcesOpen}
-      />
+      <DocumentSourcesDrawer open={sourcesOpen} onOpenChange={setSourcesOpen} />
 
       {/* Export / Import actions */}
       <div className="flex flex-wrap items-center gap-2">
@@ -983,11 +1026,7 @@ export function DocumentsView() {
               <p className="text-muted-foreground text-sm">
                 Aucun fichier ne correspond à &ldquo;{search}&rdquo;
               </p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSearch('')}
-              >
+              <Button variant="ghost" size="sm" onClick={() => setSearch('')}>
                 Effacer la recherche
               </Button>
             </div>

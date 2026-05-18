@@ -48,7 +48,11 @@ describe('cn', () => {
   it('handles mixed conditional objects and strings', () => {
     const isActive = true
     const isDisabled = false
-    const result = cn('base', { active: isActive, disabled: isDisabled }, 'extra')
+    const result = cn(
+      'base',
+      { active: isActive, disabled: isDisabled },
+      'extra',
+    )
     expect(result).toBe('base active extra')
   })
 })

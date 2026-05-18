@@ -1,10 +1,7 @@
 'use client'
 
 import React, { createContext, useContext } from 'react'
-import {
-  useImageCache,
-  type ImageCacheValue,
-} from '@/hooks/use-image-cache'
+import { useImageCache, type ImageCacheValue } from '@/hooks/use-image-cache'
 import type { DayItinerary } from '@/lib/itinerary-data'
 
 const defaultValue: ImageCacheValue = {

@@ -116,7 +116,9 @@ export function TransportCard({ transport }: TransportCardProps) {
                   rel="noopener noreferrer"
                 >
                   <Navigation className="h-3 w-3" strokeWidth={1.5} />
-                  {transport.type === 'car' ? "Point d'arrivée" : 'Point de départ'}
+                  {transport.type === 'car'
+                    ? "Point d'arrivée"
+                    : 'Point de départ'}
                 </a>
               </Button>
             )}

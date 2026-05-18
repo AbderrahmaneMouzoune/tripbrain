@@ -49,10 +49,10 @@ export function MapDayPreviewCard({
         className="w-full text-left"
         aria-label={`Sélectionner le jour ${day.dayNumber}`}
       >
-        <CardHeader className="px-0 gap-1">
+        <CardHeader className="gap-1 px-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <CardTitle className="text-sm text-foreground">
+              <CardTitle className="text-foreground text-sm">
                 Jour {day.dayNumber} · {day.city}
               </CardTitle>
               <CardDescription className="text-xs">
@@ -75,7 +75,7 @@ export function MapDayPreviewCard({
         </CardHeader>
 
         <CardContent className="px-0">
-          <p className="truncate text-xs font-medium text-foreground/90">
+          <p className="text-foreground/90 truncate text-xs font-medium">
             {day.title}
           </p>
 
@@ -94,12 +94,9 @@ export function MapDayPreviewCard({
             )}
           </div>
 
-          <ul className="list-disc mt-2 ml-4 flex flex-col gap-1 text-foreground/80">
+          <ul className="text-foreground/80 mt-2 ml-4 flex list-disc flex-col gap-1">
             {previewItems.map((item) => (
-              <li
-                key={item}
-                className="text-[10px]"
-              >
+              <li key={item} className="text-[10px]">
                 {item}
               </li>
             ))}
@@ -107,7 +104,7 @@ export function MapDayPreviewCard({
         </CardContent>
       </button>
 
-      <CardFooter className="px-0 mt-auto">
+      <CardFooter className="mt-auto px-0">
         <Button
           type="button"
           size="sm"

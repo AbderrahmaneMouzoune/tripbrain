@@ -67,7 +67,6 @@ export const SOURCE_CATEGORIES: SourceCategory[] = [
   },
 ]
 
-
 /** Category colour → Tailwind classes (used in the drawer header dots) */
 export const CATEGORY_COLOR_CLASSES: Record<
   string,

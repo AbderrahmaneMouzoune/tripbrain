@@ -74,7 +74,10 @@ export function AccommodationCard({ accommodation }: AccommodationCardProps) {
   const { copied: copiedName, copy: copyName } = useClipboard()
   const { copied: copiedAddress, copy: copyAddress } = useClipboard()
 
-  const nightCount = getNightCount(accommodation.checkIn, accommodation.checkOut)
+  const nightCount = getNightCount(
+    accommodation.checkIn,
+    accommodation.checkOut,
+  )
 
   const mapUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
     `${accommodation.name} ${accommodation.address}`,
@@ -139,7 +142,10 @@ export function AccommodationCard({ accommodation }: AccommodationCardProps) {
             <div className="min-w-0 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase">
-                  <Hotel className="text-secondary h-3 w-3" strokeWidth={1.75} />
+                  <Hotel
+                    className="text-secondary h-3 w-3"
+                    strokeWidth={1.75}
+                  />
                   Hébergement
                 </p>
                 {accommodation.status && (

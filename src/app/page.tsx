@@ -195,10 +195,6 @@ function HomePageContent() {
                   <ShareDialog
                     itinerary={itinerary}
                     selectedDay={selectedDay}
-                    onExport={exportData}
-                    onImport={importData}
-                    onImportXlsx={importXlsxData}
-                    onImportCsv={importCsvData}
                     onClear={clearData}
                   />
                 </div>
