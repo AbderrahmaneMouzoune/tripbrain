@@ -234,12 +234,13 @@ export function QrExportDialog({
                   <IconCloudUpload className="h-8 w-8 text-warning" />
                 </div>
                 <p className="text-muted-foreground text-sm leading-relaxed">
-                  Votre itinéraire ({compressedSizeKb}&nbsp;Ko) est trop grand
-                  pour tenir dans un QR code.
-                  <br />
-                  Appuyez sur le bouton ci-dessous pour créer un lien de
-                  partage valable{' '}
-                  <strong className="text-foreground">10&nbsp;minutes</strong>.
+                  Un QR code va être généré pour votre itinéraire (
+                  {compressedSizeKb}&nbsp;Ko). Il sera hébergé sur un serveur
+                  distant et{' '}
+                  <strong className="text-foreground">
+                    supprimé après 10&nbsp;minutes
+                  </strong>
+                  .
                 </p>
               </div>
             )}
