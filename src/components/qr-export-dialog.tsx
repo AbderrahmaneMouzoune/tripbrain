@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -108,8 +107,8 @@ export function QrExportDialog({
   useEffect(() => {
     if (state.status !== 'loading' && state.status !== 'uploading') return
     setStepIndex(0)
-    const t1 = setTimeout(() => setStepIndex(1), 150)
-    const t2 = setTimeout(() => setStepIndex(2), 350)
+    const t1 = setTimeout(() => setStepIndex(1), 250)
+    const t2 = setTimeout(() => setStepIndex(2), 450)
     return () => {
       clearTimeout(t1)
       clearTimeout(t2)
@@ -230,16 +229,19 @@ export function QrExportDialog({
             )}
 
             {state.status === 'needs-upload' && (
-              <Alert variant="warning" className="w-full">
-                <IconAlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  Votre itinéraire compressé pèse{' '}
-                  <strong>{compressedSizeKb}&nbsp;Ko</strong>, ce qui dépasse
-                  la limite du QR code intégré. Les données seront téléversées
-                  dans une URL temporaire valide{' '}
-                  <strong>10&nbsp;minutes</strong>.
-                </AlertDescription>
-              </Alert>
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div className="rounded-full bg-warning/10 p-4">
+                  <IconCloudUpload className="h-8 w-8 text-warning" />
+                </div>
+                <p className="text-muted-foreground text-sm leading-relaxed">
+                  Votre itinéraire ({compressedSizeKb}&nbsp;Ko) est trop grand
+                  pour tenir dans un QR code.
+                  <br />
+                  Appuyez sur le bouton ci-dessous pour créer un lien de
+                  partage valable{' '}
+                  <strong className="text-foreground">10&nbsp;minutes</strong>.
+                </p>
+              </div>
             )}
 
             {state.status === 'ready' && (
@@ -260,10 +262,14 @@ export function QrExportDialog({
             )}
 
             {state.status === 'error' && (
-              <Alert variant="destructive" className="w-full">
-                <IconAlertTriangle className="h-4 w-4" />
-                <AlertDescription>{state.message}</AlertDescription>
-              </Alert>
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div className="rounded-full bg-destructive/10 p-4">
+                  <IconAlertTriangle className="h-8 w-8 text-destructive" />
+                </div>
+                <p className="text-destructive text-sm leading-relaxed">
+                  {state.message}
+                </p>
+              </div>
             )}
           </div>
 
