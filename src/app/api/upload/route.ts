@@ -1,14 +1,16 @@
 import { route, type Router } from '@better-upload/server'
 import { toRouteHandler } from '@better-upload/server/adapters/next'
 import { cloudflare } from '@better-upload/server/clients'
+import { uploadEnv } from '@/lib/upload-env'
+import { generateUploadObjectKey } from '@/lib/upload-file-key'
 
 const router: Router = {
   client: cloudflare({
-    accountId: process.env.R2_ACCOUNT_ID!,
-    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+    accountId: uploadEnv.R2_ACCOUNT_ID,
+    accessKeyId: uploadEnv.R2_ACCESS_KEY_ID,
+    secretAccessKey: uploadEnv.R2_SECRET_ACCESS_KEY,
   }),
-  bucketName: process.env.R2_BUCKET_NAME!,
+  bucketName: uploadEnv.R2_BUCKET_NAME,
   routes: {
     'itinerary-export': route({
       fileTypes: ['application/json'],
@@ -17,15 +19,17 @@ const router: Router = {
       onBeforeUpload: async ({ file }) => {
         return {
           objectInfo: {
-            key: `exports/${Date.now()}-${file.name}`,
+            key: generateUploadObjectKey(file.name),
           },
         }
       },
       onAfterSignedUrl: async ({ file }) => {
-        const key = file.objectInfo.key
+        const key = file.objectInfo?.key
+        if (!key) throw new Error('Missing object key')
+
         return {
           // URL publique retournée au client pour générer le QR code
-          metadata: { url: `${process.env.R2_PUBLIC_URL}/${key}` },
+          metadata: { url: `${uploadEnv.R2_PUBLIC_URL}/${key}` },
         }
       },
     }),
