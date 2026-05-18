@@ -46,7 +46,8 @@ export function useQrImport({
       } else {
         window.history.replaceState(null, '', window.location.pathname)
       }
-    } catch {
+    } catch (error) {
+      console.error('[useQrImport] Échec du décodage du paramètre import :', error)
       window.history.replaceState(null, '', window.location.pathname)
     }
   }, [isLoading, searchParams])
