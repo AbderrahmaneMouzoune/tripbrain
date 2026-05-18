@@ -1,6 +1,6 @@
 import { customAlphabet } from 'nanoid'
 
-const nanoid = customAlphabet(
+const createShortId = customAlphabet(
   'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
   5,
 )
@@ -14,8 +14,8 @@ const EDGE_SLASH_REGEX = /^\/+|\/+$/g
 const ONLY_DOTS_REGEX = /^\.+$/
 
 export function sanitizeUploadFileName(fileName: string): string {
-  // NFKD retire les accents pour éviter des clés différentes selon l'encodage Unicode.
-  const normalizedName = fileName.normalize('NFKD').replace(COMBINING_MARKS_REGEX, '')
+  // NFD retire les accents tout en restant conservateur sur la normalisation Unicode.
+  const normalizedName = fileName.normalize('NFD').replace(COMBINING_MARKS_REGEX, '')
   // On garde uniquement le nom final pour neutraliser les tentatives de path traversal.
   const basename = normalizedName.split(PATH_SEPARATOR_REGEX).pop() ?? 'file'
 
@@ -40,5 +40,5 @@ export function generateUploadObjectKey(fileName: string, prefix = 'exports'): s
   const normalizedPrefix = prefix.replace(EDGE_SLASH_REGEX, '')
   const safePrefix = normalizedPrefix.length > 0 ? normalizedPrefix : 'exports'
   const safeName = sanitizeUploadFileName(fileName)
-  return `${safePrefix}/${nanoid()}-${safeName}`
+  return `${safePrefix}/${createShortId()}-${safeName}`
 }
