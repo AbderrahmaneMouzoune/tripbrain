@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   IconAlertTriangle,
@@ -101,10 +102,10 @@ export function QrImportDialog({
         <p className="text-sm">Voulez-vous importer ces données\u00a0?</p>
 
         {error && (
-          <div className="bg-destructive/10 text-destructive flex items-start gap-2 rounded-md p-3 text-sm">
-            <IconAlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{error}</span>
-          </div>
+          <Alert variant="destructive">
+            <IconAlertTriangle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         <DialogFooter>

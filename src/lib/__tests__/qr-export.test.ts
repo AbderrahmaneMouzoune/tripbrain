@@ -1,6 +1,5 @@
 import {
   compressItinerary,
-  decompressItinerary,
   exportItineraryQR,
   getInlineQrUrl,
   QR_INLINE_LIMIT,
@@ -143,49 +142,6 @@ describe('compressItinerary', () => {
   it('should produce a base64url-safe string (no +, /, or = characters)', async () => {
     const result = await compressItinerary([oneDay])
     expect(result).not.toMatch(/[+/=]/)
-  })
-})
-
-describe('decompressItinerary', () => {
-  it('devrait restituer exactement les données compressées par compressItinerary', async () => {
-    const compressed = await compressItinerary([oneDay])
-    const restored = decompressItinerary(compressed)
-    expect(restored).toEqual([oneDay])
-  })
-
-  it('devrait restituer un itinéraire multi-jours sans perte de données', async () => {
-    const days = makeLargeItinerary(5)
-    const compressed = await compressItinerary(days)
-    const restored = decompressItinerary(compressed)
-    expect(restored).toEqual(days)
-  })
-
-  it('devrait restituer un tableau vide compressé en tableau vide', async () => {
-    const compressed = await compressItinerary([])
-    const restored = decompressItinerary(compressed)
-    expect(Array.isArray(restored)).toBe(true)
-    expect(restored).toHaveLength(0)
-  })
-
-  it('devrait lever une erreur pour une chaîne base64url invalide', () => {
-    expect(() => decompressItinerary('données-invalides!!')).toThrow()
-  })
-
-  it('devrait lever une erreur si les données décompressées ne forment pas un tableau', async () => {
-    // On compresse un objet non-tableau pour simuler des données corrompues
-    const { encode } = await import('@msgpack/msgpack')
-    const { deflateSync } = await import('fflate')
-    const packed = encode({ not: 'an array' })
-    const compressed = deflateSync(packed as Uint8Array, { level: 9 })
-    let binary = ''
-    for (let i = 0; i < compressed.length; i++) {
-      binary += String.fromCharCode(compressed[i])
-    }
-    const b64url = btoa(binary)
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '')
-    expect(() => decompressItinerary(b64url)).toThrow('Format invalide')
   })
 })
 

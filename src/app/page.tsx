@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTripData } from '@/hooks/use-trip-data'
 import { useSwipe } from '@/hooks/use-swipe'
+import { useQrImport } from '@/hooks/use-qr-import'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
 import { ShareDialog } from '@/components/share-dialog'
@@ -19,8 +20,6 @@ import { MapOverlay } from '@/components/map-overlay'
 import { cn } from '@/lib/utils'
 import { AppIcon } from '@/components/app-icon'
 import { DemoBanner } from '@/components/demo-banner'
-import { decompressItinerary } from '@/lib/qr-export'
-import type { DayItinerary } from '@/lib/itinerary-data'
 
 function getTripCountdown(
   tripStartDate: Date,
@@ -75,6 +74,9 @@ function HomePageContent() {
     getCurrentDayIndex,
   } = useTripData()
 
+  const { pendingImportData, handleQrImportConfirm, handleQrImportDismiss } =
+    useQrImport({ isLoading, importItineraryData })
+
   const searchParams = useSearchParams()
 
   const [selectedDay, setSelectedDay] = useState(0)
@@ -85,47 +87,6 @@ function HomePageContent() {
     'roadbook',
   )
   const [isMapOpen, setIsMapOpen] = useState(false)
-
-  // Données en attente d'import depuis un paramètre URL ?import= (QR code scanné)
-  const [pendingImportData, setPendingImportData] =
-    useState<DayItinerary[] | null>(null)
-  const importHandledRef = useRef(false)
-
-  // Détection du paramètre ?import= après le chargement initial
-  useEffect(() => {
-    if (isLoading || importHandledRef.current) return
-    importHandledRef.current = true
-
-    const importParam = searchParams.get('import')
-    if (!importParam) return
-
-    try {
-      const decoded = decompressItinerary(importParam)
-      if (decoded.length > 0) {
-        setPendingImportData(decoded)
-      } else {
-        // Itinéraire vide — on nettoie l'URL silencieusement
-        window.history.replaceState(null, '', window.location.pathname)
-      }
-    } catch {
-      // Paramètre invalide — on nettoie l'URL silencieusement
-      window.history.replaceState(null, '', window.location.pathname)
-    }
-  }, [isLoading, searchParams])
-
-  /** Confirme l'import depuis le QR code et nettoie le paramètre URL. */
-  const handleQrImportConfirm = useCallback(async () => {
-    if (!pendingImportData) return
-    await importItineraryData(pendingImportData)
-    setPendingImportData(null)
-    window.history.replaceState(null, '', window.location.pathname)
-  }, [pendingImportData, importItineraryData])
-
-  /** Refuse l'import et nettoie le paramètre URL. */
-  const handleQrImportDismiss = useCallback(() => {
-    setPendingImportData(null)
-    window.history.replaceState(null, '', window.location.pathname)
-  }, [])
 
   useEffect(() => {
     if (!hasData && !isLoading && searchParams.get('demo') === 'true') {
