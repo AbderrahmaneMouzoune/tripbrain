@@ -1,9 +1,11 @@
 // Pipeline d'export : données → msgpack → deflate → base64url
 // Si base64url ≤ QR_INLINE_LIMIT : URL inline compatible PWA (origin/?import=<données>)
 // Sinon : upload via @better-upload/client vers R2 et retour de l'URL publique
+//
+// Pipeline d'import inverse : base64url → inflate → msgpack decode → DayItinerary[]
 
-import { encode } from '@msgpack/msgpack'
-import { deflateSync } from 'fflate'
+import { encode, decode } from '@msgpack/msgpack'
+import { deflateSync, inflateSync } from 'fflate'
 import { uploadFile } from '@better-upload/client'
 import type { DayItinerary } from '@/lib/itinerary-data'
 
@@ -23,6 +25,37 @@ export async function compressItinerary(
   const packed = encode(itinerary)
   const compressed = deflateSync(packed, { level: 9 })
   return toBase64Url(compressed)
+}
+
+/** Inverse de toBase64Url — reconstitue les octets depuis une chaîne base64url. */
+function fromBase64Url(str: string): Uint8Array {
+  const base64 = str.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = base64.padEnd(
+    base64.length + ((4 - (base64.length % 4)) % 4),
+    '=',
+  )
+  const binary = atob(padded)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
+}
+
+/**
+ * Décompresse un itinéraire précédemment produit par compressItinerary.
+ * Lève une erreur si les données sont invalides ou ne forment pas un tableau.
+ */
+export function decompressItinerary(compressed: string): DayItinerary[] {
+  const bytes = fromBase64Url(compressed)
+  const inflated = inflateSync(bytes)
+  const data = decode(inflated)
+  if (!Array.isArray(data)) {
+    throw new Error(
+      'Format invalide\u00a0: les données QR ne contiennent pas un itinéraire valide.',
+    )
+  }
+  return data as DayItinerary[]
 }
 
 /**

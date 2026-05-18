@@ -138,6 +138,16 @@ export function useTripData() {
     [saveData],
   )
 
+  /** Importe directement un tableau DayItinerary[], par exemple depuis un QR code scanné. */
+  const importItineraryData = useCallback(
+    async (data: DayItinerary[]) => {
+      await saveData({ itinerary: data })
+      setItinerary(data)
+      setHasData(true)
+    },
+    [saveData],
+  )
+
   const exportData = useCallback(() => {
     const data: TripData = { itinerary }
     const json = JSON.stringify(data, null, 2)
@@ -200,6 +210,7 @@ export function useTripData() {
     importData,
     importXlsxData,
     importCsvData,
+    importItineraryData,
     exportData,
     clearData,
     getCurrentDayIndex,
