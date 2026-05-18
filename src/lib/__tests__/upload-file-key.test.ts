@@ -12,6 +12,8 @@ describe('sanitizeUploadFileName', () => {
   it('retourne une valeur par défaut si le nom est vide après sanitization', () => {
     expect(sanitizeUploadFileName('   ')).toBe('file')
     expect(sanitizeUploadFileName('你好😊')).toBe('file')
+    expect(sanitizeUploadFileName('///')).toBe('file')
+    expect(sanitizeUploadFileName('...')).toBe('file')
   })
 
   it('conserve les caractères valides quand le nom contient aussi des caractères non-ASCII', () => {
@@ -37,5 +39,12 @@ describe('generateUploadObjectKey', () => {
   it('supporte un préfixe custom', () => {
     const key = generateUploadObjectKey('export.json', '/custom/')
     expect(key).toMatch(/^custom\/[A-Za-z0-9]{5}-export\.json$/)
+  })
+
+  it("génère des identifiants différents sur plusieurs appels", () => {
+    const keys = new Set(
+      Array.from({ length: 20 }, () => generateUploadObjectKey('export.json')),
+    )
+    expect(keys.size).toBe(20)
   })
 })

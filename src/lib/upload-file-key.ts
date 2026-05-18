@@ -11,6 +11,7 @@ const MULTIPLE_DASH_REGEX = /-{2,}/g
 const PATH_SEPARATOR_REGEX = /[/\\]/
 const EDGE_DASH_REGEX = /^-+|-+$/g
 const EDGE_SLASH_REGEX = /^\/+|\/+$/g
+const ONLY_DOTS_REGEX = /^\.+$/
 
 export function sanitizeUploadFileName(fileName: string): string {
   // NFKD retire les accents pour éviter des clés différentes selon l'encodage Unicode.
@@ -26,12 +27,14 @@ export function sanitizeUploadFileName(fileName: string): string {
     // Limite volontaire pour conserver des clés lisibles et éviter des noms excessivement longs.
     .slice(0, 120)
 
-  return sanitizedName || 'file'
+  if (!sanitizedName || ONLY_DOTS_REGEX.test(sanitizedName)) return 'file'
+  return sanitizedName
 }
 
 /**
  * Génère une clé d'objet stable pour l'upload R2 avec un identifiant court (nanoid 5 chars)
  * et un nom de fichier sanitizé.
+ * Format: {prefix}/{nanoid}-{sanitizedName}
  */
 export function generateUploadObjectKey(fileName: string, prefix = 'exports'): string {
   const normalizedPrefix = prefix.replace(EDGE_SLASH_REGEX, '')
