@@ -5,13 +5,22 @@ import {
 
 describe('sanitizeUploadFileName', () => {
   it('supprime les séparateurs de chemin et normalise les caractères', () => {
-    expect(sanitizeUploadFileName('../dossier/Mon été 2026.json')).toBe(
-      'Mon-ete-2026.json',
-    )
+    expect(sanitizeUploadFileName('../../../etc/passwd')).toBe('passwd')
+    expect(sanitizeUploadFileName('../dossier/Mon été 2026.json')).toBe('Mon-ete-2026.json')
   })
 
   it('retourne une valeur par défaut si le nom est vide après sanitization', () => {
     expect(sanitizeUploadFileName('   ')).toBe('file')
+    expect(sanitizeUploadFileName('你好😊')).toBe('file')
+  })
+
+  it('limite la longueur du nom de fichier sanitizé', () => {
+    const veryLongName = `${'a'.repeat(200)}.json`
+    expect(sanitizeUploadFileName(veryLongName)).toHaveLength(120)
+  })
+
+  it('préserve les extensions multiples', () => {
+    expect(sanitizeUploadFileName('archive.tar.gz')).toBe('archive.tar.gz')
   })
 })
 

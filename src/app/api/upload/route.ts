@@ -25,7 +25,7 @@ const router: Router = {
       },
       onAfterSignedUrl: async ({ file }) => {
         const key = file.objectInfo?.key
-        if (!key) throw new Error('Missing object key')
+        if (!key) throw new Error("Clé d'objet manquante")
 
         return {
           // URL publique retournée au client pour générer le QR code
