@@ -14,6 +14,10 @@ describe('sanitizeUploadFileName', () => {
     expect(sanitizeUploadFileName('你好😊')).toBe('file')
   })
 
+  it('conserve les caractères valides quand le nom contient aussi des caractères non-ASCII', () => {
+    expect(sanitizeUploadFileName('Mon_fichier你好.pdf')).toBe('Mon_fichier-.pdf')
+  })
+
   it('limite la longueur du nom de fichier sanitizé', () => {
     const veryLongName = `${'a'.repeat(200)}.json`
     expect(sanitizeUploadFileName(veryLongName)).toHaveLength(120)
