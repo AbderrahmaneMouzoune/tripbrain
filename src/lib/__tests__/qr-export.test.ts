@@ -171,25 +171,21 @@ describe('decompressItinerary', () => {
     expect(() => decompressItinerary('données-invalides!!')).toThrow()
   })
 
-  it('devrait lever une erreur si les données décompressées ne forment pas un tableau', () => {
+  it('devrait lever une erreur si les données décompressées ne forment pas un tableau', async () => {
     // On compresse un objet non-tableau pour simuler des données corrompues
-    import('@msgpack/msgpack').then(({ encode }) => {
-      import('fflate').then(({ deflateSync }) => {
-        const packed = encode({ not: 'an array' })
-        const compressed = deflateSync(packed as Uint8Array, { level: 9 })
-        let binary = ''
-        for (let i = 0; i < compressed.length; i++) {
-          binary += String.fromCharCode(compressed[i])
-        }
-        const b64url = btoa(binary)
-          .replace(/\+/g, '-')
-          .replace(/\//g, '_')
-          .replace(/=/g, '')
-        expect(() => decompressItinerary(b64url)).toThrow(
-          'Format invalide',
-        )
-      })
-    })
+    const { encode } = await import('@msgpack/msgpack')
+    const { deflateSync } = await import('fflate')
+    const packed = encode({ not: 'an array' })
+    const compressed = deflateSync(packed as Uint8Array, { level: 9 })
+    let binary = ''
+    for (let i = 0; i < compressed.length; i++) {
+      binary += String.fromCharCode(compressed[i])
+    }
+    const b64url = btoa(binary)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=/g, '')
+    expect(() => decompressItinerary(b64url)).toThrow('Format invalide')
   })
 })
 
