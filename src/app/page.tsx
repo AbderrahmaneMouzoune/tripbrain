@@ -4,10 +4,12 @@ import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTripData } from '@/hooks/use-trip-data'
 import { useSwipe } from '@/hooks/use-swipe'
+import { useQrImport } from '@/hooks/use-qr-import'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
 import { ShareDialog } from '@/components/share-dialog'
 import { OnboardingScreen } from '@/components/onboarding-screen'
+import { QrImportDialog } from '@/components/qr-import-dialog'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ChevronLeft, ChevronRight, Map, List, FolderOpen } from 'lucide-react'
@@ -66,10 +68,14 @@ function HomePageContent() {
     importData,
     importXlsxData,
     importCsvData,
+    importItineraryData,
     exportData,
     clearData,
     getCurrentDayIndex,
   } = useTripData()
+
+  const { pendingImportData, handleQrImportConfirm, handleQrImportDismiss } =
+    useQrImport({ isLoading, importItineraryData })
 
   const searchParams = useSearchParams()
 
@@ -130,12 +136,22 @@ function HomePageContent() {
 
   if (!hasData) {
     return (
-      <OnboardingScreen
-        onImportFile={importData}
-        onImportXlsx={importXlsxData}
-        onImportCsv={importCsvData}
-        onUseMockData={loadMockData}
-      />
+      <>
+        {pendingImportData && (
+          <QrImportDialog
+            open
+            itinerary={pendingImportData}
+            onConfirm={handleQrImportConfirm}
+            onDismiss={handleQrImportDismiss}
+          />
+        )}
+        <OnboardingScreen
+          onImportFile={importData}
+          onImportXlsx={importXlsxData}
+          onImportCsv={importCsvData}
+          onUseMockData={loadMockData}
+        />
+      </>
     )
   }
 
@@ -145,6 +161,14 @@ function HomePageContent() {
 
   return (
     <ImageCacheProvider itinerary={itinerary} currentDayIndex={safeDay}>
+      {pendingImportData && (
+        <QrImportDialog
+          open
+          itinerary={pendingImportData}
+          onConfirm={handleQrImportConfirm}
+          onDismiss={handleQrImportDismiss}
+        />
+      )}
       <main className="bg-background relative min-h-screen overflow-x-clip">
         <div
           aria-hidden
