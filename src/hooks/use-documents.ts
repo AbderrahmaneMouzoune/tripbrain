@@ -8,38 +8,13 @@ import {
   type ExportProgress,
   type ImportProgress,
 } from '@/lib/document-zip'
+import {
+  DOCUMENTS_STORE as STORE_NAME,
+  openDocumentsDB as openDB,
+  type StoredFile,
+} from '@/lib/documents-db'
 
-const DB_NAME = 'tripbrain-documents'
-const DB_VERSION = 1
-const STORE_NAME = 'files'
-
-export interface StoredFile {
-  id: string
-  name: string
-  size: number
-  type: string
-  lastModified: number
-  addedAt: number
-  blob: Blob
-}
-
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' })
-        store.createIndex('addedAt', 'addedAt', { unique: false })
-        store.createIndex('name', 'name', { unique: false })
-      }
-    }
-
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
-  })
-}
+export type { StoredFile }
 
 export function useDocuments() {
   const [files, setFiles] = useState<StoredFile[]>([])

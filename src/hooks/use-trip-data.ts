@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { itinerary as mockItinerary } from '@/lib/itinerary-data'
+import { removeDemoDocuments, seedDemoDocuments } from '@/lib/demo-documents'
 
 const DB_NAME = 'tripbrain'
 const DB_VERSION = 1
@@ -96,6 +97,12 @@ export function useTripData() {
   const loadMockData = useCallback(async () => {
     const data: TripData = { itinerary: mockItinerary }
     await saveData(data)
+    try {
+      // Sample travel paperwork so the Documents tab isn't empty in demo mode
+      await seedDemoDocuments()
+    } catch {
+      // Documents are a bonus — never block the demo itinerary on them
+    }
     localStorage.setItem(DEMO_KEY, 'true')
     setItinerary(mockItinerary)
     setHasData(true)
@@ -160,6 +167,13 @@ export function useTripData() {
       tx.oncomplete = () => resolve()
       tx.onerror = () => reject(tx.error)
     })
+
+    try {
+      // Only removes the seeded demo files, never the user's own documents
+      await removeDemoDocuments()
+    } catch {
+      // Ignore — clearing the itinerary is what matters here
+    }
 
     localStorage.removeItem(DEMO_KEY)
     setItinerary([])
