@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { itinerary as mockItinerary } from '@/lib/itinerary-data'
 import { removeDemoDocuments, seedDemoDocuments } from '@/lib/demo-documents'
+import { replaceDay } from '@/lib/itinerary-edit'
 
 const DB_NAME = 'tripbrain'
 const DB_VERSION = 1
@@ -145,6 +146,27 @@ export function useTripData() {
     [saveData],
   )
 
+  /**
+   * Remplace un jour édité depuis l'interface, puis persiste l'itinéraire.
+   * La mise à jour est optimiste : en cas d'échec d'écriture, l'état précédent
+   * est restauré et l'erreur remonte à l'appelant.
+   */
+  const updateDay = useCallback(
+    async (day: DayItinerary) => {
+      const previous = itinerary
+      const next = replaceDay(previous, day)
+      setItinerary(next)
+
+      try {
+        await saveData({ itinerary: next })
+      } catch (error) {
+        setItinerary(previous)
+        throw error
+      }
+    },
+    [itinerary, saveData],
+  )
+
   const exportData = useCallback(() => {
     const data: TripData = { itinerary }
     const json = JSON.stringify(data, null, 2)
@@ -214,6 +236,7 @@ export function useTripData() {
     importData,
     importXlsxData,
     importCsvData,
+    updateDay,
     exportData,
     clearData,
     getCurrentDayIndex,

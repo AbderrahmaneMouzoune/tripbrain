@@ -5,8 +5,28 @@ import { cn } from '@/lib/utils'
 import {
   formatDate,
   getDayStatus,
+  type Accommodation,
+  type Activity,
   type DayItinerary,
+  type Transport,
 } from '@/lib/itinerary-data'
+import {
+  accommodationForm,
+  activityForm,
+  dayForm,
+  transportForm,
+} from '@/lib/edit-fields'
+import {
+  createEmptyAccommodation,
+  createEmptyActivity,
+  createEmptyTransport,
+  moveActivity,
+  removeActivity,
+  setAccommodation,
+  setTransport,
+  upsertActivity,
+} from '@/lib/itinerary-edit'
+import { EntityEditSheet } from '@/components/edit/entity-edit-sheet'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Accordion } from '@/components/ui/accordion'
@@ -34,16 +54,62 @@ import {
   StickyNote,
   Backpack,
   Tag,
+  Pencil,
+  Plus,
 } from 'lucide-react'
 import { CachedImage } from '@/components/cached-image'
 
+type EditorKind = 'day' | 'activity' | 'transport' | 'accommodation'
+
 interface DayDetailProps {
   day: DayItinerary
+  /** Active les boutons d'édition sur les différentes sections */
+  isEditing?: boolean
+  /** Reçoit la journée modifiée ; la persistance est gérée par l'appelant */
+  onDayChange?: (day: DayItinerary) => void
 }
 
-export function DayDetail({ day }: DayDetailProps) {
+export function DayDetail({
+  day,
+  isEditing = false,
+  onDayChange,
+}: DayDetailProps) {
   const status = getDayStatus(day.date)
   const dayImages = day.images ?? []
+  const { transport, accommodation } = day
+
+  // Chaque formulaire garde l'entité en cours d'édition : le panneau reste
+  // monté après fermeture pour conserver l'animation de sortie.
+  const [openEditor, setOpenEditor] = useState<EditorKind | null>(null)
+  const [dayDraft, setDayDraft] = useState<DayItinerary | null>(null)
+  const [activityDraft, setActivityDraft] = useState<Activity | null>(null)
+  const [transportDraft, setTransportDraft] = useState<Transport | null>(null)
+  const [accommodationDraft, setAccommodationDraft] =
+    useState<Accommodation | null>(null)
+
+  const closeEditor = (open: boolean) => {
+    if (!open) setOpenEditor(null)
+  }
+
+  const editDay = () => {
+    setDayDraft(day)
+    setOpenEditor('day')
+  }
+
+  const editActivity = (activity: Activity) => {
+    setActivityDraft(activity)
+    setOpenEditor('activity')
+  }
+
+  const editTransport = (value: Transport) => {
+    setTransportDraft(value)
+    setOpenEditor('transport')
+  }
+
+  const editAccommodation = (value: Accommodation) => {
+    setAccommodationDraft(value)
+    setOpenEditor('accommodation')
+  }
 
   const [carouselApi, setCarouselApi] = useState<CarouselApi>()
   const [currentSlide, setCurrentSlide] = useState(0)
@@ -80,18 +146,35 @@ export function DayDetail({ day }: DayDetailProps) {
       <div className="flex flex-col gap-5">
         {/* Header — editorial style */}
         <div className="border-border/60 flex flex-col gap-1.5 border-b pb-4">
-          <div className="space-x-1.5">
-            {day.dayType && (
-              <Badge variant="outline" className="gap-1 font-medium capitalize">
-                <Tag className="h-3 w-3" strokeWidth={1.75} />
-                {day.dayType}
-              </Badge>
-            )}
-            {day.walkingDistance && (
-              <Badge variant="outline" className="gap-1 font-medium">
-                <Footprints className="h-3 w-3" strokeWidth={1.75} />
-                {day.walkingDistance}
-              </Badge>
+          <div className="flex items-start gap-2">
+            <div className="space-x-1.5">
+              {day.dayType && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 font-medium capitalize"
+                >
+                  <Tag className="h-3 w-3" strokeWidth={1.75} />
+                  {day.dayType}
+                </Badge>
+              )}
+              {day.walkingDistance && (
+                <Badge variant="outline" className="gap-1 font-medium">
+                  <Footprints className="h-3 w-3" strokeWidth={1.75} />
+                  {day.walkingDistance}
+                </Badge>
+              )}
+            </div>
+
+            {isEditing && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={editDay}
+                className="ml-auto h-7 shrink-0 gap-1.5 rounded-full px-2.5 text-[11px]"
+              >
+                <Pencil className="h-3 w-3" strokeWidth={1.75} />
+                Modifier la journée
+              </Button>
             )}
           </div>
 
@@ -241,11 +324,35 @@ export function DayDetail({ day }: DayDetailProps) {
         )}
 
         {/* Transport info */}
-        {day.transport && <TransportCard transport={day.transport} />}
+        {transport ? (
+          <TransportCard
+            transport={transport}
+            onEdit={isEditing ? () => editTransport(transport) : undefined}
+          />
+        ) : (
+          isEditing && (
+            <AddEntityButton
+              label="Ajouter un transport"
+              onClick={() => editTransport(createEmptyTransport())}
+            />
+          )
+        )}
 
         {/* Accommodation */}
-        {day.accommodation && (
-          <AccommodationCard accommodation={day.accommodation} />
+        {accommodation ? (
+          <AccommodationCard
+            accommodation={accommodation}
+            onEdit={
+              isEditing ? () => editAccommodation(accommodation) : undefined
+            }
+          />
+        ) : (
+          isEditing && (
+            <AddEntityButton
+              label="Ajouter un hébergement"
+              onClick={() => editAccommodation(createEmptyAccommodation(day))}
+            />
+          )
         )}
 
         {/* Activities */}
@@ -270,9 +377,27 @@ export function DayDetail({ day }: DayDetailProps) {
                   key={activity.id ?? `activity-${index}`}
                   activity={activity}
                   index={index}
+                  onEdit={isEditing ? () => editActivity(activity) : undefined}
+                  onMove={
+                    isEditing
+                      ? (offset) =>
+                          onDayChange?.(moveActivity(day, activity.id, offset))
+                      : undefined
+                  }
+                  canMoveUp={index > 0}
+                  canMoveDown={index < day.activities.length - 1}
                 />
               ))}
             </Accordion>
+
+            {isEditing && (
+              <div className="mt-3">
+                <AddEntityButton
+                  label="Ajouter une activité"
+                  onClick={() => editActivity(createEmptyActivity())}
+                />
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -331,6 +456,90 @@ export function DayDetail({ day }: DayDetailProps) {
         {/* Tips */}
         {day.tips && day.tips.length > 0 && <TipsCard tips={day.tips} />}
       </div>
+
+      {dayDraft && (
+        <EntityEditSheet
+          open={openEditor === 'day'}
+          onOpenChange={closeEditor}
+          title="Modifier la journée"
+          schema={dayForm}
+          value={dayDraft}
+          onSubmit={(next) => onDayChange?.(next)}
+        />
+      )}
+
+      {activityDraft && (
+        <EntityEditSheet
+          open={openEditor === 'activity'}
+          onOpenChange={closeEditor}
+          title={
+            day.activities.some((current) => current.id === activityDraft.id)
+              ? "Modifier l'activité"
+              : 'Nouvelle activité'
+          }
+          schema={activityForm}
+          value={activityDraft}
+          onSubmit={(next) => onDayChange?.(upsertActivity(day, next))}
+          onDelete={
+            day.activities.some((current) => current.id === activityDraft.id)
+              ? () => onDayChange?.(removeActivity(day, activityDraft.id))
+              : undefined
+          }
+        />
+      )}
+
+      {transportDraft && (
+        <EntityEditSheet
+          open={openEditor === 'transport'}
+          onOpenChange={closeEditor}
+          title={transport ? 'Modifier le transport' : 'Nouveau transport'}
+          schema={transportForm}
+          value={transportDraft}
+          onSubmit={(next) => onDayChange?.(setTransport(day, next))}
+          onDelete={
+            transport
+              ? () => onDayChange?.(setTransport(day, undefined))
+              : undefined
+          }
+        />
+      )}
+
+      {accommodationDraft && (
+        <EntityEditSheet
+          open={openEditor === 'accommodation'}
+          onOpenChange={closeEditor}
+          title={
+            accommodation ? "Modifier l'hébergement" : 'Nouvel hébergement'
+          }
+          schema={accommodationForm}
+          value={accommodationDraft}
+          onSubmit={(next) => onDayChange?.(setAccommodation(day, next))}
+          onDelete={
+            accommodation
+              ? () => onDayChange?.(setAccommodation(day, undefined))
+              : undefined
+          }
+        />
+      )}
     </>
+  )
+}
+
+interface AddEntityButtonProps {
+  label: string
+  onClick: () => void
+}
+
+/** Bouton en pointillés proposé en mode édition pour créer une entité. */
+function AddEntityButton({ label, onClick }: AddEntityButtonProps) {
+  return (
+    <Button
+      variant="outline"
+      onClick={onClick}
+      className="border-border/70 text-muted-foreground hover:text-foreground h-auto w-full justify-center gap-1.5 border-dashed py-3 text-xs"
+    >
+      <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+      {label}
+    </Button>
   )
 }
