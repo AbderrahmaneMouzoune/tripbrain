@@ -1,6 +1,7 @@
 'use client'
 
 import { type Activity, type DayItinerary } from '@/lib/itinerary-data'
+import { nextActivityStatus, type ActivityStatus } from '@/lib/itinerary-edit'
 import { cn } from '@/lib/utils'
 import { useClipboard } from '@/hooks/use-clipboard'
 import {
@@ -12,6 +13,9 @@ import {
   Banknote,
   Camera,
   Check,
+  Circle,
+  CircleCheck,
+  CircleSlash,
   Clock,
   Copy,
   ExternalLink,
@@ -36,9 +40,25 @@ interface DayActivityItemProps {
   onMove?: (offset: number) => void
   canMoveUp?: boolean
   canMoveDown?: boolean
+  /**
+   * Fourni hors mode édition : bascule le statut depuis le programme, sans
+   * ouvrir le formulaire complet.
+   */
+  onStatusChange?: (status: ActivityStatus) => void
 }
 
-type ActivityStatus = Activity['status']
+/** Libellés courts affichés sur la pastille et dans les infobulles. */
+const STATUS_LABELS: Record<ActivityStatus, string> = {
+  planned: 'À faire',
+  done: 'Fait',
+  skipped: 'Annulé',
+}
+
+const STATUS_ICONS: Record<ActivityStatus, typeof Circle> = {
+  planned: Circle,
+  done: CircleCheck,
+  skipped: CircleSlash,
+}
 
 function getActivityIcon(type: Activity['type']) {
   switch (type) {
@@ -57,7 +77,7 @@ function getActivityIcon(type: Activity['type']) {
   }
 }
 
-function getActivityStatusClass(status: Exclude<ActivityStatus, undefined>) {
+function getActivityStatusClass(status: ActivityStatus) {
   switch (status) {
     case 'done':
       return 'border-green-200 bg-green-500/10 text-green-600 dark:border-green-800 dark:text-green-400'
@@ -65,6 +85,18 @@ function getActivityStatusClass(status: Exclude<ActivityStatus, undefined>) {
       return 'border-red-200 bg-red-500/10 text-red-500 dark:border-red-800 dark:text-red-400'
     default:
       return 'bg-muted/60 text-muted-foreground border-border/40'
+  }
+}
+
+/** Teinte de l'icône de bascule : discrète tant que rien n'est tranché. */
+function getStatusToggleClass(status: ActivityStatus) {
+  switch (status) {
+    case 'done':
+      return 'text-green-600 hover:text-green-700 dark:text-green-400'
+    case 'skipped':
+      return 'text-red-500 hover:text-red-600 dark:text-red-400'
+    default:
+      return 'text-muted-foreground/40 hover:text-primary'
   }
 }
 
@@ -79,9 +111,13 @@ export function DayActivityItem({
   onMove,
   canMoveUp = false,
   canMoveDown = false,
+  onStatusChange,
 }: DayActivityItemProps) {
   const Icon = getActivityIcon(activity.type)
   const activityItemId = activity.id ?? `activity-${index}`
+  const status: ActivityStatus = activity.status ?? 'planned'
+  const nextStatus = nextActivityStatus(status)
+  const StatusIcon = STATUS_ICONS[status]
   const hasDetails = Boolean(
     activity.description ||
     activity.address ||
@@ -114,17 +150,24 @@ export function DayActivityItem({
             >
               <div className="min-w-0 space-y-1.5">
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <p className="text-foreground text-sm leading-snug font-semibold">
+                  <p
+                    className={cn(
+                      'text-foreground text-sm leading-snug font-semibold',
+                      status === 'done' && 'text-muted-foreground',
+                      status === 'skipped' &&
+                        'text-muted-foreground line-through',
+                    )}
+                  >
                     {activity.name}
                   </p>
-                  {activity.status && (
+                  {status !== 'planned' && (
                     <span
                       className={cn(
-                        'rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
-                        getActivityStatusClass(activity.status),
+                        'rounded-full border px-1.5 py-0.5 text-[10px] font-medium',
+                        getActivityStatusClass(status),
                       )}
                     >
-                      {activity.status}
+                      {STATUS_LABELS[status]}
                     </span>
                   )}
                 </div>
@@ -186,6 +229,21 @@ export function DayActivityItem({
               </>
             ) : (
               <>
+                {onStatusChange && (
+                  <button
+                    type="button"
+                    onClick={() => onStatusChange(nextStatus)}
+                    title={`${STATUS_LABELS[status]} — marquer « ${STATUS_LABELS[nextStatus]} »`}
+                    aria-label={`${activity.name} : ${STATUS_LABELS[status]}. Marquer « ${STATUS_LABELS[nextStatus]} »`}
+                    className={cn(
+                      'mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors',
+                      getStatusToggleClass(status),
+                    )}
+                  >
+                    <StatusIcon className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  </button>
+                )}
+
                 {activity.coordinates && (
                   <a
                     href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}

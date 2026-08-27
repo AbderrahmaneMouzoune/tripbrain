@@ -77,6 +77,41 @@ export function moveActivity(
   return { ...day, activities }
 }
 
+/** Statuts d'une activité, dans l'ordre du cycle proposé par le programme. */
+export const ACTIVITY_STATUS_CYCLE = ['planned', 'done', 'skipped'] as const
+
+export type ActivityStatus = (typeof ACTIVITY_STATUS_CYCLE)[number]
+
+/**
+ * Statut suivant dans le cycle « prévu → fait → annulé → prévu ».
+ * Un statut absent est traité comme `planned`.
+ */
+export function nextActivityStatus(
+  status: ActivityStatus | undefined,
+): ActivityStatus {
+  const index = ACTIVITY_STATUS_CYCLE.indexOf(status ?? 'planned')
+  return ACTIVITY_STATUS_CYCLE[(index + 1) % ACTIVITY_STATUS_CYCLE.length]
+}
+
+/**
+ * Change le statut d'une activité sans toucher au reste de la journée.
+ * Sans correspondance d'id, le jour est retourné inchangé.
+ */
+export function setActivityStatus(
+  day: DayItinerary,
+  activityId: string,
+  status: ActivityStatus,
+): DayItinerary {
+  if (!day.activities.some((current) => current.id === activityId)) return day
+
+  return {
+    ...day,
+    activities: day.activities.map((current) =>
+      current.id === activityId ? { ...current, status } : current,
+    ),
+  }
+}
+
 /** Définit (ou retire, avec `undefined`) le transport du jour. */
 export function setTransport(
   day: DayItinerary,

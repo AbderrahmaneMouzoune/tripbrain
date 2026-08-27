@@ -12,6 +12,17 @@ import { OnboardingScreen } from '@/components/onboarding-screen'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import {
   ChevronLeft,
   ChevronRight,
   Map,
@@ -19,6 +30,7 @@ import {
   FolderOpen,
   Pencil,
   Check,
+  Undo2,
 } from 'lucide-react'
 import { DocumentsView } from '@/components/documents-view'
 import { ImageCacheProvider } from '@/components/image-cache-provider'
@@ -76,6 +88,7 @@ function HomePageContent() {
     importXlsxData,
     importCsvData,
     updateDay,
+    replaceItinerary,
     exportData,
     clearData,
     getCurrentDayIndex,
@@ -92,10 +105,35 @@ function HomePageContent() {
   )
   const [isMapOpen, setIsMapOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
+  // Photo de l'itinéraire prise à l'entrée en mode édition : elle permet de
+  // tout remettre en place d'un geste tant que la session d'édition dure.
+  const [editBaseline, setEditBaseline] = useState<DayItinerary[] | null>(null)
+
+  // `updateDay` reconstruit toujours le tableau : une référence différente de
+  // la photo signale qu'au moins un enregistrement a eu lieu.
+  const hasPendingEdits = editBaseline !== null && editBaseline !== itinerary
 
   const handleDayChange = (day: DayItinerary) => {
     updateDay(day).catch((error) => {
       console.error('Enregistrement de la journée impossible', error)
+    })
+  }
+
+  const startEditing = () => {
+    setEditBaseline(itinerary)
+    setIsEditing(true)
+  }
+
+  const stopEditing = () => {
+    setIsEditing(false)
+    setEditBaseline(null)
+  }
+
+  const discardEdits = () => {
+    if (!editBaseline) return
+
+    replaceItinerary(editBaseline).catch((error) => {
+      console.error('Annulation des modifications impossible', error)
     })
   }
 
@@ -212,7 +250,9 @@ function HomePageContent() {
                     <Button
                       variant={isEditing ? 'default' : 'ghost'}
                       size="icon"
-                      onClick={() => setIsEditing((current) => !current)}
+                      onClick={() =>
+                        isEditing ? stopEditing() : startEditing()
+                      }
                       aria-pressed={isEditing}
                       aria-label={
                         isEditing
@@ -328,18 +368,54 @@ function HomePageContent() {
 
             {/* Edit mode banner */}
             {isEditing && activeTab === 'roadbook' && (
-              <div className="border-primary/30 bg-primary/10 mb-4 flex items-center justify-between gap-3 rounded-xl border px-3 py-2">
-                <p className="text-foreground/80 text-xs leading-snug">
+              <div className="border-primary/30 bg-primary/10 mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2">
+                <p className="text-foreground/80 min-w-40 flex-1 text-xs leading-snug">
                   Mode édition : retouchez les informations de la journée. Tout
                   est enregistré sur cet appareil.
                 </p>
-                <Button
-                  size="sm"
-                  onClick={() => setIsEditing(false)}
-                  className="h-7 shrink-0 rounded-full px-3 text-[11px]"
-                >
-                  Terminer
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  {hasPendingEdits && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1.5 rounded-full px-3 text-[11px]"
+                        >
+                          <Undo2 className="h-3 w-3" strokeWidth={1.75} />
+                          Annuler les modifications
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            Annuler les modifications ?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            L&apos;itinéraire revient à son état d&apos;avant
+                            l&apos;ouverture du mode édition. Tout ce qui a été
+                            modifié depuis sera perdu.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>
+                            Continuer l&apos;édition
+                          </AlertDialogCancel>
+                          <AlertDialogAction onClick={discardEdits}>
+                            Tout annuler
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={stopEditing}
+                    className="h-7 shrink-0 rounded-full px-3 text-[11px]"
+                  >
+                    Terminer
+                  </Button>
+                </div>
               </div>
             )}
 
