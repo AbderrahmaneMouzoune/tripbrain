@@ -1,14 +1,21 @@
 import { describe, it, expect } from 'vitest'
 import type { EditField } from '../edit-fields'
-import { fromDraft, toDraft, validateDraft } from '../entity-draft'
+import {
+  countFilledFields,
+  fromDraft,
+  toDraft,
+  validateDraft,
+} from '../entity-draft'
 
 const fields: readonly EditField[] = [
   { key: 'name', label: 'Nom', type: 'text', required: true },
   { key: 'notes', label: 'Note', type: 'textarea' },
-  { key: 'price', label: 'Prix', type: 'number' },
-  { key: 'bookingUrl', label: 'Lien', type: 'text', allowEmpty: true },
+  { key: 'price', label: 'Prix', type: 'price', currencyKey: 'currency' },
+  { key: 'rating', label: 'Note', type: 'rating' },
+  { key: 'bookingUrl', label: 'Lien', type: 'url', allowEmpty: true },
   { key: 'reservationRequired', label: 'Réservation', type: 'switch' },
-  { key: 'tags', label: 'Tags', type: 'list' },
+  { key: 'tags', label: 'Tags', type: 'chips' },
+  { key: 'highlights', label: 'Points forts', type: 'lines' },
   { key: 'coordinates', label: 'Coordonnées', type: 'coordinates' },
 ]
 
@@ -18,8 +25,11 @@ describe('toDraft', () => {
       {
         name: 'Temple',
         price: 25,
+        currency: 'CNY',
+        rating: 4.5,
         reservationRequired: true,
         tags: ['art', 'musée'],
+        highlights: ['Vue sur le Bund'],
         coordinates: [31.2, 121.4],
       },
       fields,
@@ -29,9 +39,12 @@ describe('toDraft', () => {
       name: 'Temple',
       notes: '',
       price: '25',
+      currency: 'CNY',
+      rating: '4.5',
       bookingUrl: '',
       reservationRequired: true,
       tags: ['art', 'musée'],
+      highlights: ['Vue sur le Bund'],
       coordinates: ['31.2', '121.4'],
     })
   })
@@ -40,6 +53,7 @@ describe('toDraft', () => {
     const draft = toDraft({ price: 'gratuit', coordinates: [1] }, fields)
 
     expect(draft.price).toBe('')
+    expect(draft.currency).toBe('')
     expect(draft.tags).toEqual([])
     expect(draft.coordinates).toEqual(['', ''])
     expect(draft.reservationRequired).toBe(false)
@@ -62,8 +76,11 @@ describe('fromDraft', () => {
       name: 'Temple',
       notes: 'à voir',
       price: 25,
+      currency: 'CNY',
+      rating: 4,
       reservationRequired: true,
       tags: ['art'],
+      highlights: ['Vue'],
       coordinates: [31.2, 121.4],
     }
 
@@ -71,9 +88,12 @@ describe('fromDraft', () => {
       name: 'Temple',
       notes: '   ',
       price: '',
+      currency: 'CNY',
+      rating: '',
       bookingUrl: '',
       reservationRequired: false,
       tags: ['', '  '],
+      highlights: [],
       coordinates: ['', ''],
     })
 
@@ -84,10 +104,13 @@ describe('fromDraft', () => {
     const next = fromDraft({ id: 'act-1' }, fields, {
       name: '  Temple  ',
       notes: '',
-      price: ' 12.5 ',
+      price: ' 12,5 ',
+      currency: ' cny ',
+      rating: '4',
       bookingUrl: 'https://exemple.fr',
       reservationRequired: true,
       tags: [' art ', ''],
+      highlights: ['  Vue sur le Bund '],
       coordinates: [' 31.2 ', '121.4'],
     })
 
@@ -95,11 +118,29 @@ describe('fromDraft', () => {
       id: 'act-1',
       name: 'Temple',
       price: 12.5,
+      currency: 'CNY',
+      rating: 4,
       bookingUrl: 'https://exemple.fr',
       reservationRequired: true,
       tags: ['art'],
+      highlights: ['Vue sur le Bund'],
       coordinates: [31.2, 121.4],
     })
+  })
+
+  it('drops the currency when the amount is removed', () => {
+    const next = fromDraft(
+      { id: 'act-1', price: 25, currency: 'CNY' },
+      fields,
+      {
+        name: 'Temple',
+        price: '',
+        currency: 'CNY',
+      },
+    )
+
+    expect('price' in next).toBe(false)
+    expect('currency' in next).toBe(false)
   })
 
   it('falls back to [0, 0] for required coordinates left empty', () => {
@@ -134,6 +175,7 @@ describe('validateDraft', () => {
       validateDraft(fields, {
         name: 'Temple',
         price: '25',
+        rating: '4',
         coordinates: ['31.2', '121.4'],
       }),
     ).toEqual({})
@@ -143,10 +185,22 @@ describe('validateDraft', () => {
     expect(validateDraft(fields, { name: '   ' })).toHaveProperty('name')
   })
 
-  it('reports non-numeric values', () => {
+  it('reports non-numeric amounts', () => {
     expect(
       validateDraft(fields, { name: 'Temple', price: 'douze' }),
     ).toHaveProperty('price')
+  })
+
+  it('reports a negative amount', () => {
+    expect(
+      validateDraft(fields, { name: 'Temple', price: '-4' }),
+    ).toHaveProperty('price')
+  })
+
+  it('reports a rating outside 0 to 5', () => {
+    expect(
+      validateDraft(fields, { name: 'Temple', rating: '7' }),
+    ).toHaveProperty('rating')
   })
 
   it('reports half-filled coordinates', () => {
@@ -163,9 +217,27 @@ describe('validateDraft', () => {
 
   it('reports an empty required list', () => {
     const requiredList: readonly EditField[] = [
-      { key: 'tags', label: 'Tags', type: 'list', required: true },
+      { key: 'tags', label: 'Tags', type: 'chips', required: true },
     ]
 
     expect(validateDraft(requiredList, { tags: ['  '] })).toHaveProperty('tags')
+  })
+})
+
+describe('countFilledFields', () => {
+  it('counts text, lists, switches and coordinates that carry a value', () => {
+    const filled = countFilledFields(fields, {
+      name: 'Temple',
+      notes: '   ',
+      price: '25',
+      rating: '',
+      bookingUrl: '',
+      reservationRequired: true,
+      tags: ['art'],
+      highlights: [''],
+      coordinates: ['31.2', '121.4'],
+    })
+
+    expect(filled).toBe(5)
   })
 })

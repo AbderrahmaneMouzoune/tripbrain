@@ -330,7 +330,7 @@ function HomePageContent() {
             {isEditing && activeTab === 'roadbook' && (
               <div className="border-primary/30 bg-primary/10 mb-4 flex items-center justify-between gap-3 rounded-xl border px-3 py-2">
                 <p className="text-foreground/80 text-xs leading-snug">
-                  Mode édition — retouchez les informations de la journée. Tout
+                  Mode édition : retouchez les informations de la journée. Tout
                   est enregistré sur cet appareil.
                 </p>
                 <Button

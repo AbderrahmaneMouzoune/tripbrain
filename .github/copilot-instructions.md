@@ -34,7 +34,7 @@ bun run test:watch     # vitest in watch mode
 1. **Itinerary data** is the core model (`DayItinerary` in `src/lib/itinerary-data.ts`). It includes days, activities, transport, accommodation, and images.
 2. All trip data lives in **IndexedDB** (database `tripbrain`, store `tripData`). There is no backend.
 3. `useTripData` hook (`src/hooks/use-trip-data.ts`) manages CRUD: load from IndexedDB on mount, save on import/edit, export as JSON.
-4. In-app editing goes through `useTripData().updateDay`, which persists a whole day at a time. The pure edit helpers live in `src/lib/itinerary-edit.ts`; the edit forms are described declaratively in `src/lib/edit-fields.ts` and rendered by `EntityEditSheet` (`src/components/edit/`).
+4. In-app editing goes through `useTripData().updateDay`, which persists a whole day at a time. The pure edit helpers live in `src/lib/itinerary-edit.ts`; forms are described declaratively in `src/lib/edit-fields.ts` (sections + field types), mapped to controls in `src/components/edit/edit-field-control.tsx`, and rendered by `EntityEditSheet`. Draft conversion and validation live in `src/lib/entity-draft.ts`.
 5. Import supports **JSON**, **XLSX** (3-sheet workbook: Days/Activities/Transports), and **CSV** (3 files: days.csv/activities.csv/transports.csv). Import logic is in `src/lib/importItinerary.ts`.
 6. A separate IndexedDB database (`tripbrain-images`) caches images for offline use, managed by `useImageCache` hook.
 7. Documents (PDFs, tickets, etc.) are stored in a third IndexedDB database (`tripbrain-documents`), managed by `useDocuments` hook.

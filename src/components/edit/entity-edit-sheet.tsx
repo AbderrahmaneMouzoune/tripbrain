@@ -1,26 +1,24 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
 import { cn } from '@/lib/utils'
-import type { EditField } from '@/lib/edit-fields'
+import type { EditField, EditFormSchema } from '@/lib/edit-fields'
 import {
+  countFilledFields,
   fromDraft,
   toDraft,
   validateDraft,
+  type DraftValue,
   type EntityDraft,
 } from '@/lib/entity-draft'
+import { EditFieldControl } from '@/components/edit/edit-field-control'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import {
   Sheet,
   SheetContent,
@@ -28,20 +26,28 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, Trash2 } from 'lucide-react'
+
+/** Types dont le libellé ne peut pas pointer vers un contrôle unique. */
+const COMPOSITE_TYPES: ReadonlySet<EditField['type']> = new Set([
+  'icon-choice',
+  'choice',
+  'lines',
+  'chips',
+  'rating',
+])
 
 interface EntityEditSheetProps<T extends object> {
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
   description?: string
-  fields: readonly EditField[]
-  /** Entité éditée — sert de base au brouillon à chaque ouverture */
+  schema: EditFormSchema
+  /** Entité éditée, base du brouillon à chaque ouverture */
   value: T
   onSubmit: (value: T) => void
   /** Affiche un bouton de suppression (avec confirmation) dans le pied */
   onDelete?: () => void
-  deleteLabel?: string
 }
 
 export function EntityEditSheet<T extends object>({
@@ -49,25 +55,42 @@ export function EntityEditSheet<T extends object>({
   onOpenChange,
   title,
   description,
-  fields,
+  schema,
   value,
   onSubmit,
   onDelete,
-  deleteLabel = 'Supprimer',
 }: EntityEditSheetProps<T>) {
+  const formId = useId()
+  const scrollArea = useRef<HTMLDivElement>(null)
+
   const [draft, setDraft] = useState<EntityDraft>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
+  // Change à chaque ouverture pour repartir de contrôles vierges (saisie en
+  // cours dans les tags, sélecteur d'heure natif ou non…).
+  const [draftVersion, setDraftVersion] = useState(0)
 
   useEffect(() => {
     if (!open) return
 
-    setDraft(toDraft(value, fields))
+    const initial = toDraft(value, schema.fields)
+    setDraft(initial)
     setErrors({})
     setConfirmingDelete(false)
-  }, [open, value, fields])
+    setDraftVersion((current) => current + 1)
+    setOpenSections(
+      Object.fromEntries(
+        schema.sections.map((section, index) => [
+          section.id,
+          index === 0 ||
+            countFilledFields(fieldsOfSection(schema, section.id), initial) > 0,
+        ]),
+      ),
+    )
+  }, [open, value, schema])
 
-  const setFieldValue = (key: string, next: EntityDraft[string]) => {
+  const setFieldValue = (key: string, next: DraftValue) => {
     setDraft((current) => ({ ...current, [key]: next }))
     setErrors((current) => {
       if (!current[key]) return current
@@ -79,15 +102,88 @@ export function EntityEditSheet<T extends object>({
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
 
-    const nextErrors = validateDraft(fields, draft)
-    if (Object.keys(nextErrors).length > 0) {
+    const nextErrors = validateDraft(schema.fields, draft)
+    const firstErrorKey = schema.fields.find(
+      (field) => nextErrors[field.key],
+    )?.key
+
+    if (firstErrorKey) {
       setErrors(nextErrors)
+      // Une erreur dans une section repliée resterait invisible.
+      setOpenSections((current) => ({
+        ...current,
+        ...Object.fromEntries(
+          schema.sections
+            .filter((section) =>
+              fieldsOfSection(schema, section.id).some(
+                (field) => nextErrors[field.key],
+              ),
+            )
+            .map((section) => [section.id, true]),
+        ),
+      }))
+      requestAnimationFrame(() => {
+        scrollArea.current
+          ?.querySelector(`[data-field="${firstErrorKey}"]`)
+          ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      })
       return
     }
 
-    onSubmit(fromDraft(value, fields, draft))
+    onSubmit(fromDraft(value, schema.fields, draft))
     onOpenChange(false)
   }
+
+  const renderField = (field: EditField) => {
+    const controlId = `${formId}-${field.key}`
+    const error = errors[field.key]
+
+    return (
+      <div
+        key={field.key}
+        data-field={field.key}
+        className={cn('flex flex-col gap-1.5', !field.half && 'sm:col-span-2')}
+      >
+        {COMPOSITE_TYPES.has(field.type) ? (
+          <p className="text-foreground text-xs font-medium">
+            {field.label}
+            {field.required && (
+              <span className="text-destructive ml-0.5" aria-hidden>
+                *
+              </span>
+            )}
+          </p>
+        ) : (
+          <Label htmlFor={controlId} className="text-xs">
+            {field.label}
+            {field.required && (
+              <span className="text-destructive -ml-0.5" aria-hidden>
+                *
+              </span>
+            )}
+          </Label>
+        )}
+
+        <EditFieldControl
+          id={controlId}
+          field={field}
+          draft={draft}
+          invalid={Boolean(error)}
+          onChange={setFieldValue}
+        />
+
+        {error ? (
+          <p className="text-destructive text-[11px]">{error}</p>
+        ) : (
+          field.hint && (
+            <p className="text-muted-foreground text-[11px]">{field.hint}</p>
+          )
+        )}
+      </div>
+    )
+  }
+
+  const [firstSection, ...foldedSections] = schema.sections
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -107,44 +203,56 @@ export function EntityEditSheet<T extends object>({
           onSubmit={handleSubmit}
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-          <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto px-4 py-4 sm:grid-cols-2">
-            {fields.map((field) => (
-              <div
-                key={field.key}
-                className={cn(
-                  'flex flex-col gap-1.5',
-                  !field.half && 'sm:col-span-2',
-                )}
-              >
-                <Label htmlFor={`field-${field.key}`} className="text-xs">
-                  {field.label}
-                  {field.required && (
-                    <span className="text-destructive" aria-hidden>
-                      *
-                    </span>
-                  )}
-                </Label>
-
-                <EditFieldControl
-                  field={field}
-                  value={draft[field.key]}
-                  invalid={Boolean(errors[field.key])}
-                  onChange={(next) => setFieldValue(field.key, next)}
-                />
-
-                {errors[field.key] ? (
-                  <p className="text-destructive text-[11px]">
-                    {errors[field.key]}
-                  </p>
-                ) : (
-                  field.hint && (
-                    <p className="text-muted-foreground text-[11px]">
-                      {field.hint}
-                    </p>
-                  )
-                )}
+          <div
+            ref={scrollArea}
+            key={draftVersion}
+            className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+          >
+            {firstSection && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {fieldsOfSection(schema, firstSection.id).map(renderField)}
               </div>
-            ))}
+            )}
+
+            {foldedSections.map((section) => {
+              const sectionFields = fieldsOfSection(schema, section.id)
+              const filled = countFilledFields(sectionFields, draft)
+
+              return (
+                <Collapsible
+                  key={section.id}
+                  open={openSections[section.id] ?? false}
+                  onOpenChange={(isOpen) =>
+                    setOpenSections((current) => ({
+                      ...current,
+                      [section.id]: isOpen,
+                    }))
+                  }
+                  className="border-border/60 mt-4 border-t pt-4"
+                >
+                  <CollapsibleTrigger className="group/section flex w-full items-center gap-2 text-left">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-foreground text-sm font-semibold">
+                        {section.title}
+                      </p>
+                      <p className="text-muted-foreground truncate text-[11px]">
+                        {filled > 0
+                          ? `${filled} information${filled > 1 ? 's' : ''} renseignée${filled > 1 ? 's' : ''}`
+                          : (section.description ?? 'Rien de renseigné')}
+                      </p>
+                    </div>
+                    <ChevronDown
+                      className="text-muted-foreground h-4 w-4 shrink-0 transition-transform group-data-[state=open]/section:rotate-180"
+                      strokeWidth={1.75}
+                    />
+                  </CollapsibleTrigger>
+
+                  <CollapsibleContent className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2">
+                    {sectionFields.map(renderField)}
+                  </CollapsibleContent>
+                </Collapsible>
+              )
+            })}
           </div>
 
           <div className="border-border/60 flex flex-wrap items-center justify-end gap-2 border-t px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
@@ -164,7 +272,7 @@ export function EntityEditSheet<T extends object>({
                 }}
               >
                 <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-                {confirmingDelete ? 'Confirmer' : deleteLabel}
+                {confirmingDelete ? 'Confirmer' : 'Supprimer'}
               </Button>
             )}
             <Button
@@ -185,168 +293,14 @@ export function EntityEditSheet<T extends object>({
   )
 }
 
-interface EditFieldControlProps {
-  field: EditField
-  value: EntityDraft[string] | undefined
-  invalid: boolean
-  onChange: (value: EntityDraft[string]) => void
-}
+/** Champs d'une section ; sans section explicite, ils vont dans la première. */
+function fieldsOfSection(
+  schema: EditFormSchema,
+  sectionId: string,
+): readonly EditField[] {
+  const fallback = schema.sections[0]?.id
 
-function EditFieldControl({
-  field,
-  value,
-  invalid,
-  onChange,
-}: EditFieldControlProps) {
-  const id = `field-${field.key}`
-  const text = typeof value === 'string' ? value : ''
-
-  switch (field.type) {
-    case 'textarea':
-      return (
-        <Textarea
-          id={id}
-          value={text}
-          aria-invalid={invalid}
-          placeholder={field.placeholder}
-          onChange={(event) => onChange(event.target.value)}
-          className="min-h-20"
-        />
-      )
-
-    case 'switch':
-      return (
-        <div className="border-input flex h-9 items-center gap-2 rounded-md border px-3">
-          <Switch
-            id={id}
-            checked={value === true}
-            onCheckedChange={(checked) => onChange(checked)}
-          />
-          <span className="text-muted-foreground text-xs">
-            {value === true ? 'Oui' : 'Non'}
-          </span>
-        </div>
-      )
-
-    case 'select':
-      return (
-        <Select
-          value={text || undefined}
-          onValueChange={(next) => onChange(next)}
-        >
-          <SelectTrigger id={id} aria-invalid={invalid} className="w-full">
-            <SelectValue placeholder="Choisir…" />
-          </SelectTrigger>
-          <SelectContent>
-            {field.options?.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )
-
-    case 'list':
-      return (
-        <StringListControl
-          id={id}
-          items={Array.isArray(value) ? value : []}
-          placeholder={field.placeholder}
-          onChange={onChange}
-        />
-      )
-
-    case 'coordinates': {
-      const parts = Array.isArray(value) ? value : ['', '']
-      return (
-        <div className="flex gap-2">
-          <Input
-            id={id}
-            value={parts[0] ?? ''}
-            inputMode="decimal"
-            aria-invalid={invalid}
-            aria-label={`${field.label} — latitude`}
-            placeholder="Latitude"
-            onChange={(event) => onChange([event.target.value, parts[1] ?? ''])}
-          />
-          <Input
-            value={parts[1] ?? ''}
-            inputMode="decimal"
-            aria-invalid={invalid}
-            aria-label={`${field.label} — longitude`}
-            placeholder="Longitude"
-            onChange={(event) => onChange([parts[0] ?? '', event.target.value])}
-          />
-        </div>
-      )
-    }
-
-    default:
-      return (
-        <Input
-          id={id}
-          type={field.type === 'date' ? 'date' : 'text'}
-          inputMode={field.type === 'number' ? 'decimal' : undefined}
-          value={text}
-          aria-invalid={invalid}
-          placeholder={field.placeholder}
-          onChange={(event) => onChange(event.target.value)}
-        />
-      )
-  }
-}
-
-interface StringListControlProps {
-  id: string
-  items: string[]
-  placeholder?: string
-  onChange: (items: string[]) => void
-}
-
-function StringListControl({
-  id,
-  items,
-  placeholder,
-  onChange,
-}: StringListControlProps) {
-  return (
-    <div className="flex flex-col gap-2">
-      {items.map((item, index) => (
-        <div key={index} className="flex gap-2">
-          <Input
-            id={index === 0 ? id : undefined}
-            value={item}
-            placeholder={placeholder}
-            onChange={(event) => {
-              const next = [...items]
-              next[index] = event.target.value
-              onChange(next)
-            }}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground hover:text-destructive shrink-0"
-            aria-label={`Supprimer la ligne ${index + 1}`}
-            onClick={() => onChange(items.filter((_, i) => i !== index))}
-          >
-            <Trash2 className="h-4 w-4" strokeWidth={1.75} />
-          </Button>
-        </div>
-      ))}
-
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="w-fit gap-1.5"
-        onClick={() => onChange([...items, ''])}
-      >
-        <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-        Ajouter
-      </Button>
-    </div>
+  return schema.fields.filter(
+    (field) => (field.section ?? fallback) === sectionId,
   )
 }

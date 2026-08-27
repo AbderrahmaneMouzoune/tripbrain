@@ -11,10 +11,10 @@ import {
   type Transport,
 } from '@/lib/itinerary-data'
 import {
-  accommodationFields,
-  activityFields,
-  dayFields,
-  transportFields,
+  accommodationForm,
+  activityForm,
+  dayForm,
+  transportForm,
 } from '@/lib/edit-fields'
 import {
   createEmptyAccommodation,
@@ -65,7 +65,7 @@ interface DayDetailProps {
   day: DayItinerary
   /** Active les boutons d'édition sur les différentes sections */
   isEditing?: boolean
-  /** Reçoit la journée modifiée — la persistance est gérée par l'appelant */
+  /** Reçoit la journée modifiée ; la persistance est gérée par l'appelant */
   onDayChange?: (day: DayItinerary) => void
 }
 
@@ -462,7 +462,7 @@ export function DayDetail({
           open={openEditor === 'day'}
           onOpenChange={closeEditor}
           title="Modifier la journée"
-          fields={dayFields}
+          schema={dayForm}
           value={dayDraft}
           onSubmit={(next) => onDayChange?.(next)}
         />
@@ -477,7 +477,7 @@ export function DayDetail({
               ? "Modifier l'activité"
               : 'Nouvelle activité'
           }
-          fields={activityFields}
+          schema={activityForm}
           value={activityDraft}
           onSubmit={(next) => onDayChange?.(upsertActivity(day, next))}
           onDelete={
@@ -485,7 +485,6 @@ export function DayDetail({
               ? () => onDayChange?.(removeActivity(day, activityDraft.id))
               : undefined
           }
-          deleteLabel="Supprimer l'activité"
         />
       )}
 
@@ -494,7 +493,7 @@ export function DayDetail({
           open={openEditor === 'transport'}
           onOpenChange={closeEditor}
           title={transport ? 'Modifier le transport' : 'Nouveau transport'}
-          fields={transportFields}
+          schema={transportForm}
           value={transportDraft}
           onSubmit={(next) => onDayChange?.(setTransport(day, next))}
           onDelete={
@@ -502,7 +501,6 @@ export function DayDetail({
               ? () => onDayChange?.(setTransport(day, undefined))
               : undefined
           }
-          deleteLabel="Supprimer le transport"
         />
       )}
 
@@ -513,7 +511,7 @@ export function DayDetail({
           title={
             accommodation ? "Modifier l'hébergement" : 'Nouvel hébergement'
           }
-          fields={accommodationFields}
+          schema={accommodationForm}
           value={accommodationDraft}
           onSubmit={(next) => onDayChange?.(setAccommodation(day, next))}
           onDelete={
@@ -521,7 +519,6 @@ export function DayDetail({
               ? () => onDayChange?.(setAccommodation(day, undefined))
               : undefined
           }
-          deleteLabel="Supprimer l'hébergement"
         />
       )}
     </>

@@ -1,7 +1,7 @@
 /**
  * Opérations d'édition de l'itinéraire.
  *
- * Fonctions pures — elles ne touchent ni à React ni à IndexedDB : la
+ * Fonctions pures : elles ne touchent ni à React ni à IndexedDB, la
  * persistance reste dans `useTripData`, l'affichage dans les composants.
  * Toutes retournent de nouvelles structures (jamais de mutation en place).
  */

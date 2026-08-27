@@ -3,9 +3,10 @@
  * formulaire d'édition.
  *
  * Le brouillon ne contient que des chaînes, des booléens et des tableaux de
- * chaînes : c'est ce que les `<input>` produisent. La reconstruction se charge
- * de reparser les nombres, les coordonnées, et surtout de **supprimer** les
- * clés vidées par l'utilisateur plutôt que de stocker des valeurs vides.
+ * chaînes : c'est ce que les contrôles de saisie produisent. La reconstruction
+ * se charge de reparser les nombres, les coordonnées, et surtout de
+ * **supprimer** les clés vidées par l'utilisateur plutôt que de stocker des
+ * valeurs vides.
  */
 
 import type { EditField } from './edit-fields'
@@ -14,6 +15,13 @@ export type DraftValue = string | boolean | string[]
 export type EntityDraft = Record<string, DraftValue>
 
 type UnknownRecord = Record<string, unknown>
+
+/** Types dont la valeur se saisit comme un nombre. */
+const NUMERIC_TYPES: ReadonlySet<EditField['type']> = new Set([
+  'number',
+  'rating',
+  'price',
+])
 
 /**
  * Vue indexable d'une entité : les interfaces du modèle n'ont pas de signature
@@ -34,25 +42,34 @@ export function toDraft(
   for (const field of fields) {
     const value = record[field.key]
 
-    switch (field.type) {
-      case 'switch':
-        draft[field.key] = value === true
-        break
-      case 'list':
-        draft[field.key] = Array.isArray(value) ? value.map(String) : []
-        break
-      case 'coordinates':
-        draft[field.key] =
-          Array.isArray(value) && value.length === 2
-            ? [String(value[0]), String(value[1])]
-            : ['', '']
-        break
-      case 'number':
-        draft[field.key] = typeof value === 'number' ? String(value) : ''
-        break
-      default:
-        draft[field.key] = typeof value === 'string' ? value : ''
+    if (field.type === 'switch') {
+      draft[field.key] = value === true
+      continue
     }
+
+    if (field.type === 'lines' || field.type === 'chips') {
+      draft[field.key] = Array.isArray(value) ? value.map(String) : []
+      continue
+    }
+
+    if (field.type === 'coordinates') {
+      draft[field.key] =
+        Array.isArray(value) && value.length === 2
+          ? [String(value[0]), String(value[1])]
+          : ['', '']
+      continue
+    }
+
+    if (NUMERIC_TYPES.has(field.type)) {
+      draft[field.key] = typeof value === 'number' ? String(value) : ''
+      if (field.currencyKey) {
+        const currency = record[field.currencyKey]
+        draft[field.currencyKey] = typeof currency === 'string' ? currency : ''
+      }
+      continue
+    }
+
+    draft[field.key] = typeof value === 'string' ? value : ''
   }
 
   return draft
@@ -74,46 +91,48 @@ export function fromDraft<T extends object>(
   for (const field of fields) {
     const value = draft[field.key]
 
-    switch (field.type) {
-      case 'switch': {
-        if (value === true) next[field.key] = true
-        else delete next[field.key]
-        break
-      }
-      case 'list': {
-        const items = Array.isArray(value)
-          ? value.map((item) => item.trim()).filter(Boolean)
-          : []
-        if (items.length > 0) next[field.key] = items
-        else if (field.allowEmpty) next[field.key] = []
-        else delete next[field.key]
-        break
-      }
-      case 'coordinates': {
-        const parsed = parseCoordinates(value)
-        if (parsed) next[field.key] = parsed
-        else if (field.required) next[field.key] = [0, 0]
-        else delete next[field.key]
-        break
-      }
-      case 'number': {
-        const parsed = Number(typeof value === 'string' ? value.trim() : '')
-        if (
-          typeof value === 'string' &&
-          value.trim() &&
-          Number.isFinite(parsed)
-        )
-          next[field.key] = parsed
-        else delete next[field.key]
-        break
-      }
-      default: {
-        const text = typeof value === 'string' ? value.trim() : ''
-        if (text) next[field.key] = text
-        else if (field.allowEmpty || field.required) next[field.key] = text
-        else delete next[field.key]
-      }
+    if (field.type === 'switch') {
+      if (value === true) next[field.key] = true
+      else delete next[field.key]
+      continue
     }
+
+    if (field.type === 'lines' || field.type === 'chips') {
+      const items = Array.isArray(value)
+        ? value.map((item) => item.trim()).filter(Boolean)
+        : []
+      if (items.length > 0) next[field.key] = items
+      else if (field.allowEmpty) next[field.key] = []
+      else delete next[field.key]
+      continue
+    }
+
+    if (field.type === 'coordinates') {
+      const parsed = parseCoordinates(value)
+      if (parsed) next[field.key] = parsed
+      else if (field.required) next[field.key] = [0, 0]
+      else delete next[field.key]
+      continue
+    }
+
+    if (NUMERIC_TYPES.has(field.type)) {
+      const amount = parseNumber(value)
+      if (amount === null) delete next[field.key]
+      else next[field.key] = amount
+
+      if (field.currencyKey) {
+        const currency = readText(draft[field.currencyKey]).toUpperCase()
+        // Une devise sans montant n'a rien à dire : les deux vont de pair.
+        if (amount === null || !currency) delete next[field.currencyKey]
+        else next[field.currencyKey] = currency
+      }
+      continue
+    }
+
+    const text = readText(value)
+    if (text) next[field.key] = text
+    else if (field.allowEmpty || field.required) next[field.key] = text
+    else delete next[field.key]
   }
 
   // Les clés hors formulaire sont recopiées telles quelles : la forme de
@@ -143,29 +162,59 @@ export function validateDraft(
       continue
     }
 
-    if (field.type === 'number') {
-      const text = typeof value === 'string' ? value.trim() : ''
-      if (text && !Number.isFinite(Number(text))) {
+    if (NUMERIC_TYPES.has(field.type)) {
+      const text = readText(value)
+      const amount = parseNumber(value)
+
+      if (text && amount === null) {
         errors[field.key] = 'Valeur numérique attendue'
+      } else if (field.type === 'rating' && amount !== null) {
+        if (amount < 0 || amount > 5) errors[field.key] = 'Note entre 0 et 5'
+      } else if (field.type === 'price' && amount !== null && amount < 0) {
+        errors[field.key] = 'Montant positif attendu'
+      } else if (field.required && !text) {
+        errors[field.key] = 'Ce champ est obligatoire'
       }
       continue
     }
 
-    if (field.required) {
-      const filled =
-        typeof value === 'string'
-          ? value.trim() !== ''
-          : Array.isArray(value)
-            ? value.some((item) => item.trim() !== '')
-            : value === true
-      if (!filled) errors[field.key] = 'Ce champ est obligatoire'
+    if (field.required && !isFilled(value)) {
+      errors[field.key] = 'Ce champ est obligatoire'
     }
   }
 
   return errors
 }
 
-function parseCoordinates(value: DraftValue): [number, number] | null {
+/** Nombre de champs renseignés dans une section, pour son résumé replié. */
+export function countFilledFields(
+  fields: readonly EditField[],
+  draft: EntityDraft,
+): number {
+  return fields.filter((field) => isFilled(draft[field.key])).length
+}
+
+function isFilled(value: DraftValue | undefined): boolean {
+  if (typeof value === 'string') return value.trim() !== ''
+  if (Array.isArray(value)) return value.some((item) => item.trim() !== '')
+  return value === true
+}
+
+function readText(value: DraftValue | undefined): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function parseNumber(value: DraftValue | undefined): number | null {
+  const text = readText(value).replace(',', '.')
+  if (!text) return null
+
+  const parsed = Number(text)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function parseCoordinates(
+  value: DraftValue | undefined,
+): [number, number] | null {
   if (!Array.isArray(value) || value.length !== 2) return null
 
   const [latitude, longitude] = value.map((part) => Number(part.trim()))

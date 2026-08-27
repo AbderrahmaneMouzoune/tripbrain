@@ -117,6 +117,12 @@ Tu peux alors corriger ce qui a change sans repasser par un import :
 - les activites : en ajouter, les modifier, les reordonner ou les supprimer
 - le transport et l'hebergement du jour : les completer, les creer s'ils manquent, ou les retirer
 
+Les formulaires sont penses pour le pouce : la categorie d'une activite et le mode de
+transport se choisissent sur des cartes illustrees, le statut sur un selecteur segmente,
+le prix et sa devise dans un seul champ, l'appreciation en etoiles, les tags en pastilles.
+Les infos secondaires sont regroupees dans des sections repliees, qui s'ouvrent d'elles-memes
+quand elles contiennent deja quelque chose.
+
 Chaque modification est enregistree immediatement sur ton appareil, comme le reste de tes donnees.
 
 ### Carte du voyage
