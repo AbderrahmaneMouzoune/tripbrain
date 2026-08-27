@@ -109,6 +109,16 @@ Elle te montre la journee comme un mini guide personnel :
 - les points d'interet
 - les infos de logement et de trajet
 
+### Mode edition
+
+Un bouton crayon en haut de l'ecran fait passer le roadbook en mode edition.
+Tu peux alors corriger ce qui a change sans repasser par un import :
+- les infos de la journee (titre, ville, date, note, points forts, conseils, bagages, plats a gouter)
+- les activites : en ajouter, les modifier, les reordonner ou les supprimer
+- le transport et l'hebergement du jour : les completer, les creer s'ils manquent, ou les retirer
+
+Chaque modification est enregistree immediatement sur ton appareil, comme le reste de tes donnees.
+
 ### Carte du voyage
 
 Tu peux visualiser ton parcours sur une carte.

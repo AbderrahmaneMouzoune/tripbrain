@@ -17,6 +17,9 @@ import {
   ExternalLink,
   MapPin,
   Navigation,
+  Pencil,
+  ArrowUp,
+  ArrowDown,
   ShoppingBag,
   Sparkles,
   Star,
@@ -27,6 +30,12 @@ import {
 interface DayActivityItemProps {
   activity: DayItinerary['activities'][number]
   index: number
+  /** Fourni en mode édition : remplace les raccourcis par les actions d'édition */
+  onEdit?: () => void
+  /** Déplace l'activité dans le programme (-1 vers le haut, +1 vers le bas) */
+  onMove?: (offset: number) => void
+  canMoveUp?: boolean
+  canMoveDown?: boolean
 }
 
 type ActivityStatus = Activity['status']
@@ -63,7 +72,14 @@ function formatPrice(value: number, currency?: string) {
   return [value.toLocaleString('fr-FR'), currency].filter(Boolean).join(' ')
 }
 
-export function DayActivityItem({ activity, index }: DayActivityItemProps) {
+export function DayActivityItem({
+  activity,
+  index,
+  onEdit,
+  onMove,
+  canMoveUp = false,
+  canMoveDown = false,
+}: DayActivityItemProps) {
   const Icon = getActivityIcon(activity.type)
   const activityItemId = activity.id ?? `activity-${index}`
   const hasDetails = Boolean(
@@ -135,41 +151,78 @@ export function DayActivityItem({ activity, index }: DayActivityItemProps) {
               </div>
             </AccordionTrigger>
 
-            {activity.coordinates && (
-              <a
-                href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
-                aria-label={`Voir ${activity.name} sur la carte`}
-              >
-                <Navigation className="h-3.5 w-3.5" strokeWidth={1.5} />
-              </a>
-            )}
+            {onEdit ? (
+              <>
+                {onMove && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => onMove(-1)}
+                      disabled={!canMoveUp}
+                      aria-label={`Monter ${activity.name}`}
+                      className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors disabled:pointer-events-none disabled:opacity-30"
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onMove(1)}
+                      disabled={!canMoveDown}
+                      aria-label={`Descendre ${activity.name}`}
+                      className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors disabled:pointer-events-none disabled:opacity-30"
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  aria-label={`Modifier ${activity.name}`}
+                  className="text-primary hover:text-primary/80 mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
+                >
+                  <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
+                </button>
+              </>
+            ) : (
+              <>
+                {activity.coordinates && (
+                  <a
+                    href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
+                    aria-label={`Voir ${activity.name} sur la carte`}
+                  >
+                    <Navigation className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  </a>
+                )}
 
-            <button
-              type="button"
-              onClick={() => {
-                void copy(activity.name)
-              }}
-              title={
-                activity.address
-                  ? "Copier l'adresse"
-                  : "Copier le nom de l'activité"
-              }
-              aria-label={
-                activity.address
-                  ? `Copier l'adresse de ${activity.name}`
-                  : `Copier le nom de ${activity.name}`
-              }
-              className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
-            >
-              {copied ? (
-                <Check className="h-3.5 w-3.5 text-green-500" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
-              )}
-            </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copy(activity.name)
+                  }}
+                  title={
+                    activity.address
+                      ? "Copier l'adresse"
+                      : "Copier le nom de l'activité"
+                  }
+                  aria-label={
+                    activity.address
+                      ? `Copier l'adresse de ${activity.name}`
+                      : `Copier le nom de ${activity.name}`
+                  }
+                  className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
+                >
+                  {copied ? (
+                    <Check className="h-3.5 w-3.5 text-green-500" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                  )}
+                </button>
+              </>
+            )}
           </div>
 
           {hasDetails && (

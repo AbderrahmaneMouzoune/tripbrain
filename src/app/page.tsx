@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTripData } from '@/hooks/use-trip-data'
+import type { DayItinerary } from '@/lib/itinerary-data'
 import { useSwipe } from '@/hooks/use-swipe'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
@@ -10,7 +11,15 @@ import { ShareDialog } from '@/components/share-dialog'
 import { OnboardingScreen } from '@/components/onboarding-screen'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ChevronLeft, ChevronRight, Map, List, FolderOpen } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Map,
+  List,
+  FolderOpen,
+  Pencil,
+  Check,
+} from 'lucide-react'
 import { DocumentsView } from '@/components/documents-view'
 import { ImageCacheProvider } from '@/components/image-cache-provider'
 import { CacheStatusBadge } from '@/components/cache-status-badge'
@@ -66,6 +75,7 @@ function HomePageContent() {
     importData,
     importXlsxData,
     importCsvData,
+    updateDay,
     exportData,
     clearData,
     getCurrentDayIndex,
@@ -81,6 +91,13 @@ function HomePageContent() {
     'roadbook',
   )
   const [isMapOpen, setIsMapOpen] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+
+  const handleDayChange = (day: DayItinerary) => {
+    updateDay(day).catch((error) => {
+      console.error('Enregistrement de la journée impossible', error)
+    })
+  }
 
   useEffect(() => {
     if (!hasData && !isLoading && searchParams.get('demo') === 'true') {
@@ -191,6 +208,30 @@ function HomePageContent() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  {activeTab === 'roadbook' && (
+                    <Button
+                      variant={isEditing ? 'default' : 'ghost'}
+                      size="icon"
+                      onClick={() => setIsEditing((current) => !current)}
+                      aria-pressed={isEditing}
+                      aria-label={
+                        isEditing
+                          ? 'Quitter le mode édition'
+                          : 'Modifier cette journée'
+                      }
+                      title={
+                        isEditing
+                          ? 'Quitter le mode édition'
+                          : 'Modifier cette journée'
+                      }
+                    >
+                      {isEditing ? (
+                        <Check className="h-4 w-4" strokeWidth={2} />
+                      ) : (
+                        <Pencil className="h-4 w-4" strokeWidth={1.75} />
+                      )}
+                    </Button>
+                  )}
                   <CacheStatusBadge />
                   <ShareDialog
                     itinerary={itinerary}
@@ -285,6 +326,23 @@ function HomePageContent() {
               )}
             </div>
 
+            {/* Edit mode banner */}
+            {isEditing && activeTab === 'roadbook' && (
+              <div className="border-primary/30 bg-primary/10 mb-4 flex items-center justify-between gap-3 rounded-xl border px-3 py-2">
+                <p className="text-foreground/80 text-xs leading-snug">
+                  Mode édition — retouchez les informations de la journée. Tout
+                  est enregistré sur cet appareil.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={() => setIsEditing(false)}
+                  className="h-7 shrink-0 rounded-full px-3 text-[11px]"
+                >
+                  Terminer
+                </Button>
+              </div>
+            )}
+
             {/* Content */}
             {activeTab === 'roadbook' ? (
               <div
@@ -296,7 +354,11 @@ function HomePageContent() {
                 })}
                 onAnimationEnd={() => setSwipeDirection('idle')}
               >
-                <DayDetail day={currentDay} />
+                <DayDetail
+                  day={currentDay}
+                  isEditing={isEditing}
+                  onDayChange={handleDayChange}
+                />
               </div>
             ) : (
               <DocumentsView />

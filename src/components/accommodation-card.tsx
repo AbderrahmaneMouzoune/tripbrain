@@ -25,6 +25,7 @@ import {
   ExternalLink,
   Copy,
   Check,
+  Pencil,
 } from 'lucide-react'
 
 function getStatusBadgeClass(status: Accommodation['status']) {
@@ -66,9 +67,14 @@ function formatPrice(value: number, currency?: string) {
 
 interface AccommodationCardProps {
   accommodation: Accommodation
+  /** Fourni en mode édition : affiche le bouton de modification */
+  onEdit?: () => void
 }
 
-export function AccommodationCard({ accommodation }: AccommodationCardProps) {
+export function AccommodationCard({
+  accommodation,
+  onEdit,
+}: AccommodationCardProps) {
   const images = accommodation.images ?? []
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const { copied: copiedName, copy: copyName } = useClipboard()
@@ -157,6 +163,17 @@ export function AccommodationCard({ accommodation }: AccommodationCardProps) {
                   >
                     {accommodation.status}
                   </span>
+                )}
+                {onEdit && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onEdit}
+                    aria-label="Modifier l'hébergement"
+                    className="ml-auto h-7 w-7 shrink-0 rounded-full"
+                  >
+                    <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  </Button>
                 )}
               </div>
 

@@ -15,6 +15,7 @@ import {
   Armchair,
   Ticket,
   ExternalLink,
+  Pencil,
 } from 'lucide-react'
 
 function getTransportIcon(type: string) {
@@ -51,9 +52,11 @@ function formatPrice(value: number, currency?: string) {
 
 interface TransportCardProps {
   transport: Transport
+  /** Fourni en mode édition : affiche le bouton de modification */
+  onEdit?: () => void
 }
 
-export function TransportCard({ transport }: TransportCardProps) {
+export function TransportCard({ transport, onEdit }: TransportCardProps) {
   const Icon = getTransportIcon(transport.type)
   const hasRoute = Boolean(transport.from && transport.to)
 
@@ -87,6 +90,18 @@ export function TransportCard({ transport }: TransportCardProps) {
               >
                 {transport.status}
               </span>
+            )}
+            {onEdit && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={onEdit}
+                aria-label="Modifier le transport"
+                className="ml-auto h-7 w-7 shrink-0 rounded-full"
+              >
+                <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
+              </Button>
             )}
           </div>
 
