@@ -1,6 +1,7 @@
 'use client'
 
 import { type Activity, type DayItinerary } from '@/lib/itinerary-data'
+import { nextActivityStatus, type ActivityStatus } from '@/lib/itinerary-edit'
 import { cn } from '@/lib/utils'
 import { useClipboard } from '@/hooks/use-clipboard'
 import {
@@ -25,6 +26,7 @@ import {
   Star,
   Train,
   Utensils,
+  X,
 } from 'lucide-react'
 
 interface DayActivityItemProps {
@@ -36,9 +38,19 @@ interface DayActivityItemProps {
   onMove?: (offset: number) => void
   canMoveUp?: boolean
   canMoveDown?: boolean
+  /**
+   * Fourni hors mode édition : bascule le statut depuis le programme, sans
+   * ouvrir le formulaire complet.
+   */
+  onStatusChange?: (status: ActivityStatus) => void
 }
 
-type ActivityStatus = Activity['status']
+/** Libellés courts affichés sur la pastille et dans les infobulles. */
+const STATUS_LABELS: Record<ActivityStatus, string> = {
+  planned: 'À faire',
+  done: 'Fait',
+  skipped: 'Annulé',
+}
 
 function getActivityIcon(type: Activity['type']) {
   switch (type) {
@@ -57,7 +69,7 @@ function getActivityIcon(type: Activity['type']) {
   }
 }
 
-function getActivityStatusClass(status: Exclude<ActivityStatus, undefined>) {
+function getActivityStatusClass(status: ActivityStatus) {
   switch (status) {
     case 'done':
       return 'border-green-200 bg-green-500/10 text-green-600 dark:border-green-800 dark:text-green-400'
@@ -65,6 +77,22 @@ function getActivityStatusClass(status: Exclude<ActivityStatus, undefined>) {
       return 'border-red-200 bg-red-500/10 text-red-500 dark:border-red-800 dark:text-red-400'
     default:
       return 'bg-muted/60 text-muted-foreground border-border/40'
+  }
+}
+
+/**
+ * Allure de la case à cocher : anneau vide tant que rien n'est tranché, pastille
+ * pleine une fois l'activité faite ou annulée. Le glyphe du survol annonce
+ * l'effet de l'appui sur les pointeurs qui le permettent.
+ */
+function getStatusToggleClass(status: ActivityStatus) {
+  switch (status) {
+    case 'done':
+      return 'border-green-600 bg-green-600 text-white hover:bg-green-600/85 dark:border-green-500 dark:bg-green-500'
+    case 'skipped':
+      return 'border-red-500 bg-red-500 text-white hover:bg-red-500/85 dark:border-red-500/80 dark:bg-red-500/80'
+    default:
+      return 'border-muted-foreground/35 text-transparent hover:border-primary hover:text-primary/45'
   }
 }
 
@@ -79,9 +107,12 @@ export function DayActivityItem({
   onMove,
   canMoveUp = false,
   canMoveDown = false,
+  onStatusChange,
 }: DayActivityItemProps) {
   const Icon = getActivityIcon(activity.type)
   const activityItemId = activity.id ?? `activity-${index}`
+  const status: ActivityStatus = activity.status ?? 'planned'
+  const nextStatus = nextActivityStatus(status)
   const hasDetails = Boolean(
     activity.description ||
     activity.address ||
@@ -100,8 +131,29 @@ export function DayActivityItem({
       className="border-b-0 py-3 first:pt-0 last:pb-0"
     >
       <div className="flex gap-3">
-        <div className="bg-primary/10 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg">
-          <Icon className="text-primary h-3.5 w-3.5" strokeWidth={1.75} />
+        <div className="mt-0.5 flex shrink-0 items-center gap-2 self-start">
+          {onStatusChange && (
+            <button
+              type="button"
+              onClick={() => onStatusChange(nextStatus)}
+              title={`${STATUS_LABELS[status]} — appuyer pour marquer « ${STATUS_LABELS[nextStatus]} »`}
+              aria-label={`${activity.name} : ${STATUS_LABELS[status]}. Appuyer pour marquer « ${STATUS_LABELS[nextStatus]} »`}
+              className={cn(
+                'flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 transition-colors active:scale-90',
+                getStatusToggleClass(status),
+              )}
+            >
+              {status === 'skipped' ? (
+                <X className="h-3.5 w-3.5" strokeWidth={3} />
+              ) : (
+                <Check className="h-3.5 w-3.5" strokeWidth={3} />
+              )}
+            </button>
+          )}
+
+          <div className="bg-primary/10 flex h-7 w-7 items-center justify-center rounded-lg">
+            <Icon className="text-primary h-3.5 w-3.5" strokeWidth={1.75} />
+          </div>
         </div>
 
         <div className="min-w-0 flex-1">
@@ -114,17 +166,24 @@ export function DayActivityItem({
             >
               <div className="min-w-0 space-y-1.5">
                 <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <p className="text-foreground text-sm leading-snug font-semibold">
+                  <p
+                    className={cn(
+                      'text-foreground text-sm leading-snug font-semibold',
+                      status === 'done' && 'text-muted-foreground',
+                      status === 'skipped' &&
+                        'text-muted-foreground line-through',
+                    )}
+                  >
                     {activity.name}
                   </p>
-                  {activity.status && (
+                  {status !== 'planned' && (
                     <span
                       className={cn(
-                        'rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
-                        getActivityStatusClass(activity.status),
+                        'rounded-full border px-1.5 py-0.5 text-[10px] font-medium',
+                        getActivityStatusClass(status),
                       )}
                     >
-                      {activity.status}
+                      {STATUS_LABELS[status]}
                     </span>
                   )}
                 </div>

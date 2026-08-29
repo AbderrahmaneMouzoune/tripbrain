@@ -6,9 +6,11 @@ import {
   createEmptyTransport,
   createEntityId,
   moveActivity,
+  nextActivityStatus,
   removeActivity,
   replaceDay,
   setAccommodation,
+  setActivityStatus,
   setTransport,
   upsertActivity,
 } from '../itinerary-edit'
@@ -195,5 +197,53 @@ describe('empty entity factories', () => {
 
     expect(accommodation.checkIn).toBe('bientôt')
     expect(accommodation.checkOut).toBe('bientôt')
+  })
+})
+
+describe('nextActivityStatus', () => {
+  it('parcourt le cycle prévu → fait → annulé → prévu', () => {
+    expect(nextActivityStatus('planned')).toBe('done')
+    expect(nextActivityStatus('done')).toBe('skipped')
+    expect(nextActivityStatus('skipped')).toBe('planned')
+  })
+
+  it('traite un statut absent comme « prévu »', () => {
+    expect(nextActivityStatus(undefined)).toBe('done')
+  })
+})
+
+describe('setActivityStatus', () => {
+  it('change le statut de la seule activité visée', () => {
+    const day = makeDay()
+
+    const next = setActivityStatus(day, 'act-2', 'done')
+
+    expect(next.activities.map((activity) => activity.status)).toEqual([
+      undefined,
+      'done',
+    ])
+    expect(next.activities[0]).toBe(day.activities[0])
+  })
+
+  it("préserve les autres champs de l'activité", () => {
+    const day = makeDay({
+      activities: [{ ...makeActivity('act-1'), price: 12, status: 'planned' }],
+    })
+
+    const next = setActivityStatus(day, 'act-1', 'skipped')
+
+    expect(next.activities[0]).toEqual({
+      id: 'act-1',
+      name: 'act-1',
+      type: 'visit',
+      price: 12,
+      status: 'skipped',
+    })
+  })
+
+  it("laisse la journée inchangée quand l'id est inconnu", () => {
+    const day = makeDay()
+
+    expect(setActivityStatus(day, 'inconnu', 'done')).toBe(day)
   })
 })

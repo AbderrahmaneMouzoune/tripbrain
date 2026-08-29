@@ -23,6 +23,7 @@ import {
   moveActivity,
   removeActivity,
   setAccommodation,
+  setActivityStatus,
   setTransport,
   upsertActivity,
 } from '@/lib/itinerary-edit'
@@ -386,6 +387,14 @@ export function DayDetail({
                   }
                   canMoveUp={index > 0}
                   canMoveDown={index < day.activities.length - 1}
+                  onStatusChange={
+                    !isEditing && onDayChange
+                      ? (status) =>
+                          onDayChange(
+                            setActivityStatus(day, activity.id, status),
+                          )
+                      : undefined
+                  }
                 />
               ))}
             </Accordion>

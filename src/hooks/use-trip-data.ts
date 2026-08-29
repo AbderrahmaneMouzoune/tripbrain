@@ -147,14 +147,14 @@ export function useTripData() {
   )
 
   /**
-   * Remplace un jour édité depuis l'interface, puis persiste l'itinéraire.
+   * Remplace l'itinéraire entier puis le persiste. Sert au retour arrière du
+   * mode édition, qui restaure une photo prise avant les modifications.
    * La mise à jour est optimiste : en cas d'échec d'écriture, l'état précédent
    * est restauré et l'erreur remonte à l'appelant.
    */
-  const updateDay = useCallback(
-    async (day: DayItinerary) => {
+  const replaceItinerary = useCallback(
+    async (next: DayItinerary[]) => {
       const previous = itinerary
-      const next = replaceDay(previous, day)
       setItinerary(next)
 
       try {
@@ -165,6 +165,14 @@ export function useTripData() {
       }
     },
     [itinerary, saveData],
+  )
+
+  /** Remplace un jour édité depuis l'interface, puis persiste l'itinéraire. */
+  const updateDay = useCallback(
+    async (day: DayItinerary) => {
+      await replaceItinerary(replaceDay(itinerary, day))
+    },
+    [itinerary, replaceItinerary],
   )
 
   const exportData = useCallback(() => {
@@ -237,6 +245,7 @@ export function useTripData() {
     importXlsxData,
     importCsvData,
     updateDay,
+    replaceItinerary,
     exportData,
     clearData,
     getCurrentDayIndex,

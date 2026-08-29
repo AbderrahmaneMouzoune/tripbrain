@@ -62,6 +62,7 @@ export function EntityEditSheet<T extends object>({
 }: EntityEditSheetProps<T>) {
   const formId = useId()
   const scrollArea = useRef<HTMLDivElement>(null)
+  const content = useRef<HTMLDivElement>(null)
 
   const [draft, setDraft] = useState<EntityDraft>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -89,6 +90,25 @@ export function EntityEditSheet<T extends object>({
       ),
     )
   }, [open, value, schema])
+
+  /**
+   * Amène la section fraîchement dépliée en haut de la zone de défilement :
+   * sans ça, l'ouverture se joue hors écran et passe inaperçue.
+   */
+  const scrollSectionIntoView = (sectionId: string) => {
+    requestAnimationFrame(() => {
+      const area = scrollArea.current
+      const section = area?.querySelector<HTMLElement>(
+        `[data-section="${sectionId}"]`,
+      )
+      if (!area || !section) return
+
+      const offset =
+        section.getBoundingClientRect().top - area.getBoundingClientRect().top
+
+      area.scrollBy({ top: offset - 8, behavior: 'smooth' })
+    })
+  }
 
   const setFieldValue = (key: string, next: DraftValue) => {
     setDraft((current) => ({ ...current, [key]: next }))
@@ -188,8 +208,16 @@ export function EntityEditSheet<T extends object>({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
+        ref={content}
         side="bottom"
         className="mx-auto max-h-[92svh] gap-0 rounded-t-2xl p-0 sm:max-w-2xl"
+        onOpenAutoFocus={(event) => {
+          // Le focus automatique sur le premier champ ouvre le clavier mobile
+          // et masque le formulaire : on se contente du panneau lui-même, qui
+          // garde le piège de focus (tabulation, Échap) fonctionnel.
+          event.preventDefault()
+          content.current?.focus({ preventScroll: true })
+        }}
       >
         <SheetHeader className="border-border/60 border-b pr-12">
           <SheetTitle>{title}</SheetTitle>
@@ -221,13 +249,15 @@ export function EntityEditSheet<T extends object>({
               return (
                 <Collapsible
                   key={section.id}
+                  data-section={section.id}
                   open={openSections[section.id] ?? false}
-                  onOpenChange={(isOpen) =>
+                  onOpenChange={(isOpen) => {
                     setOpenSections((current) => ({
                       ...current,
                       [section.id]: isOpen,
                     }))
-                  }
+                    if (isOpen) scrollSectionIntoView(section.id)
+                  }}
                   className="border-border/60 mt-4 border-t pt-4"
                 >
                   <CollapsibleTrigger className="group/section flex w-full items-center gap-2 text-left">
