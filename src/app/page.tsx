@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTripData } from '@/hooks/use-trip-data'
 import type { DayItinerary } from '@/lib/itinerary-data'
@@ -12,16 +12,10 @@ import { OnboardingScreen } from '@/components/onboarding-screen'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog'
+  EditReviewDialog,
+  type EditReviewIntent,
+} from '@/components/edit/edit-review-dialog'
+import { countChanges, summarizeItineraryChanges } from '@/lib/itinerary-diff'
 import {
   ChevronLeft,
   ChevronRight,
@@ -108,10 +102,19 @@ function HomePageContent() {
   // Photo de l'itinéraire prise à l'entrée en mode édition : elle permet de
   // tout remettre en place d'un geste tant que la session d'édition dure.
   const [editBaseline, setEditBaseline] = useState<DayItinerary[] | null>(null)
+  // `reviewIntent` survit à la fermeture pour que le récapitulatif garde son
+  // titre pendant l'animation de sortie.
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [reviewIntent, setReviewIntent] = useState<EditReviewIntent>('save')
 
-  // `updateDay` reconstruit toujours le tableau : une référence différente de
-  // la photo signale qu'au moins un enregistrement a eu lieu.
-  const hasPendingEdits = editBaseline !== null && editBaseline !== itinerary
+  // Récapitulatif des modifications de la session, alimenté par la photo.
+  const changeSummaries = useMemo(
+    () =>
+      editBaseline ? summarizeItineraryChanges(editBaseline, itinerary) : [],
+    [editBaseline, itinerary],
+  )
+  const pendingChanges = countChanges(changeSummaries)
+  const hasPendingEdits = pendingChanges > 0
 
   const handleDayChange = (day: DayItinerary) => {
     updateDay(day).catch((error) => {
@@ -124,15 +127,41 @@ function HomePageContent() {
     setIsEditing(true)
   }
 
+  const openReview = (intent: EditReviewIntent) => {
+    setReviewIntent(intent)
+    setReviewOpen(true)
+  }
+
+  /** Clôt la session : la photo est oubliée, le retour arrière n'est plus offert. */
   const stopEditing = () => {
+    setReviewOpen(false)
     setIsEditing(false)
     setEditBaseline(null)
   }
 
-  const discardEdits = () => {
-    if (!editBaseline) return
+  /**
+   * Sortie par le bouton d'en-tête : avec des modifications en attente, on
+   * passe par le récapitulatif plutôt que de clore la session en silence.
+   */
+  const toggleEditing = () => {
+    if (!isEditing) {
+      startEditing()
+      return
+    }
+    if (hasPendingEdits) {
+      openReview('save')
+      return
+    }
+    stopEditing()
+  }
 
-    replaceItinerary(editBaseline).catch((error) => {
+  const discardEdits = () => {
+    if (!editBaseline) {
+      stopEditing()
+      return
+    }
+
+    replaceItinerary(editBaseline).then(stopEditing, (error) => {
       console.error('Annulation des modifications impossible', error)
     })
   }
@@ -197,6 +226,7 @@ function HomePageContent() {
   const countdown = getTripCountdown(tripStartDate, tripEndDate)
   const safeDay = Math.min(selectedDay, itinerary.length - 1)
   const currentDay = itinerary[safeDay]
+  const showEditBar = isEditing && activeTab === 'roadbook'
 
   return (
     <ImageCacheProvider itinerary={itinerary} currentDayIndex={safeDay}>
@@ -250,9 +280,7 @@ function HomePageContent() {
                     <Button
                       variant={isEditing ? 'default' : 'ghost'}
                       size="icon"
-                      onClick={() =>
-                        isEditing ? stopEditing() : startEditing()
-                      }
+                      onClick={toggleEditing}
                       aria-pressed={isEditing}
                       aria-label={
                         isEditing
@@ -366,59 +394,6 @@ function HomePageContent() {
               )}
             </div>
 
-            {/* Edit mode banner */}
-            {isEditing && activeTab === 'roadbook' && (
-              <div className="border-primary/30 bg-primary/10 mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2">
-                <p className="text-foreground/80 min-w-40 flex-1 text-xs leading-snug">
-                  Mode édition : retouchez les informations de la journée. Tout
-                  est enregistré sur cet appareil.
-                </p>
-                <div className="flex shrink-0 items-center gap-1">
-                  {hasPendingEdits && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1.5 rounded-full px-3 text-[11px]"
-                        >
-                          <Undo2 className="h-3 w-3" strokeWidth={1.75} />
-                          Annuler les modifications
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>
-                            Annuler les modifications ?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            L&apos;itinéraire revient à son état d&apos;avant
-                            l&apos;ouverture du mode édition. Tout ce qui a été
-                            modifié depuis sera perdu.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>
-                            Continuer l&apos;édition
-                          </AlertDialogCancel>
-                          <AlertDialogAction onClick={discardEdits}>
-                            Tout annuler
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
-                  <Button
-                    size="sm"
-                    onClick={stopEditing}
-                    className="h-7 shrink-0 rounded-full px-3 text-[11px]"
-                  >
-                    Terminer
-                  </Button>
-                </div>
-              </div>
-            )}
-
             {/* Content */}
             {activeTab === 'roadbook' ? (
               <div
@@ -444,73 +419,148 @@ function HomePageContent() {
           {/* Mobile bottom nav spacer */}
           <div className="mb-[env(safe-area-inset-bottom)] h-20 md:hidden [@media(display-mode:standalone)]:mb-[calc(env(safe-area-inset-bottom)+1.5rem)]" />
 
-          {/* Mobile bottom navigation */}
-          <nav className="bg-card/85 border-border/60 fixed right-0 bottom-0 left-0 z-40 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden [@media(display-mode:standalone)]:pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
-            <div className="flex items-center justify-around gap-2 py-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handlePrevDay}
-                disabled={selectedDay === 0 || activeTab === 'documents'}
-                className={cn(`h-auto w-16 flex-col gap-0.5 py-2`, {
-                  'pointer-events-none opacity-50': activeTab === 'documents',
-                })}
-                aria-hidden={activeTab === 'documents'}
-                tabIndex={activeTab === 'documents' ? -1 : undefined}
-              >
-                <ChevronLeft className="h-5 w-5" />
-                <span className="text-[10px]">Précédent</span>
-              </Button>
+          {/* Réserve la hauteur de la barre d'édition collante */}
+          {showEditBar && (
+            <div
+              aria-hidden
+              className="h-16 md:mb-[env(safe-area-inset-bottom)]"
+            />
+          )}
 
-              <Button
-                variant={activeTab === 'roadbook' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setActiveTab('roadbook')}
-                className="h-auto flex-1 flex-col gap-0.5 py-2"
-              >
-                <List className="h-5 w-5" />
-                <span className="text-[10px]">Roadbook</span>
-              </Button>
+          {/* Barre d'édition collante, empilée juste au-dessus de la nav mobile */}
+          <div className="fixed inset-x-0 bottom-0 z-40">
+            {showEditBar && (
+              <div className="bg-card/95 border-border/60 border-t backdrop-blur-xl">
+                <div className="mx-auto flex max-w-4xl items-center gap-2 px-4 py-2.5 md:pb-[calc(0.625rem+env(safe-area-inset-bottom))]">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-foreground text-xs font-semibold">
+                      Mode édition
+                    </p>
+                    <p className="text-muted-foreground truncate text-[11px]">
+                      {hasPendingEdits
+                        ? `${pendingChanges} modification${pendingChanges > 1 ? 's' : ''} à enregistrer`
+                        : 'Aucune modification pour le moment'}
+                    </p>
+                  </div>
 
-              <Button
-                variant={activeTab === 'documents' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setActiveTab('documents')}
-                className="h-auto flex-1 flex-col gap-0.5 py-2"
-              >
-                <FolderOpen className="h-5 w-5" />
-                <span className="text-[10px]">Docs</span>
-              </Button>
+                  {hasPendingEdits ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => openReview('discard')}
+                        className="text-muted-foreground hover:text-destructive h-8 shrink-0 gap-1.5 px-2.5 text-[11px]"
+                      >
+                        <Undo2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+                        Annuler
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => openReview('save')}
+                        className="h-8 shrink-0 gap-1.5 px-3 text-[11px]"
+                      >
+                        <Check className="h-3.5 w-3.5" strokeWidth={2} />
+                        Enregistrer
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={stopEditing}
+                      className="h-8 shrink-0 px-3 text-[11px]"
+                    >
+                      Terminer
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleNextDay}
-                disabled={
-                  selectedDay === itinerary.length - 1 ||
-                  activeTab === 'documents'
-                }
-                className={cn(`h-auto w-16 flex-col gap-0.5 py-2`, {
-                  'pointer-events-none opacity-50': activeTab === 'documents',
-                })}
-                aria-hidden={activeTab === 'documents'}
-                tabIndex={activeTab === 'documents' ? -1 : undefined}
-              >
-                <ChevronRight className="h-5 w-5" />
-                <span className="text-[10px]">Suivant</span>
-              </Button>
-            </div>
-          </nav>
+            {/* Mobile bottom navigation */}
+            <nav className="bg-card/85 border-border/60 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden [@media(display-mode:standalone)]:pb-[calc(env(safe-area-inset-bottom)+1.5rem)]">
+              <div className="flex items-center justify-around gap-2 py-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handlePrevDay}
+                  disabled={selectedDay === 0 || activeTab === 'documents'}
+                  className={cn(`h-auto w-16 flex-col gap-0.5 py-2`, {
+                    'pointer-events-none opacity-50': activeTab === 'documents',
+                  })}
+                  aria-hidden={activeTab === 'documents'}
+                  tabIndex={activeTab === 'documents' ? -1 : undefined}
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                  <span className="text-[10px]">Précédent</span>
+                </Button>
+
+                <Button
+                  variant={activeTab === 'roadbook' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setActiveTab('roadbook')}
+                  className="h-auto flex-1 flex-col gap-0.5 py-2"
+                >
+                  <List className="h-5 w-5" />
+                  <span className="text-[10px]">Roadbook</span>
+                </Button>
+
+                <Button
+                  variant={activeTab === 'documents' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setActiveTab('documents')}
+                  className="h-auto flex-1 flex-col gap-0.5 py-2"
+                >
+                  <FolderOpen className="h-5 w-5" />
+                  <span className="text-[10px]">Docs</span>
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleNextDay}
+                  disabled={
+                    selectedDay === itinerary.length - 1 ||
+                    activeTab === 'documents'
+                  }
+                  className={cn(`h-auto w-16 flex-col gap-0.5 py-2`, {
+                    'pointer-events-none opacity-50': activeTab === 'documents',
+                  })}
+                  aria-hidden={activeTab === 'documents'}
+                  tabIndex={activeTab === 'documents' ? -1 : undefined}
+                >
+                  <ChevronRight className="h-5 w-5" />
+                  <span className="text-[10px]">Suivant</span>
+                </Button>
+              </div>
+            </nav>
+          </div>
 
           {/* Floating map button */}
           <Button
             onClick={() => setIsMapOpen(true)}
-            className="fixed right-5 bottom-20 z-40 rounded-full shadow-lg hover:shadow-xl md:bottom-8"
+            className={cn(
+              'fixed right-5 z-40 rounded-full shadow-lg transition-[bottom] hover:shadow-xl',
+              // Reste au-dessus de la barre d'édition quand elle est déployée.
+              showEditBar ? 'bottom-36 md:bottom-24' : 'bottom-20 md:bottom-8',
+            )}
             aria-label="Ouvrir la carte"
           >
             <Map className="h-4 w-4" strokeWidth={2} />
             <span className="text-sm font-semibold">Carte</span>
           </Button>
+
+          {/* Double validation de la session d'édition */}
+          {isEditing && (
+            <EditReviewDialog
+              open={reviewOpen}
+              onOpenChange={setReviewOpen}
+              intent={reviewIntent}
+              summaries={changeSummaries}
+              onSave={stopEditing}
+              onDiscard={discardEdits}
+            />
+          )}
 
           {/* Immersive map overlay */}
           {isMapOpen && (

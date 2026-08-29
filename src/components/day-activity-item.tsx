@@ -92,11 +92,11 @@ function getActivityStatusClass(status: ActivityStatus) {
 function getStatusToggleClass(status: ActivityStatus) {
   switch (status) {
     case 'done':
-      return 'text-green-600 hover:text-green-700 dark:text-green-400'
+      return 'text-green-600 hover:bg-green-500/10 dark:text-green-400'
     case 'skipped':
-      return 'text-red-500 hover:text-red-600 dark:text-red-400'
+      return 'text-red-500 hover:bg-red-500/10 dark:text-red-400'
     default:
-      return 'text-muted-foreground/40 hover:text-primary'
+      return 'text-muted-foreground/40 hover:text-primary hover:bg-muted/70'
   }
 }
 
@@ -136,8 +136,25 @@ export function DayActivityItem({
       className="border-b-0 py-3 first:pt-0 last:pb-0"
     >
       <div className="flex gap-3">
-        <div className="bg-primary/10 mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg">
-          <Icon className="text-primary h-3.5 w-3.5" strokeWidth={1.75} />
+        <div className="mt-0.5 flex shrink-0 items-center gap-1.5">
+          {onStatusChange && (
+            <button
+              type="button"
+              onClick={() => onStatusChange(nextStatus)}
+              title={`${STATUS_LABELS[status]} — marquer « ${STATUS_LABELS[nextStatus]} »`}
+              aria-label={`${activity.name} : ${STATUS_LABELS[status]}. Marquer « ${STATUS_LABELS[nextStatus]} »`}
+              className={cn(
+                'flex h-7 w-7 items-center justify-center rounded-lg transition-colors',
+                getStatusToggleClass(status),
+              )}
+            >
+              <StatusIcon className="h-4 w-4" strokeWidth={1.75} />
+            </button>
+          )}
+
+          <div className="bg-primary/10 flex h-7 w-7 items-center justify-center rounded-lg">
+            <Icon className="text-primary h-3.5 w-3.5" strokeWidth={1.75} />
+          </div>
         </div>
 
         <div className="min-w-0 flex-1">
@@ -229,21 +246,6 @@ export function DayActivityItem({
               </>
             ) : (
               <>
-                {onStatusChange && (
-                  <button
-                    type="button"
-                    onClick={() => onStatusChange(nextStatus)}
-                    title={`${STATUS_LABELS[status]} — marquer « ${STATUS_LABELS[nextStatus]} »`}
-                    aria-label={`${activity.name} : ${STATUS_LABELS[status]}. Marquer « ${STATUS_LABELS[nextStatus]} »`}
-                    className={cn(
-                      'mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors',
-                      getStatusToggleClass(status),
-                    )}
-                  >
-                    <StatusIcon className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  </button>
-                )}
-
                 {activity.coordinates && (
                   <a
                     href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}
