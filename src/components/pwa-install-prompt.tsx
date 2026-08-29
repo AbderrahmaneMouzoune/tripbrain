@@ -7,53 +7,62 @@ import { PwaInstallGuide } from '@/components/pwa-install-guide'
 import { usePwaInstall } from '@/hooks/use-pwa-install'
 
 /**
- * Invitation à installer TripBrain, affichée sur l'écran d'accueil de
- * l'onboarding — le moment où l'on découvre l'app et où l'installer a le plus
- * de sens. Disparaît dès que l'app tourne en mode application.
+ * Un seul geste pour l'utilisateur : « Installer ». L'invite native s'ouvre
+ * quand le navigateur en propose une, le guide prend le relais sinon.
+ */
+function useInstallAction() {
+  const install = usePwaInstall()
+  const [guideOpen, setGuideOpen] = useState(false)
+
+  return {
+    ...install,
+    guideOpen,
+    setGuideOpen,
+    startInstall: () => {
+      if (install.canPrompt) {
+        install.promptInstall()
+        return
+      }
+      setGuideOpen(true)
+    },
+  }
+}
+
+/**
+ * Invitation à installer TripBrain, affichée sur l'écran d'onboarding — le
+ * moment où l'on découvre l'app. Disparaît une fois l'app installée.
  */
 export function PwaInstallCard() {
-  const { isReady, isStandalone, isInstalled, canPrompt, promptInstall } =
-    usePwaInstall()
-  const [guideOpen, setGuideOpen] = useState(false)
+  const {
+    isReady,
+    isStandalone,
+    isInstalled,
+    guideOpen,
+    setGuideOpen,
+    startInstall,
+  } = useInstallAction()
 
   if (!isReady || isStandalone || isInstalled) return null
 
   return (
     <>
-      <div className="bg-primary/5 border-primary/15 flex flex-col gap-3 rounded-xl border p-3 sm:flex-row sm:items-center">
+      <div className="bg-primary/5 border-primary/15 flex items-center gap-3 rounded-xl border p-3">
         <span className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
           <Smartphone className="h-4 w-4" strokeWidth={1.75} />
         </span>
 
         <div className="min-w-0 flex-1">
           <p className="text-foreground text-sm font-medium">
-            Installez TripBrain comme une application
+            Installer TripBrain
           </p>
-          <p className="text-muted-foreground mt-0.5 text-xs">
-            Une icône sur votre écran d’accueil, un accès hors connexion à votre
-            roadbook et à vos billets.
+          <p className="text-muted-foreground text-xs">
+            Comme une appli, même sans réseau.
           </p>
         </div>
 
-        <div className="flex shrink-0 gap-2">
-          {canPrompt && (
-            <Button
-              size="sm"
-              onClick={() => promptInstall()}
-              className="gap-1.5"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Installer
-            </Button>
-          )}
-          <Button
-            variant={canPrompt ? 'ghost' : 'outline'}
-            size="sm"
-            onClick={() => setGuideOpen(true)}
-          >
-            {canPrompt ? 'Comment faire ?' : 'Voir la marche à suivre'}
-          </Button>
-        </div>
+        <Button size="sm" variant="outline" onClick={startInstall}>
+          Installer
+        </Button>
       </div>
 
       <PwaInstallGuide open={guideOpen} onOpenChange={setGuideOpen} />
@@ -73,10 +82,10 @@ export function PwaInstallBanner() {
     isInstalled,
     isSnoozed,
     snooze,
-    canPrompt,
-    promptInstall,
-  } = usePwaInstall()
-  const [guideOpen, setGuideOpen] = useState(false)
+    guideOpen,
+    setGuideOpen,
+    startInstall,
+  } = useInstallAction()
 
   // Rien à proposer quand le navigateur n'installe pas les applications web.
   const isActionable = guide !== null && !guide.unsupported
@@ -94,20 +103,14 @@ export function PwaInstallBanner() {
             strokeWidth={1.75}
           />
           <p className="text-foreground min-w-0 flex-1 text-xs font-medium sm:text-sm">
-            Installez TripBrain pour l’ouvrir comme une appli, même sans réseau.
+            Ajoutez TripBrain à votre écran d’accueil
           </p>
 
           <Button
             size="sm"
             variant="outline"
             className="border-primary/40 h-7 shrink-0 gap-1 text-xs"
-            onClick={() => {
-              if (canPrompt) {
-                promptInstall()
-                return
-              }
-              setGuideOpen(true)
-            }}
+            onClick={startInstall}
           >
             <Download className="h-3.5 w-3.5" />
             Installer

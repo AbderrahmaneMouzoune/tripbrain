@@ -3,8 +3,11 @@
  *
  * Les navigateurs n'exposent pas tous une invite native (`beforeinstallprompt`) :
  * sur iOS, et sur plusieurs navigateurs Android/desktop, l'utilisateur doit
- * passer par un menu. Ce module traduit le user-agent en une fiche d'étapes
- * concrètes, sans dépendre du DOM pour rester testable.
+ * passer par un menu. Ce module traduit le user-agent en une poignée d'étapes,
+ * sans dépendre du DOM pour rester testable.
+ *
+ * Les libellés sont volontairement courts : on installe une app en regardant
+ * son écran, pas en lisant un mode d'emploi.
  */
 
 /** Plateforme hôte, telle que déduite du user-agent. */
@@ -46,26 +49,26 @@ export type InstallStepIcon =
 
 export interface InstallStep {
   icon: InstallStepIcon
+  /** Une ligne, l'action à faire — pas une phrase. */
   title: string
+  /** Précision réservée aux étapes où l'on peut se tromper de bouton. */
   detail?: string
 }
 
 export interface InstallGuide {
   id: string
   family: InstallFamily
-  /** Libellé de la famille, ex. « iPhone / iPad ». */
-  label: string
   /** Navigateur ciblé par la fiche, ex. « Safari ». */
   browserLabel: string
   steps: InstallStep[]
-  /** Conseil complémentaire affiché sous les étapes. */
+  /** Réserve ou alternative, en une phrase. */
   note?: string
   /** Le navigateur n'installe pas les applications web : `steps` est vide. */
   unsupported?: boolean
 }
 
 export const INSTALL_FAMILIES: { id: InstallFamily; label: string }[] = [
-  { id: 'ios', label: 'iPhone / iPad' },
+  { id: 'ios', label: 'iPhone' },
   { id: 'android', label: 'Android' },
   { id: 'desktop', label: 'Ordinateur' },
 ]
@@ -123,175 +126,99 @@ export function detectInstallTarget(
 const IOS_SAFARI: InstallGuide = {
   id: 'ios-safari',
   family: 'ios',
-  label: 'iPhone / iPad',
   browserLabel: 'Safari',
   steps: [
     {
       icon: 'share',
-      title: 'Touchez le bouton Partager',
-      detail: 'Le carré avec une flèche vers le haut, dans la barre de Safari.',
+      title: 'Bouton Partager',
+      detail: 'Le carré avec une flèche, dans la barre Safari.',
     },
-    {
-      icon: 'plus',
-      title: 'Choisissez « Sur l’écran d’accueil »',
-      detail: 'Faites défiler la liste des actions si vous ne le voyez pas.',
-    },
-    {
-      icon: 'check',
-      title: 'Confirmez avec « Ajouter »',
-      detail: 'En haut à droite. TripBrain rejoint vos autres applications.',
-    },
+    { icon: 'plus', title: '« Sur l’écran d’accueil »' },
+    { icon: 'check', title: '« Ajouter »' },
   ],
 }
 
 const IOS_OTHER: InstallGuide = {
   id: 'ios-other',
   family: 'ios',
-  label: 'iPhone / iPad',
-  browserLabel: 'Chrome, Firefox, Edge…',
+  browserLabel: 'Chrome, Firefox, Edge',
   steps: [
-    {
-      icon: 'share',
-      title: 'Touchez le bouton Partager',
-      detail: 'Dans la barre du navigateur : un carré avec une flèche.',
-    },
-    {
-      icon: 'plus',
-      title: 'Choisissez « Ajouter à l’écran d’accueil »',
-    },
-    {
-      icon: 'check',
-      title: 'Confirmez avec « Ajouter »',
-    },
+    { icon: 'share', title: 'Bouton Partager' },
+    { icon: 'plus', title: '« Ajouter à l’écran d’accueil »' },
+    { icon: 'check', title: '« Ajouter »' },
   ],
-  note: 'Sur iPhone et iPad, l’installation est plus fiable depuis Safari : ouvrez TripBrain dans Safari si l’option n’apparaît pas.',
+  note: 'Plus fiable depuis Safari.',
 }
 
 const ANDROID_CHROME: InstallGuide = {
   id: 'android-chrome',
   family: 'android',
-  label: 'Android',
   browserLabel: 'Chrome, Edge, Opera',
   steps: [
-    {
-      icon: 'menu',
-      title: 'Ouvrez le menu ⋮',
-      detail: 'En haut à droite, à côté de la barre d’adresse.',
-    },
+    { icon: 'menu', title: 'Menu ⋮, en haut à droite' },
     {
       icon: 'download',
-      title: 'Touchez « Installer l’application »',
+      title: '« Installer l’application »',
       detail: 'Parfois libellé « Ajouter à l’écran d’accueil ».',
     },
-    {
-      icon: 'check',
-      title: 'Confirmez avec « Installer »',
-      detail: 'L’icône TripBrain apparaît sur votre écran d’accueil.',
-    },
+    { icon: 'check', title: '« Installer »' },
   ],
 }
 
 const ANDROID_SAMSUNG: InstallGuide = {
   id: 'android-samsung',
   family: 'android',
-  label: 'Android',
   browserLabel: 'Samsung Internet',
   steps: [
-    {
-      icon: 'menu',
-      title: 'Ouvrez le menu ☰',
-      detail: 'En bas à droite de l’écran.',
-    },
-    {
-      icon: 'plus',
-      title: 'Touchez « Ajouter la page à »',
-      detail: 'Puis choisissez « Écran d’accueil ».',
-    },
-    {
-      icon: 'check',
-      title: 'Confirmez avec « Ajouter »',
-    },
+    { icon: 'menu', title: 'Menu ☰, en bas à droite' },
+    { icon: 'plus', title: '« Ajouter la page à » → « Écran d’accueil »' },
+    { icon: 'check', title: '« Ajouter »' },
   ],
 }
 
 const ANDROID_FIREFOX: InstallGuide = {
   id: 'android-firefox',
   family: 'android',
-  label: 'Android',
   browserLabel: 'Firefox',
   steps: [
-    {
-      icon: 'menu',
-      title: 'Ouvrez le menu ⋮',
-      detail: 'En bas à droite de l’écran.',
-    },
-    {
-      icon: 'plus',
-      title: 'Touchez « Ajouter à l’écran d’accueil »',
-    },
-    {
-      icon: 'check',
-      title: 'Confirmez avec « Ajouter »',
-    },
+    { icon: 'menu', title: 'Menu ⋮' },
+    { icon: 'plus', title: '« Ajouter à l’écran d’accueil »' },
+    { icon: 'check', title: '« Ajouter »' },
   ],
 }
 
 const DESKTOP_CHROMIUM: InstallGuide = {
   id: 'desktop-chromium',
   family: 'desktop',
-  label: 'Ordinateur',
   browserLabel: 'Chrome, Edge, Opera',
   steps: [
     {
       icon: 'browser',
-      title: 'Repérez l’icône d’installation',
-      detail: 'À droite de la barre d’adresse : un écran avec une flèche.',
-    },
-    {
-      icon: 'download',
-      title: 'Cliquez sur « Installer »',
+      title: 'Icône d’installation dans la barre d’adresse',
       detail: 'Sinon : menu ⋮ → « Installer TripBrain… ».',
     },
-    {
-      icon: 'check',
-      title: 'TripBrain s’ouvre dans sa propre fenêtre',
-      detail: 'Un raccourci est ajouté à votre bureau.',
-    },
+    { icon: 'check', title: '« Installer »' },
   ],
 }
 
 const DESKTOP_SAFARI: InstallGuide = {
   id: 'desktop-safari',
   family: 'desktop',
-  label: 'Ordinateur',
   browserLabel: 'Safari (macOS)',
   steps: [
-    {
-      icon: 'browser',
-      title: 'Ouvrez le menu « Fichier »',
-      detail: 'Dans la barre de menus, en haut de l’écran.',
-    },
-    {
-      icon: 'plus',
-      title: 'Choisissez « Ajouter au Dock… »',
-      detail: 'Disponible à partir de macOS Sonoma (14).',
-    },
-    {
-      icon: 'check',
-      title: 'Confirmez avec « Ajouter »',
-      detail: 'TripBrain se lance depuis le Dock comme une application.',
-    },
+    { icon: 'browser', title: 'Menu « Fichier »' },
+    { icon: 'plus', title: '« Ajouter au Dock… »' },
   ],
+  note: 'À partir de macOS Sonoma.',
 }
 
 const DESKTOP_FIREFOX: InstallGuide = {
   id: 'desktop-firefox',
   family: 'desktop',
-  label: 'Ordinateur',
   browserLabel: 'Firefox',
   steps: [],
   unsupported: true,
-  note: 'Firefox pour ordinateur n’installe pas les applications web. Ouvrez TripBrain dans Chrome, Edge ou Safari pour l’installer — sinon, gardez simplement la page en favori.',
+  note: 'Firefox n’installe pas les applications web. Ouvrez TripBrain dans Chrome, Edge ou Safari.',
 }
 
 export function getInstallGuide(
@@ -327,39 +254,3 @@ export function getGuideForFamily(
       : DEFAULT_BROWSER[family]
   return getInstallGuide(family, browser)
 }
-
-// ── Bénéfices mis en avant dans le guide ─────────────────────────────────────
-
-export type InstallBenefitIcon = 'offline' | 'fullscreen' | 'home' | 'shield'
-
-export interface InstallBenefit {
-  icon: InstallBenefitIcon
-  title: string
-  description: string
-}
-
-export const INSTALL_BENEFITS: InstallBenefit[] = [
-  {
-    icon: 'offline',
-    title: 'Hors connexion',
-    description:
-      'Roadbook, photos et documents restent consultables en avion ou sans réseau.',
-  },
-  {
-    icon: 'fullscreen',
-    title: 'Plein écran',
-    description:
-      'Aucune barre d’adresse : l’affichage d’une vraie application.',
-  },
-  {
-    icon: 'home',
-    title: 'Sur l’écran d’accueil',
-    description: 'Une icône à portée de pouce, sans passer par un magasin.',
-  },
-  {
-    icon: 'shield',
-    title: 'Vos données restent chez vous',
-    description:
-      'Tout est stocké sur votre appareil : rien n’est envoyé sur un serveur.',
-  },
-]

@@ -4,19 +4,12 @@ import { useEffect, useState } from 'react'
 import {
   AppWindow,
   Check,
-  CheckCircle2,
   Download,
-  Maximize,
   MoreVertical,
   Share,
-  ShieldCheck,
-  Smartphone,
   SquarePlus,
-  WifiOff,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -26,23 +19,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from '@/components/ui/drawer'
-import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useIsMobile } from '@/hooks/use-mobile'
 import { usePwaInstall } from '@/hooks/use-pwa-install'
 import {
-  INSTALL_BENEFITS,
   INSTALL_FAMILIES,
   getGuideForFamily,
-  type InstallBenefitIcon,
   type InstallFamily,
   type InstallGuide,
   type InstallStepIcon,
@@ -57,63 +38,23 @@ const STEP_ICONS: Record<InstallStepIcon, LucideIcon> = {
   browser: AppWindow,
 }
 
-const BENEFIT_ICONS: Record<InstallBenefitIcon, LucideIcon> = {
-  offline: WifiOff,
-  fullscreen: Maximize,
-  home: Smartphone,
-  shield: ShieldCheck,
-}
-
-// ── Sous-composants ──────────────────────────────────────────────────────────
-
-function BenefitList() {
-  return (
-    <ul className="grid gap-3 sm:grid-cols-2">
-      {INSTALL_BENEFITS.map((benefit) => {
-        const Icon = BENEFIT_ICONS[benefit.icon]
-        return (
-          <li key={benefit.title} className="flex gap-2.5">
-            <span className="bg-muted text-muted-foreground mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg">
-              <Icon className="h-3.5 w-3.5" strokeWidth={1.75} />
-            </span>
-            <div className="min-w-0">
-              <p className="text-foreground text-xs font-semibold">
-                {benefit.title}
-              </p>
-              <p className="text-muted-foreground text-xs leading-snug">
-                {benefit.description}
-              </p>
-            </div>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
 function GuideSteps({ guide }: { guide: InstallGuide }) {
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <Badge variant="outline" className="h-5 px-2 text-[10px]">
-          {guide.browserLabel}
-        </Badge>
-      </div>
-
+    <div className="space-y-2">
       {guide.steps.length > 0 && (
-        <ol className="space-y-3">
+        <ol className="space-y-1.5">
           {guide.steps.map((step, index) => {
             const Icon = STEP_ICONS[step.icon]
             return (
-              <li key={step.title} className="flex gap-3">
-                <span className="bg-primary/10 text-primary flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+              <li
+                key={step.title}
+                className="bg-muted/50 flex items-center gap-3 rounded-lg px-3 py-2.5"
+              >
+                <span className="bg-background text-primary flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
                   <Icon className="h-4 w-4" strokeWidth={1.75} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-foreground text-sm font-medium">
-                    <span className="text-muted-foreground mr-1.5 tabular-nums">
-                      {index + 1}.
-                    </span>
+                  <p className="text-foreground text-sm leading-tight font-medium">
                     {step.title}
                   </p>
                   {step.detail && (
@@ -122,6 +63,9 @@ function GuideSteps({ guide }: { guide: InstallGuide }) {
                     </p>
                   )}
                 </div>
+                <span className="text-muted-foreground/60 shrink-0 text-xs tabular-nums">
+                  {index + 1}
+                </span>
               </li>
             )
           })}
@@ -129,21 +73,17 @@ function GuideSteps({ guide }: { guide: InstallGuide }) {
       )}
 
       {guide.note && (
-        <Alert variant="info">
-          <AppWindow className="h-4 w-4" />
-          <AlertTitle>Bon à savoir</AlertTitle>
-          <AlertDescription>{guide.note}</AlertDescription>
-        </Alert>
+        <p className="text-muted-foreground px-1 text-xs leading-snug">
+          {guide.note}
+        </p>
       )}
     </div>
   )
 }
 
-// ── Contenu principal ────────────────────────────────────────────────────────
-
 /**
- * Marche à suivre pour installer TripBrain, adaptée à la plateforme détectée.
- * Réutilisable tel quel dans une boîte de dialogue, un tiroir ou une page.
+ * Marche à suivre pour installer TripBrain, calée sur la plateforme détectée.
+ * Réutilisable tel quel dans une boîte de dialogue ou une page.
  */
 export function PwaInstallGuideContent() {
   const {
@@ -163,67 +103,46 @@ export function PwaInstallGuideContent() {
 
   if (isStandalone || isInstalled) {
     return (
-      <div className="space-y-4">
-        <Alert variant="info">
-          <CheckCircle2 className="h-4 w-4" />
-          <AlertTitle>TripBrain est installée</AlertTitle>
-          <AlertDescription>
-            Vous pouvez la lancer depuis votre écran d’accueil, même sans
-            connexion.
-          </AlertDescription>
-        </Alert>
-        <BenefitList />
-      </div>
+      <p className="text-muted-foreground text-sm">
+        TripBrain est installée : lancez-la depuis votre écran d’accueil.
+      </p>
+    )
+  }
+
+  // Invite native disponible : un seul bouton suffit, les étapes n'ont plus lieu d'être.
+  if (canPrompt) {
+    return (
+      <Button className="w-full gap-2" onClick={() => promptInstall()}>
+        <Download className="h-4 w-4" />
+        Installer maintenant
+      </Button>
     )
   }
 
   return (
-    <div className="space-y-4">
-      {canPrompt && (
-        <div className="bg-primary/5 border-primary/20 space-y-2 rounded-xl border p-3">
-          <p className="text-foreground text-sm font-semibold">
-            Installation en un geste
-          </p>
-          <p className="text-muted-foreground text-xs">
-            Votre navigateur sait installer TripBrain directement — inutile de
-            suivre les étapes ci-dessous.
-          </p>
-          <Button className="w-full gap-2" onClick={() => promptInstall()}>
-            <Download className="h-4 w-4" />
-            Installer l’application
-          </Button>
-        </div>
-      )}
-
-      <BenefitList />
-
-      <Separator />
-
-      <Tabs
-        value={family}
-        onValueChange={(value) => setFamily(value as InstallFamily)}
-      >
-        <TabsList className="grid w-full grid-cols-3">
-          {INSTALL_FAMILIES.map((item) => (
-            <TabsTrigger key={item.id} value={item.id} className="text-xs">
-              {item.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
+    <Tabs
+      value={family}
+      onValueChange={(value) => setFamily(value as InstallFamily)}
+      className="gap-3"
+    >
+      <TabsList className="grid w-full grid-cols-3">
         {INSTALL_FAMILIES.map((item) => (
-          <TabsContent key={item.id} value={item.id} className="mt-4">
-            <GuideSteps
-              guide={getGuideForFamily(item.id, isReady ? target : null)}
-            />
-          </TabsContent>
+          <TabsTrigger key={item.id} value={item.id} className="text-xs">
+            {item.label}
+          </TabsTrigger>
         ))}
-      </Tabs>
-    </div>
+      </TabsList>
+
+      {INSTALL_FAMILIES.map((item) => (
+        <TabsContent key={item.id} value={item.id}>
+          <GuideSteps
+            guide={getGuideForFamily(item.id, isReady ? target : null)}
+          />
+        </TabsContent>
+      ))}
+    </Tabs>
   )
 }
-
-// ── Enveloppe responsive ─────────────────────────────────────────────────────
 
 interface PwaInstallGuideProps {
   open?: boolean
@@ -231,45 +150,21 @@ interface PwaInstallGuideProps {
   trigger?: React.ReactNode
 }
 
-const GUIDE_TITLE = 'Installer TripBrain'
-const GUIDE_DESCRIPTION =
-  'Ajoutez TripBrain à votre écran d’accueil pour l’ouvrir comme une vraie application, même hors connexion.'
-
-/**
- * Guide d'installation : tiroir sur mobile — là où l'on installe vraiment —
- * et boîte de dialogue sur écran large.
- */
+/** Guide d'installation, en boîte de dialogue sur toutes les tailles d'écran. */
 export function PwaInstallGuide({
   open,
   onOpenChange,
   trigger,
 }: PwaInstallGuideProps) {
-  const isMobile = useIsMobile()
-
-  if (isMobile) {
-    return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
-        {trigger && <DrawerTrigger asChild>{trigger}</DrawerTrigger>}
-        <DrawerContent>
-          <DrawerHeader>
-            <DrawerTitle>{GUIDE_TITLE}</DrawerTitle>
-            <DrawerDescription>{GUIDE_DESCRIPTION}</DrawerDescription>
-          </DrawerHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-            <PwaInstallGuideContent />
-          </div>
-        </DrawerContent>
-      </Drawer>
-    )
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
-      <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md">
+      <DialogContent className="max-h-[85dvh] gap-4 overflow-y-auto sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>{GUIDE_TITLE}</DialogTitle>
-          <DialogDescription>{GUIDE_DESCRIPTION}</DialogDescription>
+          <DialogTitle>Installer TripBrain</DialogTitle>
+          <DialogDescription>
+            Votre roadbook comme une appli, même sans réseau.
+          </DialogDescription>
         </DialogHeader>
         <PwaInstallGuideContent />
       </DialogContent>
