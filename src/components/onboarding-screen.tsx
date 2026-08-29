@@ -6,6 +6,7 @@ import { AppIcon } from '@/components/app-icon'
 import { AlertCircle, PlayCircle, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { ImportFormatGuide } from '@/components/import-format-guide'
+import { PwaInstallCard } from '@/components/pwa-install-prompt'
 
 interface OnboardingScreenProps {
   onImportFile: (file: File) => Promise<void>
@@ -214,6 +215,9 @@ export function OnboardingScreen({
                 {loadingMock ? 'Chargement…' : 'Lancer la démo'}
               </Button>
             </div>
+
+            {/* Installation en tant qu'application */}
+            <PwaInstallCard />
           </CardContent>
         </Card>
 
