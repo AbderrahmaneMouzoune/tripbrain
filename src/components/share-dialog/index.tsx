@@ -15,9 +15,12 @@ import { downloadICS } from '@/lib/calendar-export'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { QrExportDialog } from '@/components/qr-export-dialog'
 import { ResetConfirmDialog } from '@/components/share-dialog/reset-confirm-dialog'
+import { PwaInstallGuide } from '@/components/pwa-install-guide'
+import { usePwaInstall } from '@/hooks/use-pwa-install'
 import {
   IconCalendar,
   IconDatabaseExport,
+  IconDeviceMobileDown,
   IconDownload,
   IconQrcode,
   IconShare2,
@@ -39,6 +42,10 @@ export function ShareDialog({
 }: ShareDialogProps) {
   const [open, setOpen] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
+  const [installOpen, setInstallOpen] = useState(false)
+  const { isReady, isStandalone, isInstalled } = usePwaInstall()
+  // Point d'entrée permanent vers le guide, même après avoir masqué la bannière.
+  const showInstallEntry = isReady && !isStandalone && !isInstalled
 
   const handleClear = async () => {
     await onClear()
@@ -78,6 +85,30 @@ export function ShareDialog({
 
             {/* ── Données ── */}
             <TabsContent value="data" className="mt-4 space-y-3">
+              {/* Installation en tant qu'application */}
+              {showInstallEntry && (
+                <Button
+                  variant="outline"
+                  className="border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3"
+                  onClick={() => {
+                    setOpen(false)
+                    setInstallOpen(true)
+                  }}
+                >
+                  <span className="bg-primary/10 text-primary inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+                    <IconDeviceMobileDown className="h-4 w-4" />
+                  </span>
+                  <div className="text-left">
+                    <p className="text-foreground text-sm font-medium">
+                      Installer l&apos;application
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      Ajouter TripBrain à votre écran d&apos;accueil
+                    </p>
+                  </div>
+                </Button>
+              )}
+
               {/* Export QR code */}
               <Button
                 variant="outline"
@@ -147,6 +178,8 @@ export function ShareDialog({
         onOpenChange={setQrOpen}
         onNavBack={() => setOpen(true)}
       />
+
+      <PwaInstallGuide open={installOpen} onOpenChange={setInstallOpen} />
     </>
   )
 }

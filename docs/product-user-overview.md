@@ -174,6 +174,16 @@ Ca permet de garder ton planning visible dans ton organisation habituelle.
 C'est un gros point fort dans le contexte voyage.
 Tu gardes l'acces aux infos utiles meme quand la connexion n'est pas bonne ou absente.
 
+### Installation comme une application
+
+Tu peux ajouter Tripbrain sur ton ecran d'accueil, comme une vraie app, sans passer par un magasin d'applications.
+
+L'app t'explique la marche a suivre selon ton telephone ou ton ordinateur :
+- proposition d'installation directe quand le navigateur la propose
+- etapes detaillees sinon (iPhone, Android, ordinateur)
+
+Une fois installee, elle s'ouvre en plein ecran, sans barre d'adresse, et reste consultable hors connexion.
+
 ## 7. Qu'est-ce qui le rend different ?
 
 Ce qui le distingue, c'est qu'il ne cherche pas a etre une app de reservation ou un guide touristique generique.

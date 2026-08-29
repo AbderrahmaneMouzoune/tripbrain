@@ -33,6 +33,7 @@ import { MapOverlay } from '@/components/map-overlay'
 import { cn } from '@/lib/utils'
 import { AppIcon } from '@/components/app-icon'
 import { DemoBanner } from '@/components/demo-banner'
+import { PwaInstallBanner } from '@/components/pwa-install-prompt'
 
 function getTripCountdown(
   tripStartDate: Date,
@@ -250,6 +251,9 @@ function HomePageContent() {
               }}
             />
           )}
+
+          {/* Rappel d'installation, reportable */}
+          <PwaInstallBanner />
 
           {/* Header */}
           <header

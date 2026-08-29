@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Nunito, Paytone_One, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { PWARegister } from '@/components/pwa-register'
@@ -27,18 +27,10 @@ export const metadata: Metadata = {
   description:
     'Planifiez et consultez votre itineraire de voyage avec TripBrain',
   manifest: '/manifest.json',
-  themeColor: '#2268c7',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
     title: 'TripBrain',
-  },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-    viewportFit: 'cover',
   },
   icons: {
     apple: '/apple-icon.png',
@@ -53,6 +45,18 @@ export const metadata: Metadata = {
   alternates: {
     canonical: 'https://app.tripbrain.fr',
   },
+}
+
+// Depuis Next 14, `themeColor` et `viewport` doivent sortir de `metadata` pour
+// être appliqués. `viewportFit: 'cover'` conditionne les `env(safe-area-inset-*)`
+// dont dépendent l'en-tête et la barre de navigation en mode application.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+  themeColor: '#2268c7',
 }
 
 export default function RootLayout({
