@@ -13,9 +13,6 @@ import {
   Banknote,
   Camera,
   Check,
-  Circle,
-  CircleCheck,
-  CircleSlash,
   Clock,
   Copy,
   ExternalLink,
@@ -29,6 +26,7 @@ import {
   Star,
   Train,
   Utensils,
+  X,
 } from 'lucide-react'
 
 interface DayActivityItemProps {
@@ -52,12 +50,6 @@ const STATUS_LABELS: Record<ActivityStatus, string> = {
   planned: 'À faire',
   done: 'Fait',
   skipped: 'Annulé',
-}
-
-const STATUS_ICONS: Record<ActivityStatus, typeof Circle> = {
-  planned: Circle,
-  done: CircleCheck,
-  skipped: CircleSlash,
 }
 
 function getActivityIcon(type: Activity['type']) {
@@ -88,15 +80,19 @@ function getActivityStatusClass(status: ActivityStatus) {
   }
 }
 
-/** Teinte de l'icône de bascule : discrète tant que rien n'est tranché. */
+/**
+ * Allure de la case à cocher : anneau vide tant que rien n'est tranché, pastille
+ * pleine une fois l'activité faite ou annulée. Le glyphe du survol annonce
+ * l'effet de l'appui sur les pointeurs qui le permettent.
+ */
 function getStatusToggleClass(status: ActivityStatus) {
   switch (status) {
     case 'done':
-      return 'text-green-600 hover:bg-green-500/10 dark:text-green-400'
+      return 'border-green-600 bg-green-600 text-white hover:bg-green-600/85 dark:border-green-500 dark:bg-green-500'
     case 'skipped':
-      return 'text-red-500 hover:bg-red-500/10 dark:text-red-400'
+      return 'border-red-500 bg-red-500 text-white hover:bg-red-500/85 dark:border-red-500/80 dark:bg-red-500/80'
     default:
-      return 'text-muted-foreground/40 hover:text-primary hover:bg-muted/70'
+      return 'border-muted-foreground/35 text-transparent hover:border-primary hover:text-primary/45'
   }
 }
 
@@ -117,7 +113,6 @@ export function DayActivityItem({
   const activityItemId = activity.id ?? `activity-${index}`
   const status: ActivityStatus = activity.status ?? 'planned'
   const nextStatus = nextActivityStatus(status)
-  const StatusIcon = STATUS_ICONS[status]
   const hasDetails = Boolean(
     activity.description ||
     activity.address ||
@@ -136,19 +131,23 @@ export function DayActivityItem({
       className="border-b-0 py-3 first:pt-0 last:pb-0"
     >
       <div className="flex gap-3">
-        <div className="mt-0.5 flex shrink-0 items-center gap-1.5">
+        <div className="mt-0.5 flex shrink-0 items-center gap-2 self-start">
           {onStatusChange && (
             <button
               type="button"
               onClick={() => onStatusChange(nextStatus)}
-              title={`${STATUS_LABELS[status]} — marquer « ${STATUS_LABELS[nextStatus]} »`}
-              aria-label={`${activity.name} : ${STATUS_LABELS[status]}. Marquer « ${STATUS_LABELS[nextStatus]} »`}
+              title={`${STATUS_LABELS[status]} — appuyer pour marquer « ${STATUS_LABELS[nextStatus]} »`}
+              aria-label={`${activity.name} : ${STATUS_LABELS[status]}. Appuyer pour marquer « ${STATUS_LABELS[nextStatus]} »`}
               className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-lg transition-colors',
+                'flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 transition-colors active:scale-90',
                 getStatusToggleClass(status),
               )}
             >
-              <StatusIcon className="h-4 w-4" strokeWidth={1.75} />
+              {status === 'skipped' ? (
+                <X className="h-3.5 w-3.5" strokeWidth={3} />
+              ) : (
+                <Check className="h-3.5 w-3.5" strokeWidth={3} />
+              )}
             </button>
           )}
 

@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import type { Activity, DayItinerary } from '../itinerary-data'
-import { countChanges, summarizeItineraryChanges } from '../itinerary-diff'
+import {
+  countChanges,
+  summarizeItineraryChanges,
+  type EntityChange,
+} from '../itinerary-diff'
 
 function makeActivity(id: string, overrides: Partial<Activity> = {}): Activity {
   return { id, name: id, type: 'visit', ...overrides }
@@ -19,8 +23,8 @@ function makeDay(overrides: Partial<DayItinerary> = {}): DayItinerary {
   }
 }
 
-/** Raccourci : les lignes de récap d'un itinéraire à une seule journée. */
-function changesOf(before: DayItinerary, after: DayItinerary): string[] {
+/** Raccourci : les modifications d'un itinéraire à une seule journée. */
+function changesOf(before: DayItinerary, after: DayItinerary): EntityChange[] {
   return summarizeItineraryChanges([before], [after]).flatMap(
     (summary) => summary.changes,
   )
@@ -41,23 +45,88 @@ describe('summarizeItineraryChanges', () => {
   })
 
   it('intitule la journée avec son numéro et sa ville', () => {
-    const before = makeDay()
-    const after = makeDay({ title: 'Nouveau titre' })
+    const summaries = summarizeItineraryChanges(
+      [makeDay()],
+      [makeDay({ title: 'Nouveau titre' })],
+    )
 
-    expect(summarizeItineraryChanges([before], [after])).toEqual([
-      {
-        dayId: 'day-1',
-        title: 'Jour 1 · Shanghai',
-        changes: ['Journée modifiée : Titre du jour'],
-      },
-    ])
+    expect(summaries).toHaveLength(1)
+    expect(summaries[0].dayId).toBe('day-1')
+    expect(summaries[0].title).toBe('Jour 1 · Shanghai')
   })
 
-  it('liste les libellés des champs de journée modifiés', () => {
+  it('donne la valeur avant et après de chaque champ de journée', () => {
     const before = makeDay()
     const after = makeDay({ city: 'Pékin', notes: 'Nuit sur place' })
 
-    expect(changesOf(before, after)).toEqual(['Journée modifiée : Ville, Note'])
+    expect(changesOf(before, after)).toEqual([
+      {
+        id: 'day',
+        kind: 'updated',
+        scope: 'Journée',
+        name: undefined,
+        fields: [
+          { label: 'Ville', before: 'Shanghai', after: 'Pékin' },
+          { label: 'Note', before: '', after: 'Nuit sur place' },
+        ],
+      },
+    ])
+  })
+})
+
+describe('summarizeItineraryChanges — mise en forme des valeurs', () => {
+  it('traduit un choix par le libellé de son option', () => {
+    const before = makeDay({
+      activities: [makeActivity('act-1', { status: 'planned' })],
+    })
+    const after = makeDay({
+      activities: [makeActivity('act-1', { status: 'skipped' })],
+    })
+
+    expect(changesOf(before, after)[0].fields).toEqual([
+      { label: 'Statut', before: 'Prévu', after: 'Passé' },
+    ])
+  })
+
+  it('affiche un prix avec sa devise', () => {
+    const before = makeDay({
+      activities: [makeActivity('act-1', { price: 20, currency: 'EUR' })],
+    })
+    const after = makeDay({
+      activities: [makeActivity('act-1', { price: 20, currency: 'CNY' })],
+    })
+
+    expect(changesOf(before, after)[0].fields).toEqual([
+      { label: 'Prix', before: '20 EUR', after: '20 CNY' },
+    ])
+  })
+
+  it('affiche une note sur cinq et une liste séparée par des points', () => {
+    const before = makeDay({ highlights: ['Le Bund'] })
+    const after = makeDay({ highlights: ['Le Bund', 'Jing’an'] })
+
+    expect(changesOf(before, after)[0].fields).toEqual([
+      { label: 'Points forts', before: 'Le Bund', after: 'Le Bund · Jing’an' },
+    ])
+
+    const rated = changesOf(
+      makeDay({ activities: [makeActivity('act-1')] }),
+      makeDay({ activities: [makeActivity('act-1', { rating: 4 })] }),
+    )
+    expect(rated[0].fields).toEqual([
+      { label: 'Appréciation', before: '', after: '4/5' },
+    ])
+  })
+
+  it('rend un booléen en oui / non', () => {
+    const before = makeDay({ activities: [makeActivity('act-1')] })
+    const after = makeDay({
+      activities: [makeActivity('act-1', { reservationRequired: true })],
+    })
+
+    expect(changesOf(before, after)[0].fields).toEqual([
+      { label: 'Réservation requise', before: 'Non', after: 'Oui' },
+    ])
   })
 })
 
@@ -69,54 +138,30 @@ describe('summarizeItineraryChanges — activités', () => {
     })
 
     expect(changesOf(before, after)).toEqual([
-      'Activité ajoutée : Le Bund',
-      'Activité supprimée : act-1',
+      {
+        id: 'act-2',
+        kind: 'added',
+        scope: 'Activité',
+        name: 'Le Bund',
+        fields: [],
+      },
+      {
+        id: 'act-1',
+        kind: 'removed',
+        scope: 'Activité',
+        name: 'act-1',
+        fields: [],
+      },
     ])
   })
 
-  it('formule à part une bascule de statut seule', () => {
-    const before = makeDay({
-      activities: [makeActivity('act-1', { name: 'Le Bund' })],
-    })
+  it('nomme une activité vide plutôt que de laisser un blanc', () => {
+    const before = makeDay({ activities: [] })
     const after = makeDay({
-      activities: [
-        makeActivity('act-1', { name: 'Le Bund', status: 'skipped' }),
-      ],
+      activities: [makeActivity('act-1', { name: ' ' })],
     })
 
-    expect(changesOf(before, after)).toEqual(['Le Bund : marquée « Annulé »'])
-  })
-
-  it('détaille les champs modifiés au-delà du seul statut', () => {
-    const before = makeDay({
-      activities: [makeActivity('act-1', { name: 'Le Bund' })],
-    })
-    const after = makeDay({
-      activities: [
-        makeActivity('act-1', {
-          name: 'Le Bund',
-          status: 'done',
-          duration: '2h',
-        }),
-      ],
-    })
-
-    expect(changesOf(before, after)).toEqual([
-      'Activité modifiée : Le Bund (Statut, Durée)',
-    ])
-  })
-
-  it('détecte un changement de devise à montant constant', () => {
-    const before = makeDay({
-      activities: [makeActivity('act-1', { price: 20, currency: 'EUR' })],
-    })
-    const after = makeDay({
-      activities: [makeActivity('act-1', { price: 20, currency: 'CNY' })],
-    })
-
-    expect(changesOf(before, after)).toEqual([
-      'Activité modifiée : act-1 (Prix)',
-    ])
+    expect(changesOf(before, after)[0].name).toBe('Activité sans nom')
   })
 
   it('signale un réordonnancement sans autre modification', () => {
@@ -125,7 +170,15 @@ describe('summarizeItineraryChanges — activités', () => {
       activities: [makeActivity('act-2'), makeActivity('act-1')],
     })
 
-    expect(changesOf(before, after)).toEqual(['Programme réordonné'])
+    expect(changesOf(before, after)).toEqual([
+      {
+        id: 'order',
+        kind: 'moved',
+        scope: 'Programme réordonné',
+        name: undefined,
+        fields: [],
+      },
+    ])
   })
 
   it('ne voit pas de réordonnancement dans un simple ajout en fin de liste', () => {
@@ -134,26 +187,30 @@ describe('summarizeItineraryChanges — activités', () => {
       activities: [...before.activities, makeActivity('act-3')],
     })
 
-    expect(changesOf(before, after)).toEqual(['Activité ajoutée : act-3'])
+    expect(changesOf(before, after).map((change) => change.kind)).toEqual([
+      'added',
+    ])
   })
 })
 
 describe('summarizeItineraryChanges — transport et hébergement', () => {
   it("signale l'ajout puis le retrait d'un transport", () => {
     const withoutTransport = makeDay()
-    const withTransport = makeDay({
-      transport: { id: 'tr-1', type: 'train' },
-    })
+    const withTransport = makeDay({ transport: { id: 'tr-1', type: 'train' } })
 
     expect(changesOf(withoutTransport, withTransport)).toEqual([
-      'Transport ajouté',
+      {
+        id: 'transport',
+        kind: 'added',
+        scope: 'Transport',
+        name: undefined,
+        fields: [],
+      },
     ])
-    expect(changesOf(withTransport, withoutTransport)).toEqual([
-      'Transport supprimé',
-    ])
+    expect(changesOf(withTransport, withoutTransport)[0].kind).toBe('removed')
   })
 
-  it("liste les champs modifiés d'un hébergement", () => {
+  it("détaille les champs modifiés d'un hébergement", () => {
     const accommodation = {
       id: 'acc-1',
       name: 'B&B',
@@ -168,7 +225,16 @@ describe('summarizeItineraryChanges — transport et hébergement', () => {
     })
 
     expect(changesOf(before, after)).toEqual([
-      'Hébergement modifié : Nom, Statut',
+      {
+        id: 'accommodation',
+        kind: 'updated',
+        scope: 'Hébergement',
+        name: undefined,
+        fields: [
+          { label: 'Nom', before: 'B&B', after: 'Hôtel' },
+          { label: 'Statut', before: '', after: 'Réservé' },
+        ],
+      },
     ])
   })
 })
@@ -188,29 +254,47 @@ describe('summarizeItineraryChanges — journées', () => {
 
     expect(summaries).toHaveLength(1)
     expect(summaries[0].title).toBe('Jour 2 · Pékin')
-    expect(countChanges(summaries)).toBe(1)
+    // Deux champs retouchés sur la même entité comptent pour deux lignes.
+    expect(countChanges(summaries)).toBe(2)
   })
 
   it('signale une journée ajoutée ou retirée', () => {
     const day = makeDay()
 
-    expect(summarizeItineraryChanges([], [day])[0].changes).toEqual([
-      'Journée ajoutée',
-    ])
-    expect(summarizeItineraryChanges([day], [])[0].changes).toEqual([
-      'Journée supprimée',
-    ])
+    expect(summarizeItineraryChanges([], [day])[0].changes[0]).toMatchObject({
+      kind: 'added',
+      scope: 'Journée',
+      name: 'Arrivée',
+    })
+    expect(summarizeItineraryChanges([day], [])[0].changes[0]).toMatchObject({
+      kind: 'removed',
+      scope: 'Journée',
+    })
   })
 })
 
 describe('countChanges', () => {
-  it('additionne les lignes de toutes les journées', () => {
-    expect(
-      countChanges([
-        { dayId: 'day-1', title: 'Jour 1', changes: ['a', 'b'] },
-        { dayId: 'day-2', title: 'Jour 2', changes: ['c'] },
-      ]),
-    ).toBe(3)
+  it('compte une ligne par champ retouché', () => {
+    const summaries = summarizeItineraryChanges(
+      [makeDay()],
+      [makeDay({ title: 'Autre titre', city: 'Pékin', notes: 'Note' })],
+    )
+
+    expect(countChanges(summaries)).toBe(3)
+  })
+
+  it('compte une ligne par ajout ou suppression', () => {
+    const before = [
+      makeDay({ id: 'day-1' }),
+      makeDay({ id: 'day-2', dayNumber: 2 }),
+    ]
+    const after = [
+      { ...before[0], title: 'Autre titre', activities: [] },
+      { ...before[1], city: 'Pékin' },
+    ]
+
+    // Jour 1 : un champ de journée + deux suppressions ; jour 2 : un champ.
+    expect(countChanges(summarizeItineraryChanges(before, after))).toBe(4)
   })
 
   it('vaut zéro sans modification', () => {
