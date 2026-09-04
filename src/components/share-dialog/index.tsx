@@ -23,8 +23,11 @@ import {
   IconKey,
   IconQrcode,
   IconShare2,
+  IconShieldLock,
 } from '@tabler/icons-react'
+import Link from 'next/link'
 import { useState } from 'react'
+import { trackEvent } from '@/lib/analytics/client'
 
 const PROMPT_SOURCE = { kind: 'prompt' } as const
 
@@ -49,13 +52,19 @@ export function ShareDialog({
   const [importOpen, setImportOpen] = useState(false)
 
   const handleClear = async () => {
+    trackEvent('data_cleared', { surface: 'share_dialog' })
     await onClear()
     setOpen(false)
   }
 
+  const handleOpenChange = (next: boolean) => {
+    if (next) trackEvent('share_opened')
+    setOpen(next)
+  }
+
   return (
     <>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogTrigger asChild>
           {trigger || (
             <Button variant="ghost" size="icon" title="Partager & données">
@@ -132,6 +141,33 @@ export function ShareDialog({
 
               <Separator />
 
+              {/* Confidentialité : réglage du consentement et pages légales */}
+              <Button
+                asChild
+                variant="outline"
+                className="border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3"
+              >
+                <Link
+                  href="/politique-de-confidentialite"
+                  onClick={() => setOpen(false)}
+                >
+                  <span className="bg-muted text-muted-foreground inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+                    <IconShieldLock className="h-4 w-4" />
+                  </span>
+                  <div className="text-left">
+                    <p className="text-foreground text-sm font-medium">
+                      Confidentialité
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      Ce qui reste sur l’appareil, et régler la mesure
+                      d’audience
+                    </p>
+                  </div>
+                </Link>
+              </Button>
+
+              <Separator />
+
               {/* Reset */}
               <ResetConfirmDialog onConfirm={handleClear} />
             </TabsContent>
@@ -145,7 +181,10 @@ export function ShareDialog({
                 </p>
 
                 <Button
-                  onClick={() => downloadICS(itinerary, 'tripbrain-voyage.ics')}
+                  onClick={() => {
+                    trackEvent('calendar_exported', { scope: 'trip' })
+                    downloadICS(itinerary, 'tripbrain-voyage.ics')
+                  }}
                   className="w-full gap-2"
                 >
                   <IconDownload className="h-4 w-4" />
@@ -156,6 +195,7 @@ export function ShareDialog({
                   <Button
                     variant="outline"
                     onClick={() => {
+                      trackEvent('calendar_exported', { scope: 'day' })
                       const day = itinerary[selectedDay]
                       downloadICS([day], `tripbrain-jour-${day.dayNumber}.ics`)
                     }}

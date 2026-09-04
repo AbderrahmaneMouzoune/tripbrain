@@ -27,6 +27,7 @@ import {
   setTransport,
   upsertActivity,
 } from '@/lib/itinerary-edit'
+import { trackEvent } from '@/lib/analytics/client'
 import { EntityEditSheet } from '@/components/edit/entity-edit-sheet'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -381,8 +382,13 @@ export function DayDetail({
                   onEdit={isEditing ? () => editActivity(activity) : undefined}
                   onMove={
                     isEditing
-                      ? (offset) =>
+                      ? (offset) => {
+                          trackEvent('entity_edited', {
+                            entity: 'activity',
+                            action: 'reorder',
+                          })
                           onDayChange?.(moveActivity(day, activity.id, offset))
+                        }
                       : undefined
                   }
                   canMoveUp={index > 0}
@@ -473,7 +479,10 @@ export function DayDetail({
           title="Modifier la journée"
           schema={dayForm}
           value={dayDraft}
-          onSubmit={(next) => onDayChange?.(next)}
+          onSubmit={(next) => {
+            trackEvent('entity_edited', { entity: 'day', action: 'update' })
+            onDayChange?.(next)
+          }}
         />
       )}
 
@@ -488,10 +497,26 @@ export function DayDetail({
           }
           schema={activityForm}
           value={activityDraft}
-          onSubmit={(next) => onDayChange?.(upsertActivity(day, next))}
+          onSubmit={(next) => {
+            trackEvent('entity_edited', {
+              entity: 'activity',
+              action: day.activities.some(
+                (current) => current.id === activityDraft.id,
+              )
+                ? 'update'
+                : 'create',
+            })
+            onDayChange?.(upsertActivity(day, next))
+          }}
           onDelete={
             day.activities.some((current) => current.id === activityDraft.id)
-              ? () => onDayChange?.(removeActivity(day, activityDraft.id))
+              ? () => {
+                  trackEvent('entity_edited', {
+                    entity: 'activity',
+                    action: 'delete',
+                  })
+                  onDayChange?.(removeActivity(day, activityDraft.id))
+                }
               : undefined
           }
         />
@@ -504,10 +529,22 @@ export function DayDetail({
           title={transport ? 'Modifier le transport' : 'Nouveau transport'}
           schema={transportForm}
           value={transportDraft}
-          onSubmit={(next) => onDayChange?.(setTransport(day, next))}
+          onSubmit={(next) => {
+            trackEvent('entity_edited', {
+              entity: 'transport',
+              action: transport ? 'update' : 'create',
+            })
+            onDayChange?.(setTransport(day, next))
+          }}
           onDelete={
             transport
-              ? () => onDayChange?.(setTransport(day, undefined))
+              ? () => {
+                  trackEvent('entity_edited', {
+                    entity: 'transport',
+                    action: 'delete',
+                  })
+                  onDayChange?.(setTransport(day, undefined))
+                }
               : undefined
           }
         />
@@ -522,10 +559,22 @@ export function DayDetail({
           }
           schema={accommodationForm}
           value={accommodationDraft}
-          onSubmit={(next) => onDayChange?.(setAccommodation(day, next))}
+          onSubmit={(next) => {
+            trackEvent('entity_edited', {
+              entity: 'accommodation',
+              action: accommodation ? 'update' : 'create',
+            })
+            onDayChange?.(setAccommodation(day, next))
+          }}
           onDelete={
             accommodation
-              ? () => onDayChange?.(setAccommodation(day, undefined))
+              ? () => {
+                  trackEvent('entity_edited', {
+                    entity: 'accommodation',
+                    action: 'delete',
+                  })
+                  onDayChange?.(setAccommodation(day, undefined))
+                }
               : undefined
           }
         />
