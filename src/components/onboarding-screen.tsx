@@ -7,6 +7,7 @@ import { AlertCircle, KeyRound, PlayCircle, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { ImportFormatGuide } from '@/components/import-format-guide'
 import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog'
+import { PwaInstallEntry } from '@/components/pwa-install-prompt'
 import type { DayItinerary } from '@/lib/itinerary-data'
 
 const PROMPT_SOURCE = { kind: 'prompt' } as const
@@ -247,6 +248,11 @@ export function OnboardingScreen({
             </div>
           </CardContent>
         </Card>
+
+        {/* Installation sur l'écran d'accueil, discrète tant qu'aucun voyage n'est chargé */}
+        <div className="flex justify-center">
+          <PwaInstallEntry variant="link" />
+        </div>
 
         {/* Hidden file input — accepts all supported formats, multiple for CSV */}
         <ImportShareDialog

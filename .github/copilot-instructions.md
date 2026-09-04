@@ -41,6 +41,8 @@ bun run test:watch     # vitest in watch mode
 7. Documents (PDFs, tickets, etc.) are stored in a third IndexedDB database (`tripbrain-documents`), managed by `useDocuments` hook.
 8. **Sharing** (`src/lib/share.ts`) compresses the itinerary to msgpack + deflate + base64url. Under `SHARE_INLINE_LIMIT` chars the whole trip fits in a self-contained QR code (`/?import=<payload>`) and never leaves the device. Above it — or whenever a code to read out loud is asked for — the payload is POSTed to `/api/share`, which stores it as a bucketcode snapshot under an eight-character Crockford code and returns it; the receiving device resolves it through `GET /api/share/[code]` (`/?code=<code>` opens the app straight onto it). Bucket credentials stay on the server: see `.env.example` for the required `R2_*` variables.
 
+9. **Installation PWA** : la logique pure (plateforme, cadence de relance, opt-out) vit dans `src/lib/pwa-install.ts` ; `PwaInstallProvider` (`src/components/pwa-install-provider.tsx`) branche `beforeinstallprompt`/`appinstalled` et le mode standalone, et `PwaInstallPrompt` affiche le tiroir. La relance automatique ne se déclenche que sur mobile, une fois un voyage chargé, et jamais en mode installé ; `PwaInstallEntry` garde une entrée manuelle dans l'onboarding et dans « Partager & données ».
+
 ### Single-page structure
 
 The app is a single route (`src/app/page.tsx`). It shows:

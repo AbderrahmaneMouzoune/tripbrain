@@ -37,6 +37,7 @@ import { MapOverlay } from '@/components/map-overlay'
 import { cn } from '@/lib/utils'
 import { AppIcon } from '@/components/app-icon'
 import { DemoBanner } from '@/components/demo-banner'
+import { usePwaInstall } from '@/components/pwa-install-provider'
 
 function getTripCountdown(
   tripStartDate: Date,
@@ -94,6 +95,7 @@ function HomePageContent() {
   } = useTripData()
 
   const searchParams = useSearchParams()
+  const { armAutoPrompt } = usePwaInstall()
 
   // Partage reçu via l'URL, en attente de confirmation de l'utilisateur.
   const [sharedSource, setSharedSource] = useState<ImportShareSource | null>(
@@ -182,6 +184,12 @@ function HomePageContent() {
       loadMockData()
     }
   }, [hasData, isLoading, searchParams, loadMockData])
+
+  // On ne propose l'installation qu'une fois le voyage chargé : avant, la
+  // proposition arriverait sans que l'app ait rendu le moindre service.
+  useEffect(() => {
+    armAutoPrompt(hasData && !isLoading)
+  }, [armAutoPrompt, hasData, isLoading])
 
   // Arrivée par un partage : `?import=` embarque l'itinéraire complet, `?code=`
   // pointe vers un partage déposé sur le serveur. L'URL est nettoyée aussitôt

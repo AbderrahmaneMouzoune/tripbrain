@@ -16,6 +16,7 @@ import type { DayItinerary } from '@/lib/itinerary-data'
 import { ShareExportDialog } from '@/components/share-dialog/share-export-dialog'
 import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog'
 import { ResetConfirmDialog } from '@/components/share-dialog/reset-confirm-dialog'
+import { PwaInstallEntry } from '@/components/pwa-install-prompt'
 import {
   IconCalendar,
   IconDatabaseExport,
@@ -129,6 +130,9 @@ export function ShareDialog({
                   </p>
                 </div>
               </Button>
+
+              {/* Installation sur l'écran d'accueil */}
+              <PwaInstallEntry onSelect={() => setOpen(false)} />
 
               <Separator />
 

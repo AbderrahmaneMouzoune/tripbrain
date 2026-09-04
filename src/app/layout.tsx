@@ -2,6 +2,9 @@ import type { Metadata } from 'next'
 import { Nunito, Paytone_One, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { PWARegister } from '@/components/pwa-register'
+import { PwaInstallProvider } from '@/components/pwa-install-provider'
+import { PwaInstallPrompt } from '@/components/pwa-install-prompt'
+import { INSTALL_EVENT_CAPTURE_SCRIPT } from '@/lib/pwa-install'
 import './globals.css'
 
 const nunito = Nunito({
@@ -43,6 +46,10 @@ export const metadata: Metadata = {
   icons: {
     apple: '/apple-icon.png',
   },
+  other: {
+    // Équivalent standard de `apple-mobile-web-app-capable`, lu par Chrome/Edge.
+    'mobile-web-app-capable': 'yes',
+  },
   openGraph: {
     siteName: 'TripBrain',
     title: 'TripBrain',
@@ -62,11 +69,24 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr">
+      <head>
+        {/*
+          `beforeinstallprompt` peut se déclencher avant l'hydratation React :
+          on le met de côté dès le chargement du document.
+        */}
+        <script
+          id="pwa-install-capture"
+          dangerouslySetInnerHTML={{ __html: INSTALL_EVENT_CAPTURE_SCRIPT }}
+        />
+      </head>
       <body
         className={`${nunito.variable} ${paytoneOne.variable} font-sans antialiased`}
       >
         <PWARegister />
-        {children}
+        <PwaInstallProvider>
+          {children}
+          <PwaInstallPrompt />
+        </PwaInstallProvider>
         <Analytics />
       </body>
     </html>
