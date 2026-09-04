@@ -158,9 +158,16 @@ Tu peux les retrouver plus facilement grace a :
 ### Partage simple
 
 Tu peux partager ton voyage :
+- avec un QR code a scanner
+- avec un code court a recopier, du type K7QP-2M4X
 - avec un lien
-- avec un QR code
-- avec un partage direct
+
+Un petit voyage tient entierement dans le QR code : rien ne part sur un serveur, et il
+fonctionne meme hors connexion. Pour un voyage plus gros, ou quand tu preferes dicter un
+code, TripBrain depose les donnees le temps du transfert et les efface au bout d'une heure.
+
+En face, l'autre appareil scanne le QR code ou saisit le code, verifie le voyage recu, puis
+l'enregistre.
 
 Pratique pour envoyer ton itineraire a la personne qui voyage avec toi, ou a des proches.
 

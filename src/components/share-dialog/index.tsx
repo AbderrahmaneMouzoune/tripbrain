@@ -13,22 +13,28 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { downloadICS } from '@/lib/calendar-export'
 import type { DayItinerary } from '@/lib/itinerary-data'
-import { QrExportDialog } from '@/components/qr-export-dialog'
+import { ShareExportDialog } from '@/components/share-dialog/share-export-dialog'
+import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog'
 import { ResetConfirmDialog } from '@/components/share-dialog/reset-confirm-dialog'
 import {
   IconCalendar,
   IconDatabaseExport,
   IconDownload,
+  IconKey,
   IconQrcode,
   IconShare2,
 } from '@tabler/icons-react'
 import { useState } from 'react'
+
+const PROMPT_SOURCE = { kind: 'prompt' } as const
 
 interface ShareDialogProps {
   itinerary: DayItinerary[]
   selectedDay?: number
   trigger?: React.ReactNode
   onClear: () => Promise<void>
+  /** Enregistre un itinéraire reçu via un code de partage. */
+  onImportShared: (itinerary: DayItinerary[]) => Promise<void>
 }
 
 export function ShareDialog({
@@ -36,9 +42,11 @@ export function ShareDialog({
   selectedDay,
   trigger,
   onClear,
+  onImportShared,
 }: ShareDialogProps) {
   const [open, setOpen] = useState(false)
-  const [qrOpen, setQrOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   const handleClear = async () => {
     await onClear()
@@ -78,13 +86,13 @@ export function ShareDialog({
 
             {/* ── Données ── */}
             <TabsContent value="data" className="mt-4 space-y-3">
-              {/* Export QR code */}
+              {/* Partage : QR code ou code à recopier */}
               <Button
                 variant="outline"
                 className="border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3"
                 onClick={() => {
                   setOpen(false)
-                  setQrOpen(true)
+                  setExportOpen(true)
                 }}
               >
                 <span className="bg-primary/10 text-primary inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
@@ -92,10 +100,32 @@ export function ShareDialog({
                 </span>
                 <div className="text-left">
                   <p className="text-foreground text-sm font-medium">
-                    Exporter en QR Code
+                    Partager l’itinéraire
                   </p>
                   <p className="text-muted-foreground text-xs">
-                    Générer un QR code pour partager l&apos;itinéraire
+                    QR code à scanner ou code à recopier
+                  </p>
+                </div>
+              </Button>
+
+              {/* Réception d'un partage */}
+              <Button
+                variant="outline"
+                className="border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3"
+                onClick={() => {
+                  setOpen(false)
+                  setImportOpen(true)
+                }}
+              >
+                <span className="bg-secondary/10 text-secondary inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+                  <IconKey className="h-4 w-4" />
+                </span>
+                <div className="text-left">
+                  <p className="text-foreground text-sm font-medium">
+                    Importer un partage
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    Saisir un code reçu depuis un autre appareil
                   </p>
                 </div>
               </Button>
@@ -141,10 +171,19 @@ export function ShareDialog({
         </DialogContent>
       </Dialog>
 
-      <QrExportDialog
+      <ShareExportDialog
         itinerary={itinerary}
-        open={qrOpen}
-        onOpenChange={setQrOpen}
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        onNavBack={() => setOpen(true)}
+      />
+
+      <ImportShareDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        source={PROMPT_SOURCE}
+        hasExistingData
+        onImport={onImportShared}
         onNavBack={() => setOpen(true)}
       />
     </>

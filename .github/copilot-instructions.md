@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-TripBrain is a **client-only Next.js 16 PWA** — a personal travel companion that displays a day-by-day itinerary with a roadbook, interactive map, documents, and offline support. There is no backend; all data lives in IndexedDB.
+TripBrain is a **local-first Next.js 16 PWA** — a personal travel companion that displays a day-by-day itinerary with a roadbook, interactive map, documents, and offline support. All data lives in IndexedDB; the only server-side code is the sharing API (`src/app/api/share/`), which parks a compressed itinerary in an S3/R2 bucket under a short sync code.
 
 ## Tech Stack
 
@@ -11,6 +11,7 @@ TripBrain is a **client-only Next.js 16 PWA** — a personal travel companion th
 - **Language**: TypeScript (strict mode)
 - **UI**: React 19, shadcn/ui (new-york style), Tailwind CSS v4, @tabler/icons-react icons
 - **State**: IndexedDB (3 databases: tripbrain, tripbrain-images, tripbrain-documents)
+- **Sharing**: [bucketcode](https://www.npmjs.com/package/bucketcode) on the server (S3/R2 snapshots + sync codes), `qrcode.react` on the client
 - **Map**: Leaflet
 - **Testing**: Vitest with `globals: true`
 - **Formatting**: Prettier — single quotes, no semicolons, 2-space indent, Tailwind class sorting
@@ -38,6 +39,7 @@ bun run test:watch     # vitest in watch mode
 5. Import supports **JSON**, **XLSX** (3-sheet workbook: Days/Activities/Transports), and **CSV** (3 files: days.csv/activities.csv/transports.csv). Import logic is in `src/lib/importItinerary.ts`.
 6. A separate IndexedDB database (`tripbrain-images`) caches images for offline use, managed by `useImageCache` hook.
 7. Documents (PDFs, tickets, etc.) are stored in a third IndexedDB database (`tripbrain-documents`), managed by `useDocuments` hook.
+8. **Sharing** (`src/lib/share.ts`) compresses the itinerary to msgpack + deflate + base64url. Under `SHARE_INLINE_LIMIT` chars the whole trip fits in a self-contained QR code (`/?import=<payload>`) and never leaves the device. Above it — or whenever a code to read out loud is asked for — the payload is POSTed to `/api/share`, which stores it as a bucketcode snapshot under an eight-character Crockford code and returns it; the receiving device resolves it through `GET /api/share/[code]` (`/?code=<code>` opens the app straight onto it). Bucket credentials stay on the server: see `.env.example` for the required `R2_*` variables.
 
 ### Single-page structure
 

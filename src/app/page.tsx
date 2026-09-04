@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, Suspense } from 'react'
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTripData } from '@/hooks/use-trip-data'
 import type { DayItinerary } from '@/lib/itinerary-data'
@@ -8,6 +8,10 @@ import { useSwipe } from '@/hooks/use-swipe'
 import { Timeline } from '@/components/timeline'
 import { DayDetail } from '@/components/day-detail'
 import { ShareDialog } from '@/components/share-dialog'
+import {
+  ImportShareDialog,
+  type ImportShareSource,
+} from '@/components/share-dialog/import-share-dialog'
 import { OnboardingScreen } from '@/components/onboarding-screen'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -81,6 +85,7 @@ function HomePageContent() {
     importData,
     importXlsxData,
     importCsvData,
+    importSharedItinerary,
     updateDay,
     replaceItinerary,
     exportData,
@@ -89,6 +94,12 @@ function HomePageContent() {
   } = useTripData()
 
   const searchParams = useSearchParams()
+
+  // Partage reçu via l'URL, en attente de confirmation de l'utilisateur.
+  const [sharedSource, setSharedSource] = useState<ImportShareSource | null>(
+    null,
+  )
+  const sharedHandledRef = useRef(false)
 
   const [selectedDay, setSelectedDay] = useState(0)
   const [swipeDirection, setSwipeDirection] = useState<
@@ -172,6 +183,26 @@ function HomePageContent() {
     }
   }, [hasData, isLoading, searchParams, loadMockData])
 
+  // Arrivée par un partage : `?import=` embarque l'itinéraire complet, `?code=`
+  // pointe vers un partage déposé sur le serveur. L'URL est nettoyée aussitôt
+  // pour qu'un rechargement ne repropose pas le même import, et le drapeau
+  // garantit qu'on ne le traite qu'une fois par visite.
+  useEffect(() => {
+    if (isLoading || sharedHandledRef.current) return
+
+    const payload = searchParams.get('import')
+    const code = searchParams.get('code')
+    if (!payload && !code) return
+
+    sharedHandledRef.current = true
+    setSharedSource(
+      payload
+        ? { kind: 'payload', payload }
+        : { kind: 'code', code: code as string },
+    )
+    window.history.replaceState(null, '', window.location.pathname)
+  }, [isLoading, searchParams])
+
   useEffect(() => {
     if (hasData) {
       setSelectedDay(getCurrentDayIndex())
@@ -212,14 +243,31 @@ function HomePageContent() {
     )
   }
 
+  // Rendue des deux côtés de l'onboarding : l'import fait passer de l'un à l'autre.
+  const sharedImportDialog = sharedSource ? (
+    <ImportShareDialog
+      open
+      onOpenChange={(next) => {
+        if (!next) setSharedSource(null)
+      }}
+      source={sharedSource}
+      hasExistingData={hasData}
+      onImport={importSharedItinerary}
+    />
+  ) : null
+
   if (!hasData) {
     return (
-      <OnboardingScreen
-        onImportFile={importData}
-        onImportXlsx={importXlsxData}
-        onImportCsv={importCsvData}
-        onUseMockData={loadMockData}
-      />
+      <>
+        <OnboardingScreen
+          onImportFile={importData}
+          onImportXlsx={importXlsxData}
+          onImportCsv={importCsvData}
+          onImportShared={importSharedItinerary}
+          onUseMockData={loadMockData}
+        />
+        {sharedImportDialog}
+      </>
     )
   }
 
@@ -305,6 +353,7 @@ function HomePageContent() {
                     itinerary={itinerary}
                     selectedDay={selectedDay}
                     onClear={clearData}
+                    onImportShared={importSharedItinerary}
                   />
                 </div>
               </div>
@@ -574,6 +623,8 @@ function HomePageContent() {
             />
           )}
         </div>
+
+        {sharedImportDialog}
       </main>
     </ImageCacheProvider>
   )
