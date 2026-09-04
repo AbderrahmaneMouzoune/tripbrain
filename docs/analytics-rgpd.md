@@ -14,23 +14,25 @@ Trois garde-fous, dans cet ordre :
 
 1. **Pas de clé, pas de mesure.** Sans `NEXT_PUBLIC_POSTHOG_KEY`, aucun script
    n'est chargé et aucune requête ne part.
-2. **Pas de consentement, pas de mesure.** Le SDK démarre en `opt_out`, avec un
-   stockage en mémoire vive : rien n'est envoyé, rien n'est écrit sur
-   l'appareil. Vercel Analytics est monté sous la même condition.
+2. **Pas de consentement, pas de mesure.** `posthog.init()` n'est appelé
+   qu'après un accord : le SDK contacte PostHog dès l'initialisation, pour sa
+   configuration distante et ses drapeaux, et un simple `opt_out` laisserait
+   donc déjà filer une adresse IP. Vercel Analytics est monté sous la même
+   condition.
 3. **Pas de catalogue, pas d'événement.** Ce qui part est vérifié deux fois :
    à l'émission (`trackEvent`) puis juste avant l'envoi (`before_send`).
 
 ## Où ça se passe
 
-| Fichier | Rôle |
-| --- | --- |
-| `src/lib/analytics/events.ts` | Catalogue : la liste exhaustive des événements et de leurs propriétés. |
-| `src/lib/analytics/sanitize.ts` | Filtre : liste blanche d'événements, nettoyage des URL, retrait de tout le reste. |
-| `src/lib/analytics/client.ts` | Initialisation du SDK, application du consentement, `trackEvent`. |
-| `src/lib/analytics/consent.ts` | Lecture, écriture et diffusion du choix, conservé sur l'appareil. |
-| `src/lib/analytics/metrics.ts` | Transformation d'un itinéraire ou d'un fichier en compteurs. |
-| `src/components/analytics/` | Fournisseur React, bandeau de consentement, Vercel Analytics conditionné. |
-| `src/app/politique-de-confidentialite/` | Politique publique — la liste des événements y est générée depuis le catalogue. |
+| Fichier                                 | Rôle                                                                              |
+| --------------------------------------- | --------------------------------------------------------------------------------- |
+| `src/lib/analytics/events.ts`           | Catalogue : la liste exhaustive des événements et de leurs propriétés.            |
+| `src/lib/analytics/sanitize.ts`         | Filtre : liste blanche d'événements, nettoyage des URL, retrait de tout le reste. |
+| `src/lib/analytics/client.ts`           | Initialisation du SDK, application du consentement, `trackEvent`.                 |
+| `src/lib/analytics/consent.ts`          | Lecture, écriture et diffusion du choix, conservé sur l'appareil.                 |
+| `src/lib/analytics/metrics.ts`          | Transformation d'un itinéraire ou d'un fichier en compteurs.                      |
+| `src/components/analytics/`             | Fournisseur React, bandeau de consentement, Vercel Analytics conditionné.         |
+| `src/app/politique-de-confidentialite/` | Politique publique — la liste des événements y est générée depuis le catalogue.   |
 
 ## Ce qui est coupé, et pourquoi
 
@@ -50,6 +52,8 @@ Tout ce qui pourrait les capter est désactivé à l'initialisation :
   n'est créée, la mesure reste anonyme.
 - `disable_surveys`, `disable_web_experiments`,
   `disable_external_dependency_loading` — aucun script tiers supplémentaire.
+- `advanced_disable_flags: true` — aucun drapeau de fonctionnalité n'est
+  utilisé, donc pas de requête pour les récupérer.
 - `property_denylist: ['$ip']`, `mask_personal_data_properties: true` avec
   `import`, `code`, `payload`, `q` en propriétés personnalisées.
 
@@ -72,8 +76,8 @@ Le code ne peut pas tout garantir seul. À vérifier dans le projet PostHog :
 
 - [ ] **Instance européenne** (`https://eu.i.posthog.com`), déjà l'hôte par
       défaut. Un projet créé sur l'instance US ferait sortir les données de l'UE.
-- [ ] **Discard client IP data** activé (Settings → Project → *IP data
-      capture*). Le SDK retire déjà `$ip`, mais l'adresse IP de la requête est
+- [ ] **Discard client IP data** activé (Settings → Project → _IP data
+      capture_). Le SDK retire déjà `$ip`, mais l'adresse IP de la requête est
       résolue côté serveur : seul ce réglage l'empêche.
 - [ ] **Durée de conservation** alignée sur les 12 mois annoncés dans la
       politique de confidentialité.

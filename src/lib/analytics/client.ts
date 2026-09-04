@@ -7,8 +7,8 @@
  *
  * 1. Sans clé publique configurée, la mesure n'existe pas — aucun script, aucune
  *    requête. L'application fonctionne exactement pareil.
- * 2. Sans consentement, le SDK est initialisé en opt-out et sans stockage
- *    persistant : rien n'est envoyé, rien n'est écrit sur l'appareil.
+ * 2. Sans consentement, le SDK n'est pas initialisé du tout : `posthog.init()`
+ *    contacte PostHog dès l'appel, un simple opt-out ne suffirait pas.
  * 3. Ce qui part passe par `before_send`, qui applique le catalogue et nettoie
  *    les URL. Voir `sanitize.ts`.
  *
@@ -47,26 +47,27 @@ export function isAnalyticsConfigured(): boolean {
 }
 
 /**
- * Initialise le SDK une seule fois. Appelée au montage du fournisseur, quel que
- * soit l'état du consentement : sans consentement, l'instance existe mais
- * n'émet rien, ce qui évite de recharger un script au moment du « oui ».
+ * Initialise le SDK, et seulement après un consentement.
+ *
+ * L'option `opt_out_capturing_by_default` ne suffit pas : `posthog.init()`
+ * contacte PostHog dès l'appel pour récupérer sa configuration distante et ses
+ * drapeaux, ce qui laisse déjà filer une adresse IP et un référent. Tant que
+ * le visiteur n'a pas dit oui, on ne l'appelle donc pas du tout.
  */
 export function initAnalytics(): void {
   if (initialized || !posthogKey || typeof window === 'undefined') return
-  initialized = true
+  if (!hasGrantedConsent()) return
 
-  const consented = hasGrantedConsent()
+  initialized = true
 
   posthog.init(posthogKey, {
     api_host: posthogHost,
     ui_host: DEFAULT_UI_HOST,
 
     // — Consentement —
-    // Opt-out par défaut : tant que le visiteur n'a pas accepté, aucune
-    // requête ne part. Le stockage reste en mémoire, donc rien ne survit à la
-    // fermeture de l'onglet.
-    opt_out_capturing_by_default: !consented,
-    persistence: consented ? 'localStorage' : 'memory',
+    // Ce point du code n'est atteint qu'avec un accord donné ; le retrait
+    // repasse par `applyConsent`, qui coupe l'envoi et efface l'identifiant.
+    persistence: 'localStorage',
     respect_dnt: true,
 
     // — Aucune personne identifiée —
@@ -84,6 +85,9 @@ export function initAnalytics(): void {
     disable_surveys: true,
     disable_web_experiments: true,
     disable_external_dependency_loading: true,
+    // Aucun drapeau de fonctionnalité n'est utilisé : la requête qui les
+    // récupère à chaque chargement n'a pas lieu d'être.
+    advanced_disable_flags: true,
     mask_all_text: true,
     mask_all_element_attributes: true,
 
@@ -119,15 +123,25 @@ export function initAnalytics(): void {
  * anonyme et repasse le stockage en mémoire, pour ne rien laisser derrière.
  */
 export function applyConsent(status: ConsentStatus): void {
-  if (!initialized || !posthogKey) return
+  if (!posthogKey) return
 
   if (status === 'granted') {
+    // Premier accord de la visite : le SDK n'existe pas encore, et son
+    // initialisation démarre déjà en capture.
+    if (!initialized) {
+      initAnalytics()
+      return
+    }
+
     posthog.set_config({ persistence: 'localStorage' })
     // `reset()` avant l'opt-in : dans l'autre ordre, PostHog coupe la capture.
     posthog.reset()
     posthog.opt_in_capturing({ captureEventName: false })
     return
   }
+
+  // Jamais initialisé : il n'y a rien à couper ni à effacer.
+  if (!initialized) return
 
   posthog.opt_out_capturing()
   posthog.reset()

@@ -265,8 +265,8 @@ export default function PrivacyPolicyPage() {
         <p>
           {product.name} ne dépose aucun cookie publicitaire et ne pratique
           aucun suivi entre sites. Tant que tu n’as pas accepté la mesure
-          d’audience, rien n’est écrit à cette fin : le SDK fonctionne en
-          mémoire vive et disparaît à la fermeture de l’onglet.
+          d’audience, rien n’est écrit à cette fin et rien n’est demandé à
+          PostHog : son SDK n’est même pas démarré.
         </p>
         <LegalDefinitionList
           items={[

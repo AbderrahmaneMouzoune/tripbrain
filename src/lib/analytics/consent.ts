@@ -2,9 +2,10 @@
  * Consentement aux mesures d'audience.
  *
  * Le choix du visiteur vit sur son appareil et n'est jamais envoyé nulle part.
- * Tant qu'il n'a pas dit oui, PostHog reste en opt-out complet : aucune requête
- * ne part, aucun identifiant n'est écrit. Dire non, ou revenir sur un oui, est
- * aussi simple que d'accepter — c'est ce qu'exige l'article 7.3 du RGPD.
+ * Tant qu'il n'a pas dit oui, le SDK PostHog n'est même pas initialisé : aucune
+ * requête ne part, aucun identifiant n'est écrit. Dire non, ou revenir sur un
+ * oui, est aussi simple que d'accepter — c'est ce qu'exige l'article 7.3 du
+ * RGPD.
  */
 
 export type ConsentStatus = 'granted' | 'denied'

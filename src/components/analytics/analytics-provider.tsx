@@ -68,6 +68,8 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
     // clignoter à chaque visite.
     setConsent(readConsent())
     setIsReady(true)
+    // Sans accord déjà donné, cet appel ne fait rien : le SDK n'est pas chargé
+    // et PostHog n'est pas contacté.
     initAnalytics()
 
     // Point de passage unique des changements d'avis, y compris ceux de cet
