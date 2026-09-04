@@ -147,6 +147,36 @@ export function useTripData() {
   )
 
   /**
+   * Enregistre un itinéraire reçu par partage (QR code ou code de partage) et
+   * bascule l'application dessus. Il remplace intégralement les données locales,
+   * démo comprise : l'appel se fait donc derrière une confirmation.
+   */
+  const importSharedItinerary = useCallback(
+    async (days: DayItinerary[]) => {
+      if (days.length === 0) {
+        throw new Error('Le partage ne contient aucune journée.')
+      }
+
+      await saveData({ itinerary: days })
+
+      if (localStorage.getItem(DEMO_KEY) === 'true') {
+        try {
+          // Les documents de démo n'ont plus rien à voir avec le voyage importé
+          await removeDemoDocuments()
+        } catch {
+          // Bonus : ne jamais bloquer l'import sur les documents
+        }
+        localStorage.removeItem(DEMO_KEY)
+      }
+
+      setItinerary(days)
+      setHasData(true)
+      setIsDemo(false)
+    },
+    [saveData],
+  )
+
+  /**
    * Remplace l'itinéraire entier puis le persiste. Sert au retour arrière du
    * mode édition, qui restaure une photo prise avant les modifications.
    * La mise à jour est optimiste : en cas d'échec d'écriture, l'état précédent
@@ -244,6 +274,7 @@ export function useTripData() {
     importData,
     importXlsxData,
     importCsvData,
+    importSharedItinerary,
     updateDay,
     replaceItinerary,
     exportData,

@@ -3,14 +3,19 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { AppIcon } from '@/components/app-icon'
-import { AlertCircle, PlayCircle, Upload } from 'lucide-react'
+import { AlertCircle, KeyRound, PlayCircle, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { ImportFormatGuide } from '@/components/import-format-guide'
+import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog'
+import type { DayItinerary } from '@/lib/itinerary-data'
+
+const PROMPT_SOURCE = { kind: 'prompt' } as const
 
 interface OnboardingScreenProps {
   onImportFile: (file: File) => Promise<void>
   onImportXlsx: (file: File) => Promise<void>
   onImportCsv: (files: File[]) => Promise<void>
+  onImportShared: (itinerary: DayItinerary[]) => Promise<void>
   onUseMockData: () => Promise<void>
 }
 
@@ -18,6 +23,7 @@ export function OnboardingScreen({
   onImportFile,
   onImportXlsx,
   onImportCsv,
+  onImportShared,
   onUseMockData,
 }: OnboardingScreenProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -25,6 +31,7 @@ export function OnboardingScreen({
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadingMock, setLoadingMock] = useState(false)
+  const [shareImportOpen, setShareImportOpen] = useState(false)
 
   // ── Generic async wrapper ─────────────────────────────────────────────────
 
@@ -193,6 +200,30 @@ export function OnboardingScreen({
               <ImportFormatGuide />
             </div>
 
+            {/* Partage reçu depuis un autre appareil */}
+            <div className="bg-primary/5 flex flex-col items-center justify-between gap-3 rounded-xl p-3">
+              <div className="min-w-0">
+                <p className="text-foreground text-sm font-medium">
+                  J’ai un code de partage
+                </p>
+                <p className="text-muted-foreground mt-0.5 text-xs">
+                  Récupérez le voyage préparé sur un autre appareil.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setError(null)
+                  setShareImportOpen(true)
+                }}
+                className="shrink-0"
+              >
+                <KeyRound className="mr-2 h-4 w-4" />
+                Saisir un code
+              </Button>
+            </div>
+
             {/* Demo data */}
             <div className="bg-secondary/10 flex flex-col items-center justify-between gap-3 rounded-xl p-3">
               <div className="min-w-0">
@@ -218,6 +249,13 @@ export function OnboardingScreen({
         </Card>
 
         {/* Hidden file input — accepts all supported formats, multiple for CSV */}
+        <ImportShareDialog
+          open={shareImportOpen}
+          onOpenChange={setShareImportOpen}
+          source={PROMPT_SOURCE}
+          onImport={onImportShared}
+        />
+
         <input
           ref={fileInputRef}
           type="file"
