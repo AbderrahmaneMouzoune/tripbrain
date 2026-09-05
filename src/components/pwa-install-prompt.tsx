@@ -306,62 +306,36 @@ export function PwaInstallPrompt() {
 }
 
 /**
- * Entrée manuelle : toujours disponible pour qui a repoussé la proposition.
- * Ne s'affiche pas si l'app tourne déjà en mode installé.
+ * Entrée manuelle discrète, pour qui a repoussé la proposition ou veut
+ * installer avant même d'avoir un voyage. Disparaît en mode installé.
+ *
+ * Dans « Partager & données », la même action passe par une `ActionRow` : le
+ * dialog a son propre gabarit de lignes.
  */
 export function PwaInstallEntry({
   className,
-  variant = 'card',
   onSelect,
 }: {
   className?: string
-  variant?: 'card' | 'link'
-  /** Permet au conteneur (dialog, menu…) de se refermer avant l'ouverture du tiroir. */
+  /** Permet au conteneur de se refermer avant l'ouverture du tiroir. */
   onSelect?: () => void
 }) {
   const { canInstall, open } = usePwaInstall()
 
   if (!canInstall) return null
 
-  const handleClick = () => {
-    onSelect?.()
-    open('manual')
-  }
-
-  if (variant === 'link') {
-    return (
-      <Button
-        variant="link"
-        size="sm"
-        onClick={handleClick}
-        className={cn('text-muted-foreground', className)}
-      >
-        <IconDeviceMobilePlus className="mr-1.5 h-4 w-4" />
-        Installer l’app sur mon téléphone
-      </Button>
-    )
-  }
-
   return (
     <Button
-      variant="outline"
-      className={cn(
-        'border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3',
-        className,
-      )}
-      onClick={handleClick}
+      variant="link"
+      size="sm"
+      onClick={() => {
+        onSelect?.()
+        open('manual')
+      }}
+      className={cn('text-muted-foreground', className)}
     >
-      <span className="bg-primary/10 text-primary inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
-        <IconDeviceMobilePlus className="h-4 w-4" />
-      </span>
-      <div className="text-left">
-        <p className="text-foreground text-sm font-medium">
-          Installer l’application
-        </p>
-        <p className="text-muted-foreground text-xs">
-          Accès hors ligne depuis l’écran d’accueil
-        </p>
-      </div>
+      <IconDeviceMobilePlus className="mr-1.5 h-4 w-4" />
+      Installer l’app sur mon téléphone
     </Button>
   )
 }

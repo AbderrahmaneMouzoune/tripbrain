@@ -112,6 +112,31 @@ export function setActivityStatus(
   }
 }
 
+/**
+ * Listes de textes libres d'une journée : points forts, plats à goûter,
+ * bagages et conseils. Elles se manipulent toutes de la même façon.
+ */
+export type DayTextList =
+  | 'highlights'
+  | 'foodRecommendations'
+  | 'packingTips'
+  | 'tips'
+
+/**
+ * Retire une entrée d'une de ces listes. Un index hors bornes, ou une liste
+ * absente, laisse le jour inchangé.
+ */
+export function removeDayTextListItem(
+  day: DayItinerary,
+  list: DayTextList,
+  index: number,
+): DayItinerary {
+  const current = day[list]
+  if (!current || index < 0 || index >= current.length) return day
+
+  return { ...day, [list]: current.filter((_, position) => position !== index) }
+}
+
 /** Définit (ou retire, avec `undefined`) le transport du jour. */
 export function setTransport(
   day: DayItinerary,

@@ -2,7 +2,8 @@
 // Les identifiants R2 ne quittent jamais le serveur — le navigateur ne parle
 // qu'à /api/share, il n'y a donc ni CORS à configurer ni signature côté client.
 
-import { createBucket, type Bucket } from 'bucketcode'
+import { createBucket, syncCodeAlphabets, type Bucket } from 'bucketcode'
+import { SHARE_CODE_LENGTH } from '@/lib/share'
 
 /** Nom d'application inscrit dans l'enveloppe du snapshot. */
 export const SHARE_APP = 'tripbrain'
@@ -51,6 +52,14 @@ export function getShareStore(): Bucket {
       },
       // Namespace interne : les snapshots ne côtoient pas d'autres objets.
       prefix: 'shares',
+      // Chiffres uniquement : le code se dicte au téléphone et se saisit au
+      // pavé numérique. Huit chiffres valent 26,6 bits — moins que le base32
+      // par défaut, mais le code expire en une heure et /api/share/[code] est
+      // limité à 30 tentatives par minute.
+      syncCode: {
+        alphabet: syncCodeAlphabets.digits,
+        length: SHARE_CODE_LENGTH,
+      },
       maxSize: SHARE_MAX_PAYLOAD_CHARS,
     })
   }

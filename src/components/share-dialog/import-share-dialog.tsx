@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { REGEXP_ONLY_DIGITS } from 'input-otp'
 import {
   InputOTP,
   InputOTPGroup,
@@ -71,6 +72,18 @@ function toFrenchError(err: unknown): string {
   return err.message
 }
 
+/**
+ * Le pointeur est-il fin (souris, trackpad) ?
+ *
+ * Sur un écran tactile, ouvrir le clavier d'office déplace toute la page à
+ * l'ouverture de la dialog. On ne prend donc la main sur le focus que là où le
+ * clavier est physique.
+ */
+function hasFinePointer(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia('(pointer: fine)').matches
+}
+
 function formatDate(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return iso
@@ -91,6 +104,7 @@ export function ImportShareDialog({
 }: ImportShareDialogProps) {
   const [state, setState] = useState<ImportState>({ status: 'prompt' })
   const [code, setCode] = useState('')
+  const codeInputRef = useRef<HTMLInputElement>(null)
 
   // Le code lui-même n'est jamais mesuré : seule sa provenance l'est.
   const analyticsSource = source.kind
@@ -197,60 +211,89 @@ export function ImportShareDialog({
     state.status === 'preview' || state.status === 'importing'
       ? 'Vérifiez le voyage reçu avant de l’enregistrer.'
       : source.kind === 'prompt'
-        ? 'Saisissez le code affiché sur l’autre appareil.'
+        ? `Saisissez les ${SHARE_CODE_LENGTH} chiffres affichés sur l’autre appareil.`
         : 'Récupération du voyage partagé.'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        {onNavBack && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Retour"
-            onClick={handleNavBack}
-            className="absolute top-4 left-4 h-7 w-7 opacity-70 hover:opacity-100"
-          >
-            <IconArrowLeft className="h-4 w-4" />
-            <span className="sr-only">Retour</span>
-          </Button>
-        )}
-
-        <DialogHeader className={onNavBack ? 'pl-6' : undefined}>
-          <DialogTitle className="flex items-center gap-2">
-            <IconKey className="h-5 w-5" />
-            Importer un partage
-          </DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+      {/* En-tête fixe, corps défilant : la dialog tient sur tous les écrans. */}
+      <DialogContent
+        className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-sm"
+        onOpenAutoFocus={(event) => {
+          // Au clavier physique, on va droit au champ. Ailleurs, on laisse
+          // Radix poser le focus sur le premier bouton : le clavier virtuel ne
+          // s'ouvre pas tout seul, et l'écran ne saute pas à l'ouverture.
+          if (!hasFinePointer() || source.kind !== 'prompt') return
+          event.preventDefault()
+          codeInputRef.current?.focus()
+        }}
+      >
+        <DialogHeader className="px-4 pt-5 pb-3 text-left sm:px-6 sm:pt-6">
+          <div className="flex items-center gap-2 pr-8">
+            {/* Retour — ferme cette dialog et ré-ouvre la précédente */}
+            {onNavBack && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Retour"
+                onClick={handleNavBack}
+                className="-ml-2 shrink-0 opacity-70 hover:opacity-100"
+              >
+                <IconArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
+            <DialogTitle className="flex min-w-0 items-center gap-2">
+              <IconKey className="h-5 w-5 shrink-0" />
+              Importer un partage
+            </DialogTitle>
+          </div>
+          <DialogDescription className="text-pretty">
+            {description}
+          </DialogDescription>
         </DialogHeader>
 
         {/* Conteneur stable — min-h évite le layout shift entre les états */}
-        <div className="flex min-h-[16rem] flex-col justify-between gap-4 py-2">
+        <div className="flex min-h-[16rem] flex-1 flex-col justify-between gap-4 overflow-y-auto overscroll-contain px-4 pb-5 sm:px-6 sm:pb-6">
           {state.status === 'prompt' && (
             <div className="flex flex-1 flex-col items-center justify-center gap-4">
               <InputOTP
-                autoFocus
+                ref={codeInputRef}
                 maxLength={SHARE_CODE_LENGTH}
-                pattern="[0-9A-Za-z]*"
+                // Le code n'est fait que de chiffres : le pavé numérique
+                // qu'affiche le mobile est bien celui qu'il faut.
+                pattern={REGEXP_ONLY_DIGITS}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                // Un code recopié avec son séparateur (« 4820-5137 ») reste collable.
+                pasteTransformer={(pasted) => pasted.replace(/\D/g, '')}
                 value={code}
-                onChange={(value) => setCode(value.toUpperCase())}
+                onChange={setCode}
                 onComplete={(value) => resolveCode(value)}
+                containerClassName="w-full gap-1.5 sm:gap-2"
               >
-                <InputOTPGroup>
+                <InputOTPGroup className="flex-1">
                   {[0, 1, 2, 3].map((i) => (
-                    <InputOTPSlot key={i} index={i} className="font-mono" />
+                    <InputOTPSlot
+                      key={i}
+                      index={i}
+                      className="h-11 w-full flex-1 font-mono text-base"
+                    />
                   ))}
                 </InputOTPGroup>
                 <InputOTPSeparator />
-                <InputOTPGroup>
+                <InputOTPGroup className="flex-1">
                   {[4, 5, 6, 7].map((i) => (
-                    <InputOTPSlot key={i} index={i} className="font-mono" />
+                    <InputOTPSlot
+                      key={i}
+                      index={i}
+                      className="h-11 w-full flex-1 font-mono text-base"
+                    />
                   ))}
                 </InputOTPGroup>
               </InputOTP>
-              <p className="text-muted-foreground text-center text-xs">
-                Le code se trouve dans « Partager & données » sur l’appareil qui
-                possède le voyage.
+              <p className="text-muted-foreground text-center text-xs text-pretty">
+                Le code se trouve dans « Partager &amp; données » sur l’appareil
+                qui possède le voyage.
               </p>
             </div>
           )}
@@ -294,16 +337,20 @@ export function ImportShareDialog({
                   {summary.dayCount} jour{summary.dayCount > 1 ? 's' : ''} de
                   voyage
                 </p>
-                <p className="text-muted-foreground flex items-center gap-2 text-sm">
-                  <IconMapPin className="h-4 w-4 shrink-0" />
-                  {summary.firstCity === summary.lastCity
-                    ? summary.firstCity
-                    : `${summary.firstCity} → ${summary.lastCity}`}
+                <p className="text-muted-foreground flex items-start gap-2 text-sm">
+                  <IconMapPin className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span className="min-w-0 break-words">
+                    {summary.firstCity === summary.lastCity
+                      ? summary.firstCity
+                      : `${summary.firstCity} → ${summary.lastCity}`}
+                  </span>
                 </p>
-                <p className="text-muted-foreground flex items-center gap-2 text-sm">
-                  <IconCalendarEvent className="h-4 w-4 shrink-0" />
-                  Du {formatDate(summary.startDate)} au{' '}
-                  {formatDate(summary.endDate)}
+                <p className="text-muted-foreground flex items-start gap-2 text-sm">
+                  <IconCalendarEvent className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span className="min-w-0 text-pretty">
+                    Du {formatDate(summary.startDate)} au{' '}
+                    {formatDate(summary.endDate)}
+                  </span>
                 </p>
               </div>
 

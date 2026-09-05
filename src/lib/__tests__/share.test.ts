@@ -1,5 +1,6 @@
 import {
   SHARE_INLINE_LIMIT,
+  canShareNatively,
   compressItinerary,
   createShareCode,
   decompressItinerary,
@@ -8,6 +9,7 @@ import {
   formatShareCode,
   getInlineQrUrl,
   getShareCodeUrl,
+  shareNatively,
   summarizeSharedItinerary,
 } from '@/lib/share'
 import type { DayItinerary } from '@/lib/itinerary-data'
@@ -219,17 +221,78 @@ describe('getInlineQrUrl', () => {
 })
 
 describe('getShareCodeUrl', () => {
-  it('retourne une URL contenant /?code= avec le code', () => {
-    expect(getShareCodeUrl('K7QP2M4X')).toContain('/?code=K7QP2M4X')
+  it('retourne l’URL de la page de partage, celle qui porte l’Open Graph', () => {
+    expect(getShareCodeUrl('48205137')).toContain('/s/48205137')
+  })
+})
+
+// ── Partage natif ─────────────────────────────────────────────────────────────
+
+const SHARE_CONTENT = {
+  title: 'Mon voyage sur TripBrain',
+  text: 'Voici mon itinéraire de voyage.',
+  url: 'https://app.tripbrain.fr/s/48205137',
+}
+
+describe('canShareNatively', () => {
+  it('refuse quand le navigateur n’expose pas de partage natif', () => {
+    vi.stubGlobal('navigator', {})
+    expect(canShareNatively()).toBe(false)
+  })
+
+  it('accepte quand navigator.share existe', () => {
+    vi.stubGlobal('navigator', { share: vi.fn() })
+    expect(canShareNatively()).toBe(true)
+  })
+
+  it('suit l’avis de canShare quand un contenu est fourni', () => {
+    vi.stubGlobal('navigator', {
+      share: vi.fn(),
+      canShare: vi.fn().mockReturnValue(false),
+    })
+    expect(canShareNatively(SHARE_CONTENT)).toBe(false)
+  })
+})
+
+describe('shareNatively', () => {
+  it('retourne « shared » quand la feuille de partage a abouti', async () => {
+    const share = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { share })
+
+    await expect(shareNatively(SHARE_CONTENT)).resolves.toBe('shared')
+    expect(share).toHaveBeenCalledWith(SHARE_CONTENT)
+  })
+
+  it('retourne « dismissed » quand la feuille est fermée sans envoyer', async () => {
+    vi.stubGlobal('navigator', {
+      share: vi
+        .fn()
+        .mockRejectedValue(new DOMException('closed', 'AbortError')),
+    })
+
+    await expect(shareNatively(SHARE_CONTENT)).resolves.toBe('dismissed')
+  })
+
+  it('retourne « unavailable » quand le partage échoue', async () => {
+    vi.stubGlobal('navigator', {
+      share: vi.fn().mockRejectedValue(new Error('refusé')),
+    })
+
+    await expect(shareNatively(SHARE_CONTENT)).resolves.toBe('unavailable')
+  })
+
+  it('retourne « unavailable » sans partage natif, sans rien tenter', async () => {
+    vi.stubGlobal('navigator', {})
+    await expect(shareNatively(SHARE_CONTENT)).resolves.toBe('unavailable')
   })
 })
 
 describe('formatShareCode', () => {
-  it('découpe un code de huit caractères en deux groupes', () => {
-    expect(formatShareCode('K7QP2M4X')).toBe('K7QP-2M4X')
+  it('découpe un code de huit chiffres en deux groupes', () => {
+    expect(formatShareCode('48205137')).toBe('4820-5137')
   })
 
-  it('laisse un code de quatre caractères intact', () => {
+  it('laisse un code de quatre chiffres intact', () => {
     expect(formatShareCode('8143')).toBe('8143')
   })
 })
@@ -277,7 +340,7 @@ describe('summarizeSharedItinerary', () => {
 
 describe('createShareCode', () => {
   it('envoie le payload compressé à /api/share', async () => {
-    const fetchMock = stubFetch({ body: { code: 'K7QP2M4X', expiresAt: null } })
+    const fetchMock = stubFetch({ body: { code: '48205137', expiresAt: null } })
 
     const compressed = await compressItinerary([oneDay])
     await createShareCode(compressed)
@@ -291,16 +354,16 @@ describe('createShareCode', () => {
 
   it('retourne le code et son échéance', async () => {
     stubFetch({
-      body: { code: 'K7QP2M4X', expiresAt: '2026-05-10T13:00:00.000Z' },
+      body: { code: '48205137', expiresAt: '2026-05-10T13:00:00.000Z' },
     })
 
     const share = await createShareCode('payload')
-    expect(share.code).toBe('K7QP2M4X')
+    expect(share.code).toBe('48205137')
     expect(share.expiresAt?.toISOString()).toBe('2026-05-10T13:00:00.000Z')
   })
 
   it('accepte une réponse sans échéance', async () => {
-    stubFetch({ body: { code: 'K7QP2M4X', expiresAt: null } })
+    stubFetch({ body: { code: '48205137', expiresAt: null } })
     await expect(createShareCode('payload')).resolves.toMatchObject({
       expiresAt: null,
     })
@@ -339,8 +402,8 @@ describe('fetchSharedItinerary', () => {
       body: { data: await compressItinerary(itinerary) },
     })
 
-    await expect(fetchSharedItinerary('k7qp-2m4x')).resolves.toEqual(itinerary)
-    expect(fetchMock).toHaveBeenCalledWith('/api/share/k7qp-2m4x')
+    await expect(fetchSharedItinerary('4820-5137')).resolves.toEqual(itinerary)
+    expect(fetchMock).toHaveBeenCalledWith('/api/share/4820-5137')
   })
 
   it('refuse un code vide sans appeler le serveur', async () => {
@@ -357,14 +420,14 @@ describe('fetchSharedItinerary', () => {
       status: 404,
       body: { error: 'Code inconnu ou expiré.' },
     })
-    await expect(fetchSharedItinerary('K7QP2M4X')).rejects.toThrow(
+    await expect(fetchSharedItinerary('48205137')).rejects.toThrow(
       'Code inconnu ou expiré.',
     )
   })
 
   it('rejette une réponse sans données', async () => {
     stubFetch({ body: { data: '' } })
-    await expect(fetchSharedItinerary('K7QP2M4X')).rejects.toThrow(
+    await expect(fetchSharedItinerary('48205137')).rejects.toThrow(
       'Le partage ne contient aucune donnée.',
     )
   })

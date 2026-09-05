@@ -259,7 +259,7 @@ export function OnboardingScreen({
 
         {/* Installation sur l'écran d'accueil, discrète tant qu'aucun voyage n'est chargé */}
         <div className="flex justify-center">
-          <PwaInstallEntry variant="link" />
+          <PwaInstallEntry />
         </div>
 
         {/* Hidden file input — accepts all supported formats, multiple for CSV */}

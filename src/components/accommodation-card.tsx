@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { type Accommodation } from '@/lib/itinerary-data'
+import type { QuickAction } from '@/lib/quick-actions'
+import { QuickActionsTarget } from '@/components/quick-actions'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -69,11 +71,14 @@ interface AccommodationCardProps {
   accommodation: Accommodation
   /** Fourni en mode édition : affiche le bouton de modification */
   onEdit?: () => void
+  /** Menu d'appui long ; sans action, le geste reste inerte */
+  actions?: readonly QuickAction[]
 }
 
 export function AccommodationCard({
   accommodation,
   onEdit,
+  actions = [],
 }: AccommodationCardProps) {
   const images = accommodation.images ?? []
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -106,196 +111,207 @@ export function AccommodationCard({
         onClose={() => setLightboxOpen(false)}
       />
 
-      <Card className="border-border/60 bg-card/80 overflow-hidden shadow-none">
-        <div className="flex gap-3 p-3">
-          {images.length > 0 && (
-            <div className="hidden aspect-square w-24 shrink-0 overflow-hidden rounded-xl sm:block">
-              <Carousel opts={{ loop: true }} className="h-full w-full">
-                <CarouselContent className="h-full">
-                  {images.map((src, i) => (
-                    <CarouselItem key={i} className="aspect-square h-full">
-                      <div
-                        className="h-full w-full cursor-zoom-in overflow-hidden"
-                        onClick={() => setLightboxOpen(true)}
-                      >
-                        <CachedImage
-                          src={src}
-                          alt={`${accommodation.name} – photo ${i + 1}`}
-                          className="h-full w-full object-cover"
-                          fallbackClassName="h-full w-full"
-                        />
-                      </div>
-                    </CarouselItem>
-                  ))}
-                </CarouselContent>
-                {images.length > 1 && (
-                  <>
-                    <CarouselPrevious
-                      className="left-1 h-5 w-5"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <CarouselNext
-                      className="right-1 h-5 w-5"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  </>
-                )}
-              </Carousel>
-            </div>
-          )}
+      <QuickActionsTarget
+        asChild
+        entity="accommodation"
+        title={accommodation.name}
+        description="Hébergement de la journée"
+        actions={actions}
+      >
+        <Card className="border-border/60 bg-card/80 overflow-hidden shadow-none">
+          <div className="flex gap-3 p-3">
+            {images.length > 0 && (
+              <div className="hidden aspect-square w-24 shrink-0 overflow-hidden rounded-xl sm:block">
+                <Carousel opts={{ loop: true }} className="h-full w-full">
+                  <CarouselContent className="h-full">
+                    {images.map((src, i) => (
+                      <CarouselItem key={i} className="aspect-square h-full">
+                        <div
+                          className="h-full w-full cursor-zoom-in overflow-hidden"
+                          onClick={() => setLightboxOpen(true)}
+                        >
+                          <CachedImage
+                            src={src}
+                            alt={`${accommodation.name} – photo ${i + 1}`}
+                            className="h-full w-full object-cover"
+                            fallbackClassName="h-full w-full"
+                          />
+                        </div>
+                      </CarouselItem>
+                    ))}
+                  </CarouselContent>
+                  {images.length > 1 && (
+                    <>
+                      <CarouselPrevious
+                        className="left-1 h-5 w-5"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <CarouselNext
+                        className="right-1 h-5 w-5"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </>
+                  )}
+                </Carousel>
+              </div>
+            )}
 
-          <div className="flex min-w-0 flex-1 flex-col gap-2">
-            <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase">
-                  <Hotel
-                    className="text-secondary h-3 w-3"
-                    strokeWidth={1.75}
-                  />
-                  Hébergement
-                </p>
-                {accommodation.status && (
-                  <span
-                    className={cn(
-                      'w-fit rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
-                      getStatusBadgeClass(accommodation.status),
-                    )}
-                  >
-                    {accommodation.status}
-                  </span>
-                )}
-                {onEdit && (
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.14em] uppercase">
+                    <Hotel
+                      className="text-secondary h-3 w-3"
+                      strokeWidth={1.75}
+                    />
+                    Hébergement
+                  </p>
+                  {accommodation.status && (
+                    <span
+                      className={cn(
+                        'w-fit rounded-full border px-1.5 py-0.5 text-[10px] font-medium capitalize',
+                        getStatusBadgeClass(accommodation.status),
+                      )}
+                    >
+                      {accommodation.status}
+                    </span>
+                  )}
+                  {onEdit && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={onEdit}
+                      aria-label="Modifier l'hébergement"
+                      className="ml-auto h-7 w-7 shrink-0 rounded-full"
+                    >
+                      <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    </Button>
+                  )}
+                </div>
+
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-foreground min-w-0 text-sm leading-snug font-semibold">
+                    {accommodation.name}
+                  </p>
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={onEdit}
-                    aria-label="Modifier l'hébergement"
-                    className="ml-auto h-7 w-7 shrink-0 rounded-full"
+                    onClick={() => copyName(accommodation.name)}
+                    title="Copier le nom"
+                    className="h-7 w-7 shrink-0 rounded-full"
                   >
-                    <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    {copiedName ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    )}
                   </Button>
-                )}
+                </div>
               </div>
 
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-foreground min-w-0 text-sm leading-snug font-semibold">
-                  {accommodation.name}
-                </p>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => copyName(accommodation.name)}
-                  title="Copier le nom"
-                  className="h-7 w-7 shrink-0 rounded-full"
-                >
-                  {copiedName ? (
-                    <Check className="h-3.5 w-3.5" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            <div className="bg-muted/35 border-border/50 rounded-xl border px-3 py-2.5">
-              <div className="flex items-start gap-2">
-                <MapPin
-                  className="text-secondary mt-0.5 h-3.5 w-3.5 shrink-0"
-                  strokeWidth={1.5}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-foreground text-sm leading-snug font-medium">
-                    {accommodation.address}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => copyAddress(accommodation.address)}
-                      className="h-7 rounded-full px-2.5 text-[11px]"
-                    >
-                      {copiedAddress ? (
-                        <Check className="h-3 w-3" />
-                      ) : (
-                        <Copy className="h-3 w-3" strokeWidth={1.5} />
-                      )}
-                      Copier l'adresse
-                    </Button>
-                    <Button
-                      asChild
-                      size="sm"
-                      className="h-7 rounded-full px-2.5 text-[11px]"
-                    >
-                      <a
-                        href={directionsUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+              <div className="bg-muted/35 border-border/50 rounded-xl border px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <MapPin
+                    className="text-secondary mt-0.5 h-3.5 w-3.5 shrink-0"
+                    strokeWidth={1.5}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-foreground text-sm leading-snug font-medium">
+                      {accommodation.address}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyAddress(accommodation.address)}
+                        className="h-7 rounded-full px-2.5 text-[11px]"
                       >
-                        <Navigation className="h-3 w-3" strokeWidth={1.5} />
-                        Itinéraire
-                      </a>
-                    </Button>
+                        {copiedAddress ? (
+                          <Check className="h-3 w-3" />
+                        ) : (
+                          <Copy className="h-3 w-3" strokeWidth={1.5} />
+                        )}
+                        Copier l'adresse
+                      </Button>
+                      <Button
+                        asChild
+                        size="sm"
+                        className="h-7 rounded-full px-2.5 text-[11px]"
+                      >
+                        <a
+                          href={directionsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <Navigation className="h-3 w-3" strokeWidth={1.5} />
+                          Itinéraire
+                        </a>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-              <span className="inline-flex items-center gap-1">
-                <CalendarDays className="h-3 w-3 shrink-0" strokeWidth={1.5} />
-                {formatCompactDate(accommodation.checkIn)} →{' '}
-                {formatCompactDate(accommodation.checkOut)}
-              </span>
-
-              {nightCount && (
-                <span>
-                  {nightCount} nuit{nightCount > 1 ? 's' : ''}
-                </span>
-              )}
-
-              {accommodation.price !== undefined && (
+              <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
                 <span className="inline-flex items-center gap-1">
-                  <Banknote className="h-3 w-3 shrink-0" strokeWidth={1.5} />
-                  {formatPrice(accommodation.price, accommodation.currency)}
+                  <CalendarDays
+                    className="h-3 w-3 shrink-0"
+                    strokeWidth={1.5}
+                  />
+                  {formatCompactDate(accommodation.checkIn)} →{' '}
+                  {formatCompactDate(accommodation.checkOut)}
                 </span>
-              )}
 
-              {accommodation.bookingReference && (
-                <span className="inline-flex min-w-0 items-center gap-1">
-                  <BookCheck className="h-3 w-3 shrink-0" strokeWidth={1.5} />
-                  <span className="truncate font-mono">
-                    {accommodation.bookingReference}
+                {nightCount && (
+                  <span>
+                    {nightCount} nuit{nightCount > 1 ? 's' : ''}
                   </span>
-                </span>
-              )}
+                )}
 
-              {accommodation.bookingUrl && (
-                <a
-                  href={accommodation.bookingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:text-primary/80 inline-flex items-center gap-1 font-medium transition-colors hover:underline"
-                >
-                  Réservation
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
+                {accommodation.price !== undefined && (
+                  <span className="inline-flex items-center gap-1">
+                    <Banknote className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                    {formatPrice(accommodation.price, accommodation.currency)}
+                  </span>
+                )}
 
-              {!accommodation.bookingUrl && mapUrl && (
-                <a
-                  href={mapUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:text-primary/80 inline-flex items-center gap-1 font-medium transition-colors hover:underline"
-                >
-                  Voir sur la carte
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              )}
+                {accommodation.bookingReference && (
+                  <span className="inline-flex min-w-0 items-center gap-1">
+                    <BookCheck className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                    <span className="truncate font-mono">
+                      {accommodation.bookingReference}
+                    </span>
+                  </span>
+                )}
+
+                {accommodation.bookingUrl && (
+                  <a
+                    href={accommodation.bookingUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:text-primary/80 inline-flex items-center gap-1 font-medium transition-colors hover:underline"
+                  >
+                    Réservation
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+
+                {!accommodation.bookingUrl && mapUrl && (
+                  <a
+                    href={mapUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:text-primary/80 inline-flex items-center gap-1 font-medium transition-colors hover:underline"
+                  >
+                    Voir sur la carte
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      </QuickActionsTarget>
     </>
   )
 }
