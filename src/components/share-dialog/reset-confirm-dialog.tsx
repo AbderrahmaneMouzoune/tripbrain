@@ -11,7 +11,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
+import { ActionRow } from '@/components/share-dialog/action-row'
 import { IconTrash } from '@tabler/icons-react'
 
 interface ResetConfirmDialogProps {
@@ -22,20 +22,13 @@ export function ResetConfirmDialog({ onConfirm }: ResetConfirmDialogProps) {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button
-          variant="outline"
-          className="h-auto w-full justify-start gap-3 py-3"
-        >
-          <span className="bg-destructive text-destructive-foreground inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
-            <IconTrash className="h-4 w-4" stroke={1.9} />
-          </span>
-          <div className="text-left">
-            <p className="text-sm font-medium">Réinitialiser</p>
-            <p className="text-muted-foreground text-xs">
-              Supprimer toutes les données du voyage
-            </p>
-          </div>
-        </Button>
+        <ActionRow
+          icon={IconTrash}
+          tone="destructive"
+          label="Réinitialiser"
+          description="Supprimer le voyage et les documents de cet appareil"
+          className="hover:border-destructive/40 hover:bg-destructive/5"
+        />
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>

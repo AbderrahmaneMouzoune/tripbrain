@@ -9,23 +9,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Separator } from '@/components/ui/separator'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { downloadICS } from '@/lib/calendar-export'
+import { SHARE_CODE_LENGTH } from '@/lib/share'
 import type { DayItinerary } from '@/lib/itinerary-data'
+import { ActionRow } from '@/components/share-dialog/action-row'
 import { ShareExportDialog } from '@/components/share-dialog/share-export-dialog'
 import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog'
 import { ResetConfirmDialog } from '@/components/share-dialog/reset-confirm-dialog'
 import {
-  IconCalendar,
-  IconDatabaseExport,
+  IconCalendarPlus,
+  IconCalendarWeek,
+  IconDeviceMobile,
   IconDownload,
   IconKey,
   IconQrcode,
   IconShare2,
   IconShieldLock,
 } from '@tabler/icons-react'
-import Link from 'next/link'
 import { useState } from 'react'
 import { trackEvent } from '@/lib/analytics/client'
 
@@ -38,6 +38,15 @@ interface ShareDialogProps {
   onClear: () => Promise<void>
   /** Enregistre un itinéraire reçu via un code de partage. */
   onImportShared: (itinerary: DayItinerary[]) => Promise<void>
+}
+
+/** Intitulé de section : repère visuel, sans peser dans la hiérarchie. */
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="text-muted-foreground px-1 text-[0.6875rem] font-semibold tracking-wider uppercase">
+      {children}
+    </h3>
+  )
 }
 
 export function ShareDialog({
@@ -62,6 +71,10 @@ export function ShareDialog({
     setOpen(next)
   }
 
+  const dayCount = itinerary.length
+  const currentDay =
+    selectedDay !== undefined ? itinerary[selectedDay] : undefined
+
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -73,141 +86,107 @@ export function ShareDialog({
             </Button>
           )}
         </DialogTrigger>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Partager & données</DialogTitle>
+
+        {/* En-tête fixe, contenu défilant : la dialog ne dépasse jamais l'écran. */}
+        <DialogContent className="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+          <DialogHeader className="px-4 pt-5 pb-3 text-left sm:px-6 sm:pt-6">
+            <DialogTitle className="pr-8">Partager &amp; données</DialogTitle>
             <DialogDescription>
-              Exportez votre voyage ou gérez vos données
+              Envoyez votre voyage sur un autre appareil, ajoutez-le à votre
+              agenda ou effacez-le.
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs defaultValue="data" className="mt-2">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="data" className="gap-1.5 text-xs">
-                <IconDatabaseExport className="h-3.5 w-3.5" />
-                Données
-              </TabsTrigger>
-              <TabsTrigger value="calendar" className="gap-1.5 text-xs">
-                <IconCalendar className="h-3.5 w-3.5" />
-                Calendrier
-              </TabsTrigger>
-            </TabsList>
+          <div className="flex flex-col gap-5 overflow-y-auto overscroll-contain px-4 pt-1 pb-5 sm:px-6 sm:pb-6">
+            <p className="text-muted-foreground bg-muted/40 flex items-start gap-2 rounded-lg px-3 py-2 text-xs leading-relaxed">
+              <IconDeviceMobile className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                Votre voyage vit sur cet appareil : le partage est le seul moyen
+                de le retrouver ailleurs.
+              </span>
+            </p>
 
-            {/* ── Données ── */}
-            <TabsContent value="data" className="mt-4 space-y-3">
-              {/* Partage : QR code ou code à recopier */}
-              <Button
-                variant="outline"
-                className="border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3"
+            {/* ── Partage ── */}
+            <section className="flex flex-col gap-2">
+              <SectionTitle>Partage</SectionTitle>
+
+              <ActionRow
+                icon={IconQrcode}
+                tone="primary"
+                label="Partager l’itinéraire"
+                description="Lien à envoyer, QR code à scanner ou code à dicter"
                 onClick={() => {
                   setOpen(false)
                   setExportOpen(true)
                 }}
-              >
-                <span className="bg-primary/10 text-primary inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
-                  <IconQrcode className="h-4 w-4" />
-                </span>
-                <div className="text-left">
-                  <p className="text-foreground text-sm font-medium">
-                    Partager l’itinéraire
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    QR code à scanner ou code à recopier
-                  </p>
-                </div>
-              </Button>
+              />
 
-              {/* Réception d'un partage */}
-              <Button
-                variant="outline"
-                className="border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3"
+              <ActionRow
+                icon={IconKey}
+                tone="secondary"
+                label="Recevoir un partage"
+                description={`Saisir les ${SHARE_CODE_LENGTH} chiffres affichés sur l’autre appareil`}
                 onClick={() => {
                   setOpen(false)
                   setImportOpen(true)
                 }}
-              >
-                <span className="bg-secondary/10 text-secondary inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
-                  <IconKey className="h-4 w-4" />
-                </span>
-                <div className="text-left">
-                  <p className="text-foreground text-sm font-medium">
-                    Importer un partage
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    Saisir un code reçu depuis un autre appareil
-                  </p>
-                </div>
-              </Button>
-
-              <Separator />
-
-              {/* Confidentialité : réglage du consentement et pages légales */}
-              <Button
-                asChild
-                variant="outline"
-                className="border-border bg-muted/40 hover:bg-muted/70 h-auto w-full justify-start gap-3 py-3"
-              >
-                <Link
-                  href="/politique-de-confidentialite"
-                  onClick={() => setOpen(false)}
-                >
-                  <span className="bg-muted text-muted-foreground inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
-                    <IconShieldLock className="h-4 w-4" />
-                  </span>
-                  <div className="text-left">
-                    <p className="text-foreground text-sm font-medium">
-                      Confidentialité
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      Ce qui reste sur l’appareil, et régler la mesure
-                      d’audience
-                    </p>
-                  </div>
-                </Link>
-              </Button>
-
-              <Separator />
-
-              {/* Reset */}
-              <ResetConfirmDialog onConfirm={handleClear} />
-            </TabsContent>
+              />
+            </section>
 
             {/* ── Calendrier ── */}
-            <TabsContent value="calendar" className="mt-4 space-y-4">
-              <div className="flex flex-col gap-3">
-                <p className="text-muted-foreground text-sm">
-                  Exportez votre voyage vers votre application de calendrier
-                  préférée (Apple Calendar, Outlook…)
-                </p>
+            <section className="flex flex-col gap-2">
+              <SectionTitle>Calendrier</SectionTitle>
 
-                <Button
+              <ActionRow
+                icon={IconCalendarWeek}
+                tone="primary"
+                label="Ajouter tout le voyage"
+                description={`Fichier .ics — ${dayCount} jour${dayCount > 1 ? 's' : ''} vers Apple Calendar, Google Agenda ou Outlook`}
+                trailing={
+                  <IconDownload className="text-muted-foreground/60 mt-1 h-4 w-4 shrink-0" />
+                }
+                onClick={() => {
+                  trackEvent('calendar_exported', { scope: 'trip' })
+                  downloadICS(itinerary, 'tripbrain-voyage.ics')
+                }}
+              />
+
+              {currentDay && (
+                <ActionRow
+                  icon={IconCalendarPlus}
+                  tone="neutral"
+                  label={`Ajouter le jour ${currentDay.dayNumber}`}
+                  description={`Fichier .ics — ${currentDay.city} uniquement`}
+                  trailing={
+                    <IconDownload className="text-muted-foreground/60 mt-1 h-4 w-4 shrink-0" />
+                  }
                   onClick={() => {
-                    trackEvent('calendar_exported', { scope: 'trip' })
-                    downloadICS(itinerary, 'tripbrain-voyage.ics')
+                    trackEvent('calendar_exported', { scope: 'day' })
+                    downloadICS(
+                      [currentDay],
+                      `tripbrain-jour-${currentDay.dayNumber}.ics`,
+                    )
                   }}
-                  className="w-full gap-2"
-                >
-                  <IconDownload className="h-4 w-4" />
-                  Télécharger tout le voyage (.ics)
-                </Button>
+                />
+              )}
+            </section>
 
-                {selectedDay !== undefined && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      trackEvent('calendar_exported', { scope: 'day' })
-                      const day = itinerary[selectedDay]
-                      downloadICS([day], `tripbrain-jour-${day.dayNumber}.ics`)
-                    }}
-                    className="w-full gap-2"
-                  >
-                    <IconDownload className="h-4 w-4" />
-                    Télécharger ce jour (.ics)
-                  </Button>
-                )}
-              </div>
-            </TabsContent>
-          </Tabs>
+            {/* ── Vos données ── */}
+            <section className="flex flex-col gap-2">
+              <SectionTitle>Vos données</SectionTitle>
+
+              <ActionRow
+                icon={IconShieldLock}
+                tone="neutral"
+                label="Confidentialité"
+                description="Ce qui reste sur l’appareil, et réglage de la mesure d’audience"
+                href="/politique-de-confidentialite"
+                onClick={() => setOpen(false)}
+              />
+
+              <ResetConfirmDialog onConfirm={handleClear} />
+            </section>
+          </div>
         </DialogContent>
       </Dialog>
 
