@@ -1,5 +1,5 @@
 ---
-applyTo: '**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx,src/lib/__tests__/**'
+applyTo: '**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx,apps/web/src/lib/__tests__/**'
 description: 'Testing standards for TripBrain using Vitest'
 ---
 
