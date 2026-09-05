@@ -5,6 +5,8 @@ import type { DayItinerary } from '@/lib/itinerary-data'
 import { itinerary as mockItinerary } from '@/lib/itinerary-data'
 import { removeDemoDocuments, seedDemoDocuments } from '@/lib/demo-documents'
 import { replaceDay } from '@/lib/itinerary-edit'
+import { trackEvent } from '@/lib/analytics/client'
+import { importFailureReason, itineraryVolume } from '@/lib/analytics/metrics'
 
 const DB_NAME = 'tripbrain'
 const DB_VERSION = 1
@@ -108,40 +110,81 @@ export function useTripData() {
     setItinerary(mockItinerary)
     setHasData(true)
     setIsDemo(true)
+    trackEvent('trip_imported', {
+      source: 'demo',
+      ...itineraryVolume(mockItinerary),
+    })
   }, [saveData])
 
   const importData = useCallback(
     async (file: File) => {
-      const text = await file.text()
-      const parsed = JSON.parse(text) as TripData
-      if (!parsed.itinerary || !Array.isArray(parsed.itinerary)) {
-        throw new Error('Format invalide : tableau itinerary manquant')
+      try {
+        const text = await file.text()
+        const parsed = JSON.parse(text) as TripData
+        if (!parsed.itinerary || !Array.isArray(parsed.itinerary)) {
+          throw new Error('Format invalide : tableau itinerary manquant')
+        }
+        await saveData({ itinerary: parsed.itinerary })
+        setItinerary(parsed.itinerary)
+        setHasData(true)
+        trackEvent('trip_imported', {
+          source: 'json',
+          ...itineraryVolume(parsed.itinerary),
+        })
+      } catch (error) {
+        // Seule la nature de l'échec est remontée : ni le fichier, ni son nom.
+        trackEvent('trip_import_failed', {
+          source: 'json',
+          reason: importFailureReason(error),
+        })
+        throw error
       }
-      await saveData({ itinerary: parsed.itinerary })
-      setItinerary(parsed.itinerary)
-      setHasData(true)
     },
     [saveData],
   )
 
   const importXlsxData = useCallback(
     async (file: File) => {
-      const { importFromXlsx } = await import('@/lib/importItinerary')
-      const result = await importFromXlsx(file)
-      await saveData({ itinerary: result.itinerary })
-      setItinerary(result.itinerary)
-      setHasData(true)
+      try {
+        const { importFromXlsx } = await import('@/lib/importItinerary')
+        const result = await importFromXlsx(file)
+        await saveData({ itinerary: result.itinerary })
+        setItinerary(result.itinerary)
+        setHasData(true)
+        trackEvent('trip_imported', {
+          source: 'xlsx',
+          ...itineraryVolume(result.itinerary),
+        })
+      } catch (error) {
+        trackEvent('trip_import_failed', {
+          source: 'xlsx',
+          reason: importFailureReason(error),
+        })
+        throw error
+      }
     },
     [saveData],
   )
 
   const importCsvData = useCallback(
     async (files: File[]) => {
-      const { importFromCsv } = await import('@/lib/importItinerary')
-      const result = await importFromCsv(files)
-      await saveData({ itinerary: result.itinerary })
-      setItinerary(result.itinerary)
-      setHasData(true)
+      try {
+        const { importFromCsv } = await import('@/lib/importItinerary')
+        const result = await importFromCsv(files)
+        await saveData({ itinerary: result.itinerary })
+        setItinerary(result.itinerary)
+        setHasData(true)
+        trackEvent('trip_imported', {
+          source: 'csv',
+          ...itineraryVolume(result.itinerary),
+        })
+      } catch (error) {
+        trackEvent('trip_import_failed', {
+          source: 'csv',
+          reason: importFailureReason(error),
+        })
+        throw error
+      }
     },
     [saveData],
   )

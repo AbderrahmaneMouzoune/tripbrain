@@ -4,10 +4,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { AppIcon } from '@/components/app-icon'
 import { AlertCircle, KeyRound, PlayCircle, Upload } from 'lucide-react'
-import { useRef, useState } from 'react'
+import Link from 'next/link'
+import { useEffect, useRef, useState } from 'react'
 import { ImportFormatGuide } from '@/components/import-format-guide'
 import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog'
 import type { DayItinerary } from '@/lib/itinerary-data'
+import { trackEvent } from '@/lib/analytics/client'
 
 const PROMPT_SOURCE = { kind: 'prompt' } as const
 
@@ -32,6 +34,12 @@ export function OnboardingScreen({
   const [loading, setLoading] = useState(false)
   const [loadingMock, setLoadingMock] = useState(false)
   const [shareImportOpen, setShareImportOpen] = useState(false)
+
+  // Première chose vue quand aucun voyage n'est enregistré : savoir combien de
+  // visites s'arrêtent là dit si l'import est assez clair.
+  useEffect(() => {
+    trackEvent('onboarding_viewed')
+  }, [])
 
   // ── Generic async wrapper ─────────────────────────────────────────────────
 
@@ -264,6 +272,34 @@ export function OnboardingScreen({
           className="sr-only"
           onChange={handleFileChange}
         />
+
+        {/*
+          Les pages légales sont accessibles dès le premier écran : c'est le
+          seul moment où l'application n'a encore rien à montrer d'autre.
+        */}
+        <nav
+          aria-label="Informations légales"
+          className="text-muted-foreground flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs"
+        >
+          <Link
+            href="/mentions-legales"
+            className="hover:text-foreground underline-offset-4 hover:underline"
+          >
+            Mentions légales
+          </Link>
+          <Link
+            href="/politique-de-confidentialite"
+            className="hover:text-foreground underline-offset-4 hover:underline"
+          >
+            Confidentialité
+          </Link>
+          <Link
+            href="/guide"
+            className="hover:text-foreground underline-offset-4 hover:underline"
+          >
+            Guide d’import
+          </Link>
+        </nav>
       </div>
     </div>
   )

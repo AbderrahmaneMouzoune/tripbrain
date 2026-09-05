@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import { Nunito, Paytone_One, Geist_Mono } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
 import { PWARegister } from '@/components/pwa-register'
+import { AnalyticsProvider } from '@/components/analytics/analytics-provider'
+import { ConsentedVercelAnalytics } from '@/components/analytics/vercel-analytics'
 import './globals.css'
 
 const nunito = Nunito({
@@ -65,9 +66,11 @@ export default function RootLayout({
       <body
         className={`${nunito.variable} ${paytoneOne.variable} font-sans antialiased`}
       >
-        <PWARegister />
-        {children}
-        <Analytics />
+        <AnalyticsProvider>
+          <PWARegister />
+          {children}
+          <ConsentedVercelAnalytics />
+        </AnalyticsProvider>
       </body>
     </html>
   )

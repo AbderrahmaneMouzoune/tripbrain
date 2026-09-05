@@ -31,6 +31,8 @@ import {
   fetchSharedItinerary,
   summarizeSharedItinerary,
 } from '@/lib/share'
+import { trackEvent } from '@/lib/analytics/client'
+import { shareImportFailureReason } from '@/lib/analytics/metrics'
 
 /** D'où vient le partage à importer. */
 export type ImportShareSource =
@@ -90,17 +92,28 @@ export function ImportShareDialog({
   const [state, setState] = useState<ImportState>({ status: 'prompt' })
   const [code, setCode] = useState('')
 
-  const resolveCode = useCallback(async (value: string) => {
-    setState({ status: 'resolving' })
-    try {
-      setState({
-        status: 'preview',
-        itinerary: await fetchSharedItinerary(value),
-      })
-    } catch (err) {
-      setState({ status: 'error', message: toFrenchError(err) })
-    }
-  }, [])
+  // Le code lui-même n'est jamais mesuré : seule sa provenance l'est.
+  const analyticsSource = source.kind
+
+  const resolveCode = useCallback(
+    async (value: string) => {
+      setState({ status: 'resolving' })
+      trackEvent('share_import_started', { source: analyticsSource })
+      try {
+        setState({
+          status: 'preview',
+          itinerary: await fetchSharedItinerary(value),
+        })
+      } catch (err) {
+        setState({ status: 'error', message: toFrenchError(err) })
+        trackEvent('share_import_failed', {
+          source: analyticsSource,
+          reason: shareImportFailureReason(err),
+        })
+      }
+    },
+    [analyticsSource],
+  )
 
   // À l'ouverture : un payload d'URL se lit sur place, un code demande un
   // aller-retour serveur, et une saisie manuelle attend l'utilisateur.
@@ -110,6 +123,7 @@ export function ImportShareDialog({
     setCode('')
 
     if (source.kind === 'payload') {
+      trackEvent('share_import_started', { source: 'payload' })
       try {
         setState({
           status: 'preview',
@@ -117,6 +131,10 @@ export function ImportShareDialog({
         })
       } catch (err) {
         setState({ status: 'error', message: toFrenchError(err) })
+        trackEvent('share_import_failed', {
+          source: 'payload',
+          reason: shareImportFailureReason(err),
+        })
       }
       return
     }
@@ -137,11 +155,19 @@ export function ImportShareDialog({
     setState({ status: 'importing', itinerary })
     try {
       await onImport(itinerary)
+      trackEvent('share_import_completed', {
+        source: analyticsSource,
+        days_count: itinerary.length,
+      })
       onOpenChange(false)
     } catch (err) {
       setState({ status: 'error', message: toFrenchError(err) })
+      trackEvent('share_import_failed', {
+        source: analyticsSource,
+        reason: shareImportFailureReason(err),
+      })
     }
-  }, [state, onImport, onOpenChange])
+  }, [state, onImport, onOpenChange, analyticsSource])
 
   const handleRetry = useCallback(() => {
     // Une saisie manuelle repart du champ ; un lien n'a rien à ressaisir.
