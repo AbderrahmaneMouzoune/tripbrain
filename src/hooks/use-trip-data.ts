@@ -38,6 +38,13 @@ export function useTripData() {
   const [isLoading, setIsLoading] = useState(true)
   const [hasData, setHasData] = useState(false)
   const [itinerary, setItinerary] = useState<DayItinerary[]>([])
+  /**
+   * Compte les voyages chargés, pas les modifications : il n'avance qu'à
+   * l'ouverture et aux imports, jamais quand une journée est retouchée. C'est
+   * ce qui permet à l'interface de se placer sur la bonne journée sans y
+   * revenir à chaque case cochée.
+   */
+  const [tripRevision, setTripRevision] = useState(0)
 
   const tripStartDate = useMemo(
     () => (itinerary.length > 0 ? new Date(itinerary[0].date) : new Date()),
@@ -67,6 +74,7 @@ export function useTripData() {
           if (data && data.itinerary?.length > 0) {
             setItinerary(data.itinerary)
             setHasData(true)
+            setTripRevision((revision) => revision + 1)
           }
           setIsLoading(false)
           resolve()
@@ -110,6 +118,7 @@ export function useTripData() {
     setItinerary(mockItinerary)
     setHasData(true)
     setIsDemo(true)
+    setTripRevision((revision) => revision + 1)
     trackEvent('trip_imported', {
       source: 'demo',
       ...itineraryVolume(mockItinerary),
@@ -127,6 +136,7 @@ export function useTripData() {
         await saveData({ itinerary: parsed.itinerary })
         setItinerary(parsed.itinerary)
         setHasData(true)
+        setTripRevision((revision) => revision + 1)
         trackEvent('trip_imported', {
           source: 'json',
           ...itineraryVolume(parsed.itinerary),
@@ -151,6 +161,7 @@ export function useTripData() {
         await saveData({ itinerary: result.itinerary })
         setItinerary(result.itinerary)
         setHasData(true)
+        setTripRevision((revision) => revision + 1)
         trackEvent('trip_imported', {
           source: 'xlsx',
           ...itineraryVolume(result.itinerary),
@@ -174,6 +185,7 @@ export function useTripData() {
         await saveData({ itinerary: result.itinerary })
         setItinerary(result.itinerary)
         setHasData(true)
+        setTripRevision((revision) => revision + 1)
         trackEvent('trip_imported', {
           source: 'csv',
           ...itineraryVolume(result.itinerary),
@@ -215,6 +227,7 @@ export function useTripData() {
       setItinerary(days)
       setHasData(true)
       setIsDemo(false)
+      setTripRevision((revision) => revision + 1)
     },
     [saveData],
   )
@@ -311,6 +324,7 @@ export function useTripData() {
     hasData,
     isDemo,
     itinerary,
+    tripRevision,
     tripStartDate,
     tripEndDate,
     loadMockData,

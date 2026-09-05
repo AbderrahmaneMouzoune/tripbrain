@@ -13,7 +13,12 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { SharedTripHandoff } from './shared-trip-handoff'
 
-/** Ce qu'un code de partage peut contenir, séparateurs de lecture compris. */
+/**
+ * Forme admise dans l'URL : chiffres et séparateurs de lecture.
+ *
+ * Volontairement tolérant — ce filtre n'est là que pour écarter les adresses
+ * fantaisistes ; c'est `/api/share/[code]` qui valide vraiment le code.
+ */
 const CODE_PATTERN = /^[A-Za-z0-9-]{4,24}$/
 
 const TITLE = 'Un voyage vous a été partagé'

@@ -86,6 +86,7 @@ function HomePageContent() {
     hasData,
     isDemo,
     itinerary,
+    tripRevision,
     tripStartDate,
     tripEndDate,
     loadMockData,
@@ -221,11 +222,18 @@ function HomePageContent() {
     window.history.replaceState(null, '', window.location.pathname)
   }, [isLoading, searchParams])
 
+  // Placement automatique sur la journée du jour : à l'ouverture et à chaque
+  // voyage chargé, jamais après une modification. Sans ce garde-fou, cocher une
+  // activité renvoyait à la journée en cours, loin de ce qu'on était en train
+  // de retoucher — `getCurrentDayIndex` change d'identité à chaque écriture.
+  const positionedRevision = useRef<number | null>(null)
+
   useEffect(() => {
-    if (hasData) {
-      setSelectedDay(getCurrentDayIndex())
-    }
-  }, [hasData, getCurrentDayIndex])
+    if (!hasData || positionedRevision.current === tripRevision) return
+
+    positionedRevision.current = tripRevision
+    setSelectedDay(getCurrentDayIndex())
+  }, [hasData, tripRevision, getCurrentDayIndex])
 
   // Une seule fois par visite, une fois l'état local connu : savoir si l'app est
   // installée et si elle s'ouvre sur un voyage dit à quoi ressemble l'entrée.

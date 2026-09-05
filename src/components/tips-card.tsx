@@ -1,13 +1,18 @@
 'use client'
 
+import type { QuickAction } from '@/lib/quick-actions'
+import { dayListItemLabel } from '@/lib/quick-actions'
+import { QuickActionsTarget } from '@/components/quick-actions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Lightbulb } from 'lucide-react'
 
 interface TipsCardProps {
   tips: string[]
+  /** Menu d'appui long d'un conseil ; sans lui, le geste reste inerte */
+  itemActions?: (tip: string, index: number) => readonly QuickAction[]
 }
 
-export function TipsCard({ tips }: TipsCardProps) {
+export function TipsCard({ tips, itemActions }: TipsCardProps) {
   if (tips.length === 0) return null
 
   return (
@@ -24,10 +29,19 @@ export function TipsCard({ tips }: TipsCardProps) {
       <CardContent className="px-4 pt-0 pb-4">
         <ul className="flex flex-col gap-2">
           {tips.map((tip, i) => (
-            <li key={i} className="flex items-start gap-2 text-sm">
-              <span className="text-secondary mt-0.5 shrink-0">→</span>
-              <span className="text-foreground leading-snug">{tip}</span>
-            </li>
+            <QuickActionsTarget
+              key={i}
+              asChild
+              entity="day"
+              title={tip}
+              description={dayListItemLabel('tips')}
+              actions={itemActions?.(tip, i) ?? []}
+            >
+              <li className="flex items-start gap-2 text-sm">
+                <span className="text-secondary mt-0.5 shrink-0">→</span>
+                <span className="text-foreground leading-snug">{tip}</span>
+              </li>
+            </QuickActionsTarget>
           ))}
         </ul>
       </CardContent>

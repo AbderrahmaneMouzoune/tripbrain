@@ -10,6 +10,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { downloadICS } from '@/lib/calendar-export'
+import { SHARE_CODE_LENGTH } from '@/lib/share'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { ActionRow } from '@/components/share-dialog/action-row'
 import { ShareExportDialog } from '@/components/share-dialog/share-export-dialog'
@@ -113,7 +114,7 @@ export function ShareDialog({
                 icon={IconQrcode}
                 tone="primary"
                 label="Partager l’itinéraire"
-                description="Lien à envoyer, QR code à scanner ou code à recopier"
+                description="Lien à envoyer, QR code à scanner ou code à dicter"
                 onClick={() => {
                   setOpen(false)
                   setExportOpen(true)
@@ -124,7 +125,7 @@ export function ShareDialog({
                 icon={IconKey}
                 tone="secondary"
                 label="Recevoir un partage"
-                description="Saisir le code affiché sur l’autre appareil"
+                description={`Saisir les ${SHARE_CODE_LENGTH} chiffres affichés sur l’autre appareil`}
                 onClick={() => {
                   setOpen(false)
                   setImportOpen(true)

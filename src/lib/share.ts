@@ -13,11 +13,14 @@ import type { DayItinerary } from '@/lib/itinerary-data'
 /** Au-delà, un QR code inline devient trop dense pour être scanné confortablement. */
 export const SHARE_INLINE_LIMIT = 2000
 
-/** Longueur d'un code de partage — celle que le serveur produit (bucketcode). */
+/**
+ * Longueur d'un code de partage — celle que le serveur produit (bucketcode).
+ * Le code n'est fait que de chiffres : voir `syncCode` dans `share-store.ts`.
+ */
 export const SHARE_CODE_LENGTH = 8
 
 export interface ShareCode {
-  /** Code canonique, en majuscules et sans séparateur : `K7QP2M4X`. */
+  /** Code canonique, chiffres seuls et sans séparateur : `48205137`. */
   code: string
   /** Fin de validité annoncée par le serveur, si elle est connue. */
   expiresAt: Date | null
