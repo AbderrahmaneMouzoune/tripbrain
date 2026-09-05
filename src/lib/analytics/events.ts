@@ -147,6 +147,11 @@ export const analyticsEvents = {
       reason: choice('too_large', 'network_error', 'unavailable', 'unknown'),
     },
   },
+  share_link_sent: {
+    description:
+      'Ouverture de la feuille de partage du système pour envoyer le lien du voyage, et ce qu’elle a donné.',
+    properties: { outcome: choice('shared', 'dismissed', 'unavailable') },
+  },
   share_import_started: {
     description: "Tentative de récupération d'un partage reçu.",
     properties: { source: choice('code', 'prompt', 'payload') },

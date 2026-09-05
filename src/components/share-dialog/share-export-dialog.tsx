@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -18,24 +19,26 @@ import {
   IconCloudUpload,
   IconCopy,
   IconDownload,
-  IconKey,
   IconLink,
   IconPackage,
   IconQrcode,
   IconRefresh,
   IconSearch,
   IconServer,
+  IconShare2,
   IconWifiOff,
 } from '@tabler/icons-react'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import {
   SHARE_INLINE_LIMIT,
+  canShareNatively,
   compressItinerary,
   createShareCode,
   formatExpiresIn,
   formatShareCode,
   getInlineQrUrl,
   getShareCodeUrl,
+  shareNatively,
   type ShareCode,
 } from '@/lib/share'
 import { useClipboard } from '@/hooks/use-clipboard'
@@ -54,8 +57,13 @@ const LOADING_STEPS = [
 const UPLOADING_STEPS = [
   { label: 'Connexion au serveur…', Icon: IconServer },
   { label: 'Envoi des données…', Icon: IconCloudUpload },
-  { label: 'Génération du code…', Icon: IconKey },
+  { label: 'Génération du lien…', Icon: IconLink },
 ]
+
+/** Ce que la feuille de partage du système annonce — jamais le voyage lui-même. */
+const NATIVE_SHARE_TITLE = 'Mon voyage sur TripBrain'
+const NATIVE_SHARE_TEXT =
+  'Voici mon itinéraire de voyage : ouvre ce lien pour le retrouver dans TripBrain.'
 
 /** Convertit une erreur inconnue en message explicite en français. */
 function toFrenchError(err: unknown, context: 'share' | 'compress'): string {
@@ -72,6 +80,11 @@ function toFrenchError(err: unknown, context: 'share' | 'compress'): string {
   // Les routes /api/share répondent déjà en français : leur message passe tel quel.
   if (context === 'share') return err.message
   return `Erreur de compression : ${err.message}`
+}
+
+/** Version lisible d'une URL : sans protocole, c'est le domaine qui rassure. */
+function toDisplayUrl(url: string): string {
+  return url.replace(/^https?:\/\//, '')
 }
 
 interface ShareExportDialogProps {
@@ -99,12 +112,18 @@ export function ShareExportDialog({
   const [shareError, setShareError] = useState<string | null>(null)
   const [revision, setRevision] = useState(0)
   const [stepIndex, setStepIndex] = useState(0)
-  const [tab, setTab] = useState<'qr' | 'code'>('qr')
+  const [tab, setTab] = useState<'qr' | 'link'>('qr')
+  // Décidé après le montage : `navigator.share` n'existe pas au rendu serveur.
+  const [hasNativeShare, setHasNativeShare] = useState(false)
 
   const codeClipboard = useClipboard()
   const linkClipboard = useClipboard()
 
   const isBusy = state.status === 'compressing' || isSharing
+
+  useEffect(() => {
+    setHasNativeShare(canShareNatively())
+  }, [])
 
   // Anime les étapes de chargement / envoi — progression linéaire sans boucle :
   // étape 1 visible dès le départ, étape 2 à 250 ms, étape 3 à 450 ms.
@@ -186,6 +205,30 @@ export function ShareExportDialog({
     document.body.removeChild(a)
   }, [])
 
+  /**
+   * Ouvre la feuille de partage du système avec le lien du voyage.
+   *
+   * Appelée directement depuis le clic — les navigateurs refusent un partage
+   * natif qui n'est pas déclenché par un geste. Si la feuille n'aboutit pas,
+   * le lien part au moins dans le presse-papier.
+   */
+  const handleNativeShare = useCallback(async () => {
+    if (!share) return
+    const url = getShareCodeUrl(share.code)
+
+    const outcome = await shareNatively({
+      title: NATIVE_SHARE_TITLE,
+      text: NATIVE_SHARE_TEXT,
+      url,
+    })
+
+    trackEvent('share_link_sent', { outcome })
+    if (outcome === 'unavailable') {
+      setHasNativeShare(false)
+      linkClipboard.copy(url)
+    }
+  }, [share, linkClipboard])
+
   const handleNavBack = useCallback(() => {
     onOpenChange(false)
     onNavBack?.()
@@ -198,14 +241,14 @@ export function ShareExportDialog({
   const canInline =
     state.status === 'ready' && state.compressed.length <= SHARE_INLINE_LIMIT
 
+  const shareUrl = share ? getShareCodeUrl(share.code) : null
+
   const qrValue =
     state.status !== 'ready'
       ? null
       : canInline
         ? getInlineQrUrl(state.compressed)
-        : share
-          ? getShareCodeUrl(share.code)
-          : null
+        : shareUrl
 
   const sizeKb =
     state.status === 'ready'
@@ -214,18 +257,28 @@ export function ShareExportDialog({
 
   const expiresIn = formatExpiresIn(share?.expiresAt ?? null)
 
-  /** Explication + bouton communs aux deux onglets quand le serveur est requis. */
+  const description = isBusy
+    ? 'Préparation du partage…'
+    : state.status === 'error'
+      ? 'Le partage n’a pas pu être préparé.'
+      : canInline && tab === 'qr'
+        ? 'Tout le voyage tient dans ce QR code, sans passer par le réseau.'
+        : share
+          ? 'Votre voyage est prêt à être envoyé.'
+          : 'Choisissez comment envoyer votre voyage sur l’autre appareil.'
+
+  /** Explication + erreur communes aux deux onglets quand le serveur est requis. */
   const remoteCta = (
     <div className="flex flex-col items-center gap-4 text-center">
       <div className="bg-primary/10 rounded-full p-4">
         <IconCloudUpload className="text-primary h-8 w-8" />
       </div>
-      <p className="text-muted-foreground text-sm leading-relaxed">
+      <p className="text-muted-foreground text-sm leading-relaxed text-pretty">
         {tab === 'qr' && canInline === false && sizeKb
           ? `Cet itinéraire (${sizeKb} Ko) est trop volumineux pour tenir dans un QR code. `
           : ''}
         Vos données seront déposées sur un serveur, accessibles uniquement avec
-        le code généré, puis{' '}
+        le lien généré, puis{' '}
         <strong className="text-foreground">
           supprimées après 1&nbsp;heure
         </strong>
@@ -237,32 +290,74 @@ export function ShareExportDialog({
     </div>
   )
 
+  /** Feuille de partage du système — proposée dans les deux onglets. */
+  const nativeShareButton = shareUrl && hasNativeShare && (
+    <Button onClick={handleNativeShare} className="w-full gap-2">
+      <IconShare2 className="h-4 w-4" />
+      Partager le lien
+    </Button>
+  )
+
+  /** Repli universel : copier, pour coller où l'on veut. */
+  const copyActions = shareUrl && (
+    <div className="flex w-full gap-2">
+      <Button
+        variant={hasNativeShare ? 'outline' : 'default'}
+        onClick={() => linkClipboard.copy(shareUrl)}
+        className="flex-1 gap-2 text-xs sm:text-sm"
+      >
+        {linkClipboard.copied ? (
+          <IconCheck className="h-4 w-4" />
+        ) : (
+          <IconLink className="h-4 w-4" />
+        )}
+        {linkClipboard.copied ? 'Lien copié' : 'Copier le lien'}
+      </Button>
+      <Button
+        variant="outline"
+        onClick={() => codeClipboard.copy(share?.code ?? '')}
+        className="flex-1 gap-2 text-xs sm:text-sm"
+      >
+        {codeClipboard.copied ? (
+          <IconCheck className="h-4 w-4" />
+        ) : (
+          <IconCopy className="h-4 w-4" />
+        )}
+        {codeClipboard.copied ? 'Code copié' : 'Copier le code'}
+      </Button>
+    </div>
+  )
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        {/* Bouton retour — ferme cette dialog et ré-ouvre la précédente */}
-        {onNavBack && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Retour"
-            onClick={handleNavBack}
-            className="absolute top-4 left-4 h-7 w-7 opacity-70 hover:opacity-100"
-          >
-            <IconArrowLeft className="h-4 w-4" />
-            <span className="sr-only">Retour</span>
-          </Button>
-        )}
-
-        <DialogHeader className={onNavBack ? 'pl-6' : undefined}>
-          <DialogTitle className="flex items-center gap-2">
-            <IconQrcode className="h-5 w-5" />
-            Partager l’itinéraire
-          </DialogTitle>
+      {/* En-tête fixe, corps défilant : la dialog tient sur tous les écrans. */}
+      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-sm">
+        <DialogHeader className="px-4 pt-5 pb-3 text-left sm:px-6 sm:pt-6">
+          <div className="flex items-center gap-2 pr-8">
+            {/* Retour — ferme cette dialog et ré-ouvre la précédente */}
+            {onNavBack && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Retour"
+                onClick={handleNavBack}
+                className="-ml-2 shrink-0 opacity-70 hover:opacity-100"
+              >
+                <IconArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
+            <DialogTitle className="flex min-w-0 items-center gap-2">
+              <IconQrcode className="h-5 w-5 shrink-0" />
+              Partager l’itinéraire
+            </DialogTitle>
+          </div>
+          <DialogDescription className="text-pretty">
+            {description}
+          </DialogDescription>
         </DialogHeader>
 
         {/* Conteneur stable — min-h évite le layout shift entre les états */}
-        <div className="flex min-h-[24rem] flex-col py-2">
+        <div className="flex min-h-[20rem] flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-5 sm:min-h-[22rem] sm:px-6 sm:pb-6">
           {isBusy && (
             <div className="flex flex-1 flex-col items-center justify-center gap-4">
               <div className="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
@@ -309,17 +404,17 @@ export function ShareExportDialog({
           {!isBusy && state.status === 'ready' && (
             <Tabs
               value={tab}
-              onValueChange={(value) => setTab(value as 'qr' | 'code')}
+              onValueChange={(value) => setTab(value as 'qr' | 'link')}
               className="flex flex-1 flex-col"
             >
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="qr" className="gap-1.5 text-xs">
                   <IconQrcode className="h-3.5 w-3.5" />
-                  QR Code
+                  QR code
                 </TabsTrigger>
-                <TabsTrigger value="code" className="gap-1.5 text-xs">
-                  <IconKey className="h-3.5 w-3.5" />
-                  Code
+                <TabsTrigger value="link" className="gap-1.5 text-xs">
+                  <IconLink className="h-3.5 w-3.5" />
+                  Lien &amp; code
                 </TabsTrigger>
               </TabsList>
 
@@ -338,18 +433,21 @@ export function ShareExportDialog({
                           size={200}
                           level="M"
                           marginSize={1}
+                          className="h-auto w-full max-w-[200px]"
                         />
                       </div>
                       {canInline ? (
-                        <p className="text-muted-foreground flex items-center gap-1.5 text-center text-xs">
-                          <IconWifiOff className="h-3.5 w-3.5 shrink-0" />
-                          Tout l’itinéraire tient dans ce code : il fonctionne
-                          sans connexion et n’expire pas.
+                        <p className="text-muted-foreground flex items-start gap-1.5 text-center text-xs text-pretty">
+                          <IconWifiOff className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          <span>
+                            Tout l’itinéraire tient dans ce code : il fonctionne
+                            sans connexion et n’expire pas.
+                          </span>
                         </p>
                       ) : (
-                        <p className="text-muted-foreground text-center text-xs">
+                        <p className="text-muted-foreground text-center text-xs text-pretty">
                           Scannez ce code, ou saisissez{' '}
-                          <span className="text-foreground font-mono font-medium">
+                          <span className="text-foreground font-mono font-medium whitespace-nowrap">
                             {formatShareCode(share?.code ?? '')}
                           </span>{' '}
                           sur l’autre appareil.
@@ -357,48 +455,58 @@ export function ShareExportDialog({
                       )}
                     </div>
 
-                    <div className="flex w-full gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => setRevision((r) => r + 1)}
-                        className="flex-1 gap-2"
-                      >
-                        <IconRefresh className="h-4 w-4" />
-                        Régénérer
-                      </Button>
-                      <Button onClick={handleDownload} className="flex-1 gap-2">
-                        <IconDownload className="h-4 w-4" />
-                        Télécharger
-                      </Button>
+                    <div className="flex w-full flex-col gap-2">
+                      {nativeShareButton}
+                      <div className="flex w-full gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setRevision((r) => r + 1)}
+                          className="flex-1 gap-2 text-xs sm:text-sm"
+                        >
+                          <IconRefresh className="h-4 w-4" />
+                          Régénérer
+                        </Button>
+                        <Button
+                          variant={nativeShareButton ? 'outline' : 'default'}
+                          onClick={handleDownload}
+                          className="flex-1 gap-2 text-xs sm:text-sm"
+                        >
+                          <IconDownload className="h-4 w-4" />
+                          Télécharger
+                        </Button>
+                      </div>
                     </div>
                   </>
                 ) : (
                   <>
-                    <div className="flex flex-1 items-center justify-center">
+                    <div className="flex flex-1 items-center justify-center py-4">
                       {remoteCta}
                     </div>
                     <Button onClick={handleCreateCode} className="w-full gap-2">
                       <IconCloudUpload className="h-4 w-4" />
-                      Générer le QR Code
+                      Générer le QR code
                     </Button>
                   </>
                 )}
               </TabsContent>
 
-              {/* ── Code à recopier ── */}
+              {/* ── Lien à envoyer, code à recopier ── */}
               <TabsContent
-                value="code"
+                value="link"
                 className="mt-4 flex flex-1 flex-col justify-between gap-4"
               >
-                {share ? (
+                {share && shareUrl ? (
                   <>
                     <div className="flex flex-col items-center gap-3">
-                      <p className="text-muted-foreground text-center text-sm">
-                        Saisissez ce code sur l’autre appareil pour y retrouver
-                        le voyage.
+                      <p className="text-muted-foreground text-center text-sm text-pretty">
+                        Envoyez le lien, ou dictez le code : les deux ouvrent le
+                        même voyage.
                       </p>
                       <p className="bg-muted/60 border-border text-foreground rounded-lg border px-4 py-3 font-mono text-2xl font-semibold tracking-[0.2em] tabular-nums">
                         {formatShareCode(share.code)}
+                      </p>
+                      <p className="text-muted-foreground w-full truncate text-center font-mono text-xs">
+                        {toDisplayUrl(shareUrl)}
                       </p>
                       {expiresIn && (
                         <p className="text-muted-foreground text-center text-xs">
@@ -407,42 +515,19 @@ export function ShareExportDialog({
                       )}
                     </div>
 
-                    <div className="flex w-full gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          linkClipboard.copy(getShareCodeUrl(share.code))
-                        }
-                        className="flex-1 gap-2"
-                      >
-                        {linkClipboard.copied ? (
-                          <IconCheck className="h-4 w-4" />
-                        ) : (
-                          <IconLink className="h-4 w-4" />
-                        )}
-                        {linkClipboard.copied ? 'Copié' : 'Le lien'}
-                      </Button>
-                      <Button
-                        onClick={() => codeClipboard.copy(share.code)}
-                        className="flex-1 gap-2"
-                      >
-                        {codeClipboard.copied ? (
-                          <IconCheck className="h-4 w-4" />
-                        ) : (
-                          <IconCopy className="h-4 w-4" />
-                        )}
-                        {codeClipboard.copied ? 'Copié' : 'Le code'}
-                      </Button>
+                    <div className="flex w-full flex-col gap-2">
+                      {nativeShareButton}
+                      {copyActions}
                     </div>
                   </>
                 ) : (
                   <>
-                    <div className="flex flex-1 items-center justify-center">
+                    <div className="flex flex-1 items-center justify-center py-4">
                       {remoteCta}
                     </div>
                     <Button onClick={handleCreateCode} className="w-full gap-2">
                       <IconCloudUpload className="h-4 w-4" />
-                      Générer un code
+                      Générer un lien
                     </Button>
                   </>
                 )}

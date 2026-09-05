@@ -3,6 +3,7 @@ import { Nunito, Paytone_One, Geist_Mono } from 'next/font/google'
 import { PWARegister } from '@/components/pwa-register'
 import { AnalyticsProvider } from '@/components/analytics/analytics-provider'
 import { ConsentedVercelAnalytics } from '@/components/analytics/vercel-analytics'
+import { getSiteUrl } from '@/lib/site-url'
 import './globals.css'
 
 const nunito = Nunito({
@@ -24,6 +25,9 @@ const _geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
+  // Sans base absolue, les images Open Graph sortent en URL relative : aucune
+  // messagerie ne sait alors afficher l'aperçu d'un lien partagé.
+  metadataBase: getSiteUrl(),
   title: 'TripBrain',
   description:
     'Planifiez et consultez votre itineraire de voyage avec TripBrain',
@@ -45,11 +49,19 @@ export const metadata: Metadata = {
     apple: '/apple-icon.png',
   },
   openGraph: {
+    type: 'website',
     siteName: 'TripBrain',
     title: 'TripBrain',
     description:
       'Planifiez et consultez votre itinéraire de voyage avec TripBrain',
     url: 'https://app.tripbrain.fr',
+    locale: 'fr_FR',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'TripBrain',
+    description:
+      'Planifiez et consultez votre itinéraire de voyage avec TripBrain',
   },
   alternates: {
     canonical: 'https://app.tripbrain.fr',

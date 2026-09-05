@@ -202,30 +202,34 @@ export function ImportShareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm">
-        {onNavBack && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Retour"
-            onClick={handleNavBack}
-            className="absolute top-4 left-4 h-7 w-7 opacity-70 hover:opacity-100"
-          >
-            <IconArrowLeft className="h-4 w-4" />
-            <span className="sr-only">Retour</span>
-          </Button>
-        )}
-
-        <DialogHeader className={onNavBack ? 'pl-6' : undefined}>
-          <DialogTitle className="flex items-center gap-2">
-            <IconKey className="h-5 w-5" />
-            Importer un partage
-          </DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+      {/* En-tête fixe, corps défilant : la dialog tient sur tous les écrans. */}
+      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-sm">
+        <DialogHeader className="px-4 pt-5 pb-3 text-left sm:px-6 sm:pt-6">
+          <div className="flex items-center gap-2 pr-8">
+            {/* Retour — ferme cette dialog et ré-ouvre la précédente */}
+            {onNavBack && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Retour"
+                onClick={handleNavBack}
+                className="-ml-2 shrink-0 opacity-70 hover:opacity-100"
+              >
+                <IconArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
+            <DialogTitle className="flex min-w-0 items-center gap-2">
+              <IconKey className="h-5 w-5 shrink-0" />
+              Importer un partage
+            </DialogTitle>
+          </div>
+          <DialogDescription className="text-pretty">
+            {description}
+          </DialogDescription>
         </DialogHeader>
 
         {/* Conteneur stable — min-h évite le layout shift entre les états */}
-        <div className="flex min-h-[16rem] flex-col justify-between gap-4 py-2">
+        <div className="flex min-h-[16rem] flex-1 flex-col justify-between gap-4 overflow-y-auto overscroll-contain px-4 pb-5 sm:px-6 sm:pb-6">
           {state.status === 'prompt' && (
             <div className="flex flex-1 flex-col items-center justify-center gap-4">
               <InputOTP
@@ -235,22 +239,31 @@ export function ImportShareDialog({
                 value={code}
                 onChange={(value) => setCode(value.toUpperCase())}
                 onComplete={(value) => resolveCode(value)}
+                containerClassName="w-full gap-1.5 sm:gap-2"
               >
-                <InputOTPGroup>
+                <InputOTPGroup className="flex-1">
                   {[0, 1, 2, 3].map((i) => (
-                    <InputOTPSlot key={i} index={i} className="font-mono" />
+                    <InputOTPSlot
+                      key={i}
+                      index={i}
+                      className="h-11 w-full flex-1 font-mono text-base"
+                    />
                   ))}
                 </InputOTPGroup>
                 <InputOTPSeparator />
-                <InputOTPGroup>
+                <InputOTPGroup className="flex-1">
                   {[4, 5, 6, 7].map((i) => (
-                    <InputOTPSlot key={i} index={i} className="font-mono" />
+                    <InputOTPSlot
+                      key={i}
+                      index={i}
+                      className="h-11 w-full flex-1 font-mono text-base"
+                    />
                   ))}
                 </InputOTPGroup>
               </InputOTP>
-              <p className="text-muted-foreground text-center text-xs">
-                Le code se trouve dans « Partager & données » sur l’appareil qui
-                possède le voyage.
+              <p className="text-muted-foreground text-center text-xs text-pretty">
+                Le code se trouve dans « Partager &amp; données » sur l’appareil
+                qui possède le voyage.
               </p>
             </div>
           )}
@@ -294,16 +307,20 @@ export function ImportShareDialog({
                   {summary.dayCount} jour{summary.dayCount > 1 ? 's' : ''} de
                   voyage
                 </p>
-                <p className="text-muted-foreground flex items-center gap-2 text-sm">
-                  <IconMapPin className="h-4 w-4 shrink-0" />
-                  {summary.firstCity === summary.lastCity
-                    ? summary.firstCity
-                    : `${summary.firstCity} → ${summary.lastCity}`}
+                <p className="text-muted-foreground flex items-start gap-2 text-sm">
+                  <IconMapPin className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span className="min-w-0 break-words">
+                    {summary.firstCity === summary.lastCity
+                      ? summary.firstCity
+                      : `${summary.firstCity} → ${summary.lastCity}`}
+                  </span>
                 </p>
-                <p className="text-muted-foreground flex items-center gap-2 text-sm">
-                  <IconCalendarEvent className="h-4 w-4 shrink-0" />
-                  Du {formatDate(summary.startDate)} au{' '}
-                  {formatDate(summary.endDate)}
+                <p className="text-muted-foreground flex items-start gap-2 text-sm">
+                  <IconCalendarEvent className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span className="min-w-0 text-pretty">
+                    Du {formatDate(summary.startDate)} au{' '}
+                    {formatDate(summary.endDate)}
+                  </span>
                 </p>
               </div>
 

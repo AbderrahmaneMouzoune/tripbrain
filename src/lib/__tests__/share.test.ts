@@ -1,5 +1,6 @@
 import {
   SHARE_INLINE_LIMIT,
+  canShareNatively,
   compressItinerary,
   createShareCode,
   decompressItinerary,
@@ -8,6 +9,7 @@ import {
   formatShareCode,
   getInlineQrUrl,
   getShareCodeUrl,
+  shareNatively,
   summarizeSharedItinerary,
 } from '@/lib/share'
 import type { DayItinerary } from '@/lib/itinerary-data'
@@ -219,8 +221,69 @@ describe('getInlineQrUrl', () => {
 })
 
 describe('getShareCodeUrl', () => {
-  it('retourne une URL contenant /?code= avec le code', () => {
-    expect(getShareCodeUrl('K7QP2M4X')).toContain('/?code=K7QP2M4X')
+  it('retourne l’URL de la page de partage, celle qui porte l’Open Graph', () => {
+    expect(getShareCodeUrl('K7QP2M4X')).toContain('/s/K7QP2M4X')
+  })
+})
+
+// ── Partage natif ─────────────────────────────────────────────────────────────
+
+const SHARE_CONTENT = {
+  title: 'Mon voyage sur TripBrain',
+  text: 'Voici mon itinéraire de voyage.',
+  url: 'https://app.tripbrain.fr/s/K7QP2M4X',
+}
+
+describe('canShareNatively', () => {
+  it('refuse quand le navigateur n’expose pas de partage natif', () => {
+    vi.stubGlobal('navigator', {})
+    expect(canShareNatively()).toBe(false)
+  })
+
+  it('accepte quand navigator.share existe', () => {
+    vi.stubGlobal('navigator', { share: vi.fn() })
+    expect(canShareNatively()).toBe(true)
+  })
+
+  it('suit l’avis de canShare quand un contenu est fourni', () => {
+    vi.stubGlobal('navigator', {
+      share: vi.fn(),
+      canShare: vi.fn().mockReturnValue(false),
+    })
+    expect(canShareNatively(SHARE_CONTENT)).toBe(false)
+  })
+})
+
+describe('shareNatively', () => {
+  it('retourne « shared » quand la feuille de partage a abouti', async () => {
+    const share = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', { share })
+
+    await expect(shareNatively(SHARE_CONTENT)).resolves.toBe('shared')
+    expect(share).toHaveBeenCalledWith(SHARE_CONTENT)
+  })
+
+  it('retourne « dismissed » quand la feuille est fermée sans envoyer', async () => {
+    vi.stubGlobal('navigator', {
+      share: vi
+        .fn()
+        .mockRejectedValue(new DOMException('closed', 'AbortError')),
+    })
+
+    await expect(shareNatively(SHARE_CONTENT)).resolves.toBe('dismissed')
+  })
+
+  it('retourne « unavailable » quand le partage échoue', async () => {
+    vi.stubGlobal('navigator', {
+      share: vi.fn().mockRejectedValue(new Error('refusé')),
+    })
+
+    await expect(shareNatively(SHARE_CONTENT)).resolves.toBe('unavailable')
+  })
+
+  it('retourne « unavailable » sans partage natif, sans rien tenter', async () => {
+    vi.stubGlobal('navigator', {})
+    await expect(shareNatively(SHARE_CONTENT)).resolves.toBe('unavailable')
   })
 })
 

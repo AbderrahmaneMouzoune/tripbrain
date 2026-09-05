@@ -103,14 +103,82 @@ export function getInlineQrUrl(compressed: string): string {
   return `${getOrigin()}/?import=${compressed}`
 }
 
-/** URL d'ouverture directe d'un code de partage : `<origin>/?code=<code>`. */
+/**
+ * URL d'ouverture d'un code de partage : `<origin>/s/<code>`.
+ *
+ * Cette page est rendue par le serveur : c'est elle qui porte les métadonnées
+ * Open Graph, pour qu'un lien collé dans une messagerie s'affiche en aperçu au
+ * lieu d'une adresse nue. Elle bascule ensuite vers `/?code=<code>`, que
+ * l'application sait déjà traiter.
+ */
 export function getShareCodeUrl(code: string): string {
-  return `${getOrigin()}/?code=${encodeURIComponent(code)}`
+  return `${getOrigin()}/s/${encodeURIComponent(code)}`
 }
 
 /** Découpe le code en groupes de quatre — plus facile à lire et à dicter. */
 export function formatShareCode(code: string): string {
   return code.replace(/(.{4})(?=.)/g, '$1-')
+}
+
+// ── Partage natif ─────────────────────────────────────────────────────────────
+
+/** Ce que la feuille de partage du système reçoit — jamais l'itinéraire lui-même. */
+export interface NativeShareContent {
+  title: string
+  text: string
+  url: string
+}
+
+/** Comment s'est terminée l'ouverture de la feuille de partage du système. */
+export type NativeShareOutcome =
+  /** Le contenu est parti dans l'application choisie. */
+  | 'shared'
+  /** La feuille a été fermée sans rien envoyer — ce n'est pas une erreur. */
+  | 'dismissed'
+  /** Pas de partage natif ici, ou il a refusé : au reste de l'interface de prendre le relais. */
+  | 'unavailable'
+
+/**
+ * Le partage natif du système est-il utilisable pour ce contenu ?
+ *
+ * Toujours `false` côté serveur : le résultat ne doit donc décider d'un rendu
+ * qu'après le montage, sinon l'hydratation ne correspondrait pas.
+ */
+export function canShareNatively(content?: NativeShareContent): boolean {
+  if (typeof navigator === 'undefined') return false
+  if (typeof navigator.share !== 'function') return false
+  // `canShare` dit ce que la plateforme accepte réellement de transmettre.
+  if (content && typeof navigator.canShare === 'function') {
+    try {
+      return navigator.canShare(content)
+    } catch {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Ouvre la feuille de partage du système (Web Share API).
+ *
+ * À appeler directement depuis le clic : les navigateurs exigent un geste
+ * utilisateur, et toute attente intercalée invaliderait l'appel.
+ */
+export async function shareNatively(
+  content: NativeShareContent,
+): Promise<NativeShareOutcome> {
+  if (!canShareNatively(content)) return 'unavailable'
+
+  try {
+    await navigator.share(content)
+    return 'shared'
+  } catch (error) {
+    // Fermer la feuille sans choisir d'application lève `AbortError`.
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return 'dismissed'
+    }
+    return 'unavailable'
+  }
 }
 
 // ── API de partage ────────────────────────────────────────────────────────────
