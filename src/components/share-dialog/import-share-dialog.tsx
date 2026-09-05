@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { REGEXP_ONLY_DIGITS } from 'input-otp'
 import {
   InputOTP,
   InputOTPGroup,
@@ -197,7 +198,7 @@ export function ImportShareDialog({
     state.status === 'preview' || state.status === 'importing'
       ? 'Vérifiez le voyage reçu avant de l’enregistrer.'
       : source.kind === 'prompt'
-        ? 'Saisissez le code affiché sur l’autre appareil.'
+        ? `Saisissez les ${SHARE_CODE_LENGTH} chiffres affichés sur l’autre appareil.`
         : 'Récupération du voyage partagé.'
 
   return (
@@ -231,9 +232,15 @@ export function ImportShareDialog({
               <InputOTP
                 autoFocus
                 maxLength={SHARE_CODE_LENGTH}
-                pattern="[0-9A-Za-z]*"
+                // Le code n'est fait que de chiffres : le pavé numérique
+                // qu'affiche le mobile est bien celui qu'il faut.
+                pattern={REGEXP_ONLY_DIGITS}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                // Un code recopié avec son séparateur (« 4820-5137 ») reste collable.
+                pasteTransformer={(pasted) => pasted.replace(/\D/g, '')}
                 value={code}
-                onChange={(value) => setCode(value.toUpperCase())}
+                onChange={setCode}
                 onComplete={(value) => resolveCode(value)}
               >
                 <InputOTPGroup>
