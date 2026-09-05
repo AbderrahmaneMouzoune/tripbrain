@@ -39,6 +39,8 @@ import {
   type ShareCode,
 } from '@/lib/share'
 import { useClipboard } from '@/hooks/use-clipboard'
+import { trackEvent } from '@/lib/analytics/client'
+import { shareFailureReason } from '@/lib/analytics/metrics'
 import { cn } from '@/lib/utils'
 
 // Étapes affichées pendant la compression locale
@@ -127,10 +129,25 @@ export function ShareExportDialog({
     setShareError(null)
 
     compressItinerary(itinerary)
-      .then((compressed) => setState({ status: 'ready', compressed }))
-      .catch((err) =>
-        setState({ status: 'error', message: toFrenchError(err, 'compress') }),
-      )
+      .then((compressed) => {
+        setState({ status: 'ready', compressed })
+
+        // Sous la limite, le QR code embarque tout le voyage : le partage est
+        // déjà fait, sans le moindre passage par le réseau.
+        if (compressed.length <= SHARE_INLINE_LIMIT) {
+          trackEvent('share_created', {
+            method: 'qr_inline',
+            days_count: itinerary.length,
+          })
+        }
+      })
+      .catch((err) => {
+        setState({ status: 'error', message: toFrenchError(err, 'compress') })
+        trackEvent('share_failed', {
+          method: 'qr_inline',
+          reason: shareFailureReason(err),
+        })
+      })
   }, [open, itinerary, revision])
 
   const handleCreateCode = useCallback(async () => {
@@ -140,12 +157,20 @@ export function ShareExportDialog({
     setIsSharing(true)
     try {
       setShare(await createShareCode(state.compressed))
+      trackEvent('share_created', {
+        method: 'server_code',
+        days_count: itinerary.length,
+      })
     } catch (err) {
       setShareError(toFrenchError(err, 'share'))
+      trackEvent('share_failed', {
+        method: 'server_code',
+        reason: shareFailureReason(err),
+      })
     } finally {
       setIsSharing(false)
     }
-  }, [state])
+  }, [state, itinerary.length])
 
   const handleDownload = useCallback(() => {
     const canvas = document.querySelector(

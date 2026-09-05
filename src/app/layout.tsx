@@ -1,10 +1,11 @@
 import type { Metadata } from 'next'
 import { Nunito, Paytone_One, Geist_Mono } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
 import { PWARegister } from '@/components/pwa-register'
 import { PwaInstallProvider } from '@/components/pwa-install-provider'
 import { PwaInstallPrompt } from '@/components/pwa-install-prompt'
 import { INSTALL_EVENT_CAPTURE_SCRIPT } from '@/lib/pwa-install'
+import { AnalyticsProvider } from '@/components/analytics/analytics-provider'
+import { ConsentedVercelAnalytics } from '@/components/analytics/vercel-analytics'
 import './globals.css'
 
 const nunito = Nunito({
@@ -82,12 +83,14 @@ export default function RootLayout({
       <body
         className={`${nunito.variable} ${paytoneOne.variable} font-sans antialiased`}
       >
-        <PWARegister />
-        <PwaInstallProvider>
-          {children}
-          <PwaInstallPrompt />
-        </PwaInstallProvider>
-        <Analytics />
+        <AnalyticsProvider>
+          <PWARegister />
+          <PwaInstallProvider>
+            {children}
+            <PwaInstallPrompt />
+          </PwaInstallProvider>
+          <ConsentedVercelAnalytics />
+        </AnalyticsProvider>
       </body>
     </html>
   )

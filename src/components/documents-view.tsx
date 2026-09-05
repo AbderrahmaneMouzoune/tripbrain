@@ -58,6 +58,8 @@ import {
   DrawerDescription,
 } from '@/components/ui/drawer'
 import { useDocuments, StoredFile } from '@/hooks/use-documents'
+import { trackEvent } from '@/lib/analytics/client'
+import { documentKind, documentKindOf } from '@/lib/analytics/metrics'
 import {
   SOURCE_CATEGORIES,
   CATEGORY_COLOR_CLASSES,
@@ -599,10 +601,30 @@ export function DocumentsView() {
   }, [])
 
   const openPreview = useCallback((file: StoredFile) => {
+    trackEvent('document_opened', { kind: documentKind(file.type) })
     const url = URL.createObjectURL(file.blob)
     openedPreviewUrlsRef.current.add(url)
     window.open(url, '_blank', 'noopener')
   }, [])
+
+  /**
+   * Seuls le nombre de fichiers et leur famille sont mesurés : ni le nom, ni le
+   * poids, ni le contenu ne quittent l'appareil.
+   */
+  const trackAddedFiles = useCallback((added: File[]) => {
+    trackEvent('document_added', {
+      count: added.length,
+      kind: documentKindOf(added.map((file) => file.type)),
+    })
+  }, [])
+
+  const handleDownload = useCallback(
+    (file: StoredFile) => {
+      trackEvent('document_downloaded', { kind: documentKind(file.type) })
+      downloadFile(file)
+    },
+    [downloadFile],
+  )
 
   // Generate preview URLs for image files
   useEffect(() => {
@@ -634,9 +656,10 @@ export function DocumentsView() {
       const droppedFiles = Array.from(e.dataTransfer.files)
       if (droppedFiles.length > 0) {
         await addFiles(droppedFiles)
+        trackAddedFiles(droppedFiles)
       }
     },
-    [addFiles],
+    [addFiles, trackAddedFiles],
   )
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -660,11 +683,12 @@ export function DocumentsView() {
       const selected = Array.from(e.target.files ?? [])
       if (selected.length > 0) {
         await addFiles(selected)
+        trackAddedFiles(selected)
       }
       // Reset input to allow re-uploading the same file
       if (fileInputRef.current) fileInputRef.current.value = ''
     },
-    [addFiles],
+    [addFiles, trackAddedFiles],
   )
 
   const handleDelete = useCallback(
@@ -672,6 +696,7 @@ export function DocumentsView() {
       setDeletingId(id)
       await deleteFile(id)
       setDeletingId(null)
+      trackEvent('document_deleted')
     },
     [deleteFile],
   )
@@ -683,6 +708,7 @@ export function DocumentsView() {
     })
     try {
       await exportAll((p) => setExportProgress(p))
+      trackEvent('document_downloaded', { kind: 'archive' })
     } finally {
       setTimeout(() => setExportProgress(null), FEEDBACK_DISPLAY_DURATION)
     }
@@ -725,6 +751,19 @@ export function DocumentsView() {
       return sortOrder === 'asc' ? cmp : -cmp
     })
 
+  // Une recherche est mesurée par son résultat, jamais par son contenu : le
+  // terme saisi peut nommer un hôtel ou un compagnon de voyage.
+  const resultCount = filteredAndSorted.length
+  useEffect(() => {
+    const term = search.trim()
+    if (!term) return
+
+    const timer = setTimeout(() => {
+      trackEvent('documents_searched', { has_results: resultCount > 0 })
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [search, resultCount])
+
   const totalSize = useMemo(
     () => files.reduce((acc, f) => acc + f.size, 0),
     [files],
@@ -751,7 +790,9 @@ export function DocumentsView() {
             variant="outline"
             size="sm"
             className="gap-2"
-            disabled={files.length === 0 || exportProgress?.status === 'preparing'}
+            disabled={
+              files.length === 0 || exportProgress?.status === 'preparing'
+            }
             onClick={handleExportAll}
           >
             {exportProgress?.status === 'preparing' ? (
@@ -1041,7 +1082,7 @@ export function DocumentsView() {
                     file={file}
                     viewMode="grid"
                     onDelete={handleDelete}
-                    onDownload={downloadFile}
+                    onDownload={handleDownload}
                     onPreview={openPreview}
                     previewUrl={previewUrls[file.id] ?? null}
                   />
@@ -1059,7 +1100,7 @@ export function DocumentsView() {
                     file={file}
                     viewMode="list"
                     onDelete={handleDelete}
-                    onDownload={downloadFile}
+                    onDownload={handleDownload}
                     onPreview={openPreview}
                     previewUrl={previewUrls[file.id] ?? null}
                   />

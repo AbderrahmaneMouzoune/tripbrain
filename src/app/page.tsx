@@ -38,6 +38,14 @@ import { cn } from '@/lib/utils'
 import { AppIcon } from '@/components/app-icon'
 import { DemoBanner } from '@/components/demo-banner'
 import { usePwaInstall } from '@/components/pwa-install-provider'
+import { useAnalytics } from '@/hooks/use-analytics'
+import { trackEvent } from '@/lib/analytics/client'
+
+/** Gestes possibles pour changer de journée : sert la mesure d'usage. */
+type DayChangeMethod = 'swipe' | 'arrow' | 'timeline' | 'bottom_nav' | 'map'
+
+/** Endroits d'où l'on bascule entre roadbook et documents. */
+type TabSurface = 'tabs' | 'bottom_nav' | 'timeline'
 
 function getTripCountdown(
   tripStartDate: Date,
@@ -96,12 +104,15 @@ function HomePageContent() {
 
   const searchParams = useSearchParams()
   const { armAutoPrompt } = usePwaInstall()
+  const { consent, isConfigured: isAnalyticsConfigured } = useAnalytics()
 
   // Partage reçu via l'URL, en attente de confirmation de l'utilisateur.
   const [sharedSource, setSharedSource] = useState<ImportShareSource | null>(
     null,
   )
   const sharedHandledRef = useRef(false)
+
+  const appOpenedRef = useRef(false)
 
   const [selectedDay, setSelectedDay] = useState(0)
   const [swipeDirection, setSwipeDirection] = useState<
@@ -138,6 +149,7 @@ function HomePageContent() {
   const startEditing = () => {
     setEditBaseline(itinerary)
     setIsEditing(true)
+    trackEvent('edit_mode_started')
   }
 
   const openReview = (intent: EditReviewIntent) => {
@@ -174,9 +186,17 @@ function HomePageContent() {
       return
     }
 
-    replaceItinerary(editBaseline).then(stopEditing, (error) => {
-      console.error('Annulation des modifications impossible', error)
-    })
+    const discarded = pendingChanges
+
+    replaceItinerary(editBaseline).then(
+      () => {
+        trackEvent('edit_changes_discarded', { changes_count: discarded })
+        stopEditing()
+      },
+      (error) => {
+        console.error('Annulation des modifications impossible', error)
+      },
+    )
   }
 
   useEffect(() => {
@@ -186,10 +206,13 @@ function HomePageContent() {
   }, [hasData, isLoading, searchParams, loadMockData])
 
   // On ne propose l'installation qu'une fois le voyage chargé : avant, la
-  // proposition arriverait sans que l'app ait rendu le moindre service.
+  // proposition arriverait sans que l'app ait rendu le moindre service. Tant
+  // que la bannière de consentement attend une réponse, elle occupe déjà le bas
+  // de l'écran : une seule demande à la fois.
+  const consentSettled = !isAnalyticsConfigured || consent !== null
   useEffect(() => {
-    armAutoPrompt(hasData && !isLoading)
-  }, [armAutoPrompt, hasData, isLoading])
+    armAutoPrompt(hasData && !isLoading && consentSettled)
+  }, [armAutoPrompt, hasData, isLoading, consentSettled])
 
   // Arrivée par un partage : `?import=` embarque l'itinéraire complet, `?code=`
   // pointe vers un partage déposé sur le serveur. L'URL est nettoyée aussitôt
@@ -217,28 +240,51 @@ function HomePageContent() {
     }
   }, [hasData, getCurrentDayIndex])
 
-  const handlePrevDay = () => {
+  // Une seule fois par visite, une fois l'état local connu : savoir si l'app est
+  // installée et si elle s'ouvre sur un voyage dit à quoi ressemble l'entrée.
+  useEffect(() => {
+    if (isLoading || appOpenedRef.current) return
+    appOpenedRef.current = true
+
+    trackEvent('app_opened', {
+      display_mode: window.matchMedia('(display-mode: standalone)').matches
+        ? 'standalone'
+        : 'browser',
+      has_trip: hasData,
+      is_demo: isDemo,
+    })
+  }, [isLoading, hasData, isDemo])
+
+  /** D'où vient le changement de journée : le geste compte autant que le saut. */
+  const handlePrevDay = (method: DayChangeMethod = 'arrow') => {
     setSwipeDirection('right')
     setSelectedDay((prev) => Math.max(0, prev - 1))
+    trackEvent('day_changed', { method, direction: 'previous' })
   }
 
-  const handleNextDay = () => {
+  const handleNextDay = (method: DayChangeMethod = 'arrow') => {
     setSwipeDirection('left')
     setSelectedDay((prev) => Math.min(itinerary.length - 1, prev + 1))
+    trackEvent('day_changed', { method, direction: 'next' })
   }
 
   const swipeHandlers = useSwipe({
     onSwipeLeft: () => {
       if (activeTab === 'roadbook' && selectedDay < itinerary.length - 1) {
-        handleNextDay()
+        handleNextDay('swipe')
       }
     },
     onSwipeRight: () => {
       if (activeTab === 'roadbook' && selectedDay > 0) {
-        handlePrevDay()
+        handlePrevDay('swipe')
       }
     },
   })
+
+  const openTab = (view: 'roadbook' | 'documents', surface: TabSurface) => {
+    if (view !== activeTab) trackEvent('view_changed', { view, surface })
+    setActiveTab(view)
+  }
 
   if (isLoading) {
     return (
@@ -301,6 +347,8 @@ function HomePageContent() {
           {isDemo && (
             <DemoBanner
               onQuitDemo={() => {
+                trackEvent('demo_exited')
+                trackEvent('data_cleared', { surface: 'demo_banner' })
                 clearData()
                 window.history.replaceState(null, '', window.location.pathname)
               }}
@@ -378,9 +426,13 @@ function HomePageContent() {
                   if (index !== selectedDay) {
                     setSwipeDirection(index > selectedDay ? 'left' : 'right')
                     setSelectedDay(index)
+                    trackEvent('day_changed', {
+                      method: 'timeline',
+                      direction: 'jump',
+                    })
                   }
                   if (activeTab === 'documents') {
-                    setActiveTab('roadbook')
+                    openTab('roadbook', 'timeline')
                   }
                 }}
               />
@@ -401,7 +453,7 @@ function HomePageContent() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handlePrevDay}
+                  onClick={() => handlePrevDay('arrow')}
                   disabled={selectedDay === 0}
                   className="border-border/70 hover:bg-muted/60 gap-1"
                 >
@@ -413,7 +465,7 @@ function HomePageContent() {
               <Tabs
                 value={activeTab}
                 onValueChange={(v) =>
-                  setActiveTab(v as 'roadbook' | 'documents')
+                  openTab(v as 'roadbook' | 'documents', 'tabs')
                 }
                 className="shrink-0"
               >
@@ -441,7 +493,7 @@ function HomePageContent() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleNextDay}
+                  onClick={() => handleNextDay('arrow')}
                   disabled={selectedDay === itinerary.length - 1}
                   className="border-border/70 hover:bg-muted/60 gap-1"
                 >
@@ -540,7 +592,7 @@ function HomePageContent() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handlePrevDay}
+                  onClick={() => handlePrevDay('bottom_nav')}
                   disabled={selectedDay === 0 || activeTab === 'documents'}
                   className={cn(`h-auto w-16 flex-col gap-0.5 py-2`, {
                     'pointer-events-none opacity-50': activeTab === 'documents',
@@ -555,7 +607,7 @@ function HomePageContent() {
                 <Button
                   variant={activeTab === 'roadbook' ? 'default' : 'ghost'}
                   size="sm"
-                  onClick={() => setActiveTab('roadbook')}
+                  onClick={() => openTab('roadbook', 'bottom_nav')}
                   className="h-auto flex-1 flex-col gap-0.5 py-2"
                 >
                   <List className="h-5 w-5" />
@@ -565,7 +617,7 @@ function HomePageContent() {
                 <Button
                   variant={activeTab === 'documents' ? 'default' : 'ghost'}
                   size="sm"
-                  onClick={() => setActiveTab('documents')}
+                  onClick={() => openTab('documents', 'bottom_nav')}
                   className="h-auto flex-1 flex-col gap-0.5 py-2"
                 >
                   <FolderOpen className="h-5 w-5" />
@@ -575,7 +627,7 @@ function HomePageContent() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={handleNextDay}
+                  onClick={() => handleNextDay('bottom_nav')}
                   disabled={
                     selectedDay === itinerary.length - 1 ||
                     activeTab === 'documents'
@@ -595,7 +647,10 @@ function HomePageContent() {
 
           {/* Floating map button */}
           <Button
-            onClick={() => setIsMapOpen(true)}
+            onClick={() => {
+              trackEvent('map_opened')
+              setIsMapOpen(true)
+            }}
             className={cn(
               'fixed right-5 z-40 rounded-full shadow-lg transition-[bottom] hover:shadow-xl',
               // Reste au-dessus de la barre d'édition quand elle est déployée.
@@ -614,7 +669,12 @@ function HomePageContent() {
               onOpenChange={setReviewOpen}
               intent={reviewIntent}
               summaries={changeSummaries}
-              onSave={stopEditing}
+              onSave={() => {
+                trackEvent('edit_changes_saved', {
+                  changes_count: pendingChanges,
+                })
+                stopEditing()
+              }}
               onDiscard={discardEdits}
             />
           )}
@@ -625,9 +685,18 @@ function HomePageContent() {
               itinerary={itinerary}
               selectedDay={selectedDay}
               onSelectDay={(index) => {
+                if (index !== selectedDay) {
+                  trackEvent('day_changed', {
+                    method: 'map',
+                    direction: 'jump',
+                  })
+                }
                 setSelectedDay(index)
               }}
-              onClose={() => setIsMapOpen(false)}
+              onClose={() => {
+                trackEvent('map_closed')
+                setIsMapOpen(false)
+              }}
             />
           )}
         </div>
