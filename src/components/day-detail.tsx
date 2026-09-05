@@ -27,7 +27,18 @@ import {
   setTransport,
   upsertActivity,
 } from '@/lib/itinerary-edit'
+import {
+  buildAccommodationActions,
+  buildActivityActions,
+  buildDayActions,
+  buildTransportActions,
+} from '@/lib/quick-actions'
 import { trackEvent } from '@/lib/analytics/client'
+import { useClipboard } from '@/hooks/use-clipboard'
+import {
+  QuickActionsHint,
+  QuickActionsTarget,
+} from '@/components/quick-actions'
 import { EntityEditSheet } from '@/components/edit/entity-edit-sheet'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -113,6 +124,70 @@ export function DayDetail({
     setOpenEditor('accommodation')
   }
 
+  const { copy } = useClipboard()
+  const copyText = (text: string) => {
+    void copy(text)
+  }
+
+  const deleteActivity = (activityId: string) => {
+    trackEvent('entity_edited', { entity: 'activity', action: 'delete' })
+    onDayChange?.(removeActivity(day, activityId))
+  }
+
+  const reorderActivity = (activityId: string, offset: number) => {
+    trackEvent('entity_edited', { entity: 'activity', action: 'reorder' })
+    onDayChange?.(moveActivity(day, activityId, offset))
+  }
+
+  /**
+   * Menus d'appui long : ils touchent à l'itinéraire, ils n'ont donc de sens
+   * que là où les modifications peuvent être enregistrées. Contrairement aux
+   * boutons crayon, ils restent offerts hors mode édition : c'est le raccourci
+   * pour corriger une information au moment où on la lit.
+   */
+  const isMutable = Boolean(onDayChange)
+
+  const dayActions = isMutable
+    ? buildDayActions(day, {
+        onEdit: editDay,
+        onAddActivity: () => editActivity(createEmptyActivity()),
+        onAddTransport: () => editTransport(createEmptyTransport()),
+        onAddAccommodation: () =>
+          editAccommodation(createEmptyAccommodation(day)),
+        onCopy: copyText,
+      })
+    : []
+
+  const transportActions =
+    isMutable && transport
+      ? buildTransportActions(transport, {
+          onEdit: () => editTransport(transport),
+          onDelete: () => {
+            trackEvent('entity_edited', {
+              entity: 'transport',
+              action: 'delete',
+            })
+            onDayChange?.(setTransport(day, undefined))
+          },
+          onCopy: copyText,
+        })
+      : []
+
+  const accommodationActions =
+    isMutable && accommodation
+      ? buildAccommodationActions(accommodation, {
+          onEdit: () => editAccommodation(accommodation),
+          onDelete: () => {
+            trackEvent('entity_edited', {
+              entity: 'accommodation',
+              action: 'delete',
+            })
+            onDayChange?.(setAccommodation(day, undefined))
+          },
+          onCopy: copyText,
+        })
+      : []
+
   const [carouselApi, setCarouselApi] = useState<CarouselApi>()
   const [currentSlide, setCurrentSlide] = useState(0)
   const [dayLightboxOpen, setDayLightboxOpen] = useState(false)
@@ -147,64 +222,74 @@ export function DayDetail({
       />
       <div className="flex flex-col gap-5">
         {/* Header — editorial style */}
-        <div className="border-border/60 flex flex-col gap-1.5 border-b pb-4">
-          <div className="flex items-start gap-2">
-            <div className="space-x-1.5">
-              {day.dayType && (
-                <Badge
+        <QuickActionsTarget
+          asChild
+          entity="day"
+          title={day.title}
+          description={`Jour ${day.dayNumber} · ${day.city}`}
+          actions={dayActions}
+        >
+          <div className="border-border/60 flex flex-col gap-1.5 border-b pb-4">
+            <div className="flex items-start gap-2">
+              <div className="space-x-1.5">
+                {day.dayType && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 font-medium capitalize"
+                  >
+                    <Tag className="h-3 w-3" strokeWidth={1.75} />
+                    {day.dayType}
+                  </Badge>
+                )}
+                {day.walkingDistance && (
+                  <Badge variant="outline" className="gap-1 font-medium">
+                    <Footprints className="h-3 w-3" strokeWidth={1.75} />
+                    {day.walkingDistance}
+                  </Badge>
+                )}
+              </div>
+
+              {isEditing && (
+                <Button
                   variant="outline"
-                  className="gap-1 font-medium capitalize"
+                  size="sm"
+                  onClick={editDay}
+                  className="ml-auto h-7 shrink-0 gap-1.5 rounded-full px-2.5 text-[11px]"
                 >
-                  <Tag className="h-3 w-3" strokeWidth={1.75} />
-                  {day.dayType}
-                </Badge>
-              )}
-              {day.walkingDistance && (
-                <Badge variant="outline" className="gap-1 font-medium">
-                  <Footprints className="h-3 w-3" strokeWidth={1.75} />
-                  {day.walkingDistance}
-                </Badge>
+                  <Pencil className="h-3 w-3" strokeWidth={1.75} />
+                  Modifier la journée
+                </Button>
               )}
             </div>
 
-            {isEditing && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={editDay}
-                className="ml-auto h-7 shrink-0 gap-1.5 rounded-full px-2.5 text-[11px]"
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span
+                className={cn(
+                  'inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-semibold tracking-wider uppercase',
+                  status === 'current'
+                    ? 'bg-primary text-primary-foreground'
+                    : status === 'past'
+                      ? 'bg-muted text-muted-foreground'
+                      : 'bg-secondary/20 text-secondary border-secondary/30 border',
+                )}
               >
-                <Pencil className="h-3 w-3" strokeWidth={1.75} />
-                Modifier la journée
-              </Button>
-            )}
+                Jour {day.dayNumber}
+              </span>
+              <span className="text-muted-foreground text-xs tracking-widest uppercase">
+                {formatDate(day.date)}
+              </span>
+            </div>
+            <h2 className="text-foreground font-display text-2xl leading-tight font-bold tracking-[0.03em]">
+              {day.title}
+            </h2>
+            <div className="text-muted-foreground flex items-center gap-1.5">
+              <MapPin className="text-secondary h-3.5 w-3.5" />
+              <span className="text-sm font-medium">{day.city}</span>
+            </div>
           </div>
+        </QuickActionsTarget>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span
-              className={cn(
-                'inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-semibold tracking-wider uppercase',
-                status === 'current'
-                  ? 'bg-primary text-primary-foreground'
-                  : status === 'past'
-                    ? 'bg-muted text-muted-foreground'
-                    : 'bg-secondary/20 text-secondary border-secondary/30 border',
-              )}
-            >
-              Jour {day.dayNumber}
-            </span>
-            <span className="text-muted-foreground text-xs tracking-widest uppercase">
-              {formatDate(day.date)}
-            </span>
-          </div>
-          <h2 className="text-foreground font-display text-2xl leading-tight font-bold tracking-[0.03em]">
-            {day.title}
-          </h2>
-          <div className="text-muted-foreground flex items-center gap-1.5">
-            <MapPin className="text-secondary h-3.5 w-3.5" />
-            <span className="text-sm font-medium">{day.city}</span>
-          </div>
-        </div>
+        {isMutable && <QuickActionsHint className="-mt-2" />}
 
         {/* Notes */}
         {day.notes && (
@@ -330,6 +415,7 @@ export function DayDetail({
           <TransportCard
             transport={transport}
             onEdit={isEditing ? () => editTransport(transport) : undefined}
+            actions={transportActions}
           />
         ) : (
           isEditing && (
@@ -347,6 +433,7 @@ export function DayDetail({
             onEdit={
               isEditing ? () => editAccommodation(accommodation) : undefined
             }
+            actions={accommodationActions}
           />
         ) : (
           isEditing && (
@@ -382,13 +469,7 @@ export function DayDetail({
                   onEdit={isEditing ? () => editActivity(activity) : undefined}
                   onMove={
                     isEditing
-                      ? (offset) => {
-                          trackEvent('entity_edited', {
-                            entity: 'activity',
-                            action: 'reorder',
-                          })
-                          onDayChange?.(moveActivity(day, activity.id, offset))
-                        }
+                      ? (offset) => reorderActivity(activity.id, offset)
                       : undefined
                   }
                   canMoveUp={index > 0}
@@ -400,6 +481,28 @@ export function DayDetail({
                             setActivityStatus(day, activity.id, status),
                           )
                       : undefined
+                  }
+                  actions={
+                    isMutable
+                      ? buildActivityActions(
+                          activity,
+                          {
+                            onEdit: () => editActivity(activity),
+                            onStatusChange: (status) =>
+                              onDayChange?.(
+                                setActivityStatus(day, activity.id, status),
+                              ),
+                            onMove: (offset) =>
+                              reorderActivity(activity.id, offset),
+                            onDelete: () => deleteActivity(activity.id),
+                            onCopy: copyText,
+                          },
+                          {
+                            canMoveUp: index > 0,
+                            canMoveDown: index < day.activities.length - 1,
+                          },
+                        )
+                      : []
                   }
                 />
               ))}
@@ -510,13 +613,7 @@ export function DayDetail({
           }}
           onDelete={
             day.activities.some((current) => current.id === activityDraft.id)
-              ? () => {
-                  trackEvent('entity_edited', {
-                    entity: 'activity',
-                    action: 'delete',
-                  })
-                  onDayChange?.(removeActivity(day, activityDraft.id))
-                }
+              ? () => deleteActivity(activityDraft.id)
               : undefined
           }
         />

@@ -125,6 +125,22 @@ quand elles contiennent deja quelque chose.
 
 Chaque modification est enregistree immediatement sur ton appareil, comme le reste de tes donnees.
 
+### Appui long sur une information
+
+Pas besoin de passer par le mode edition pour une correction rapide.
+Garde le doigt appuye (ou fais un clic droit) sur la journee, une activite, le transport
+ou l'hebergement : un panneau s'ouvre en bas de l'ecran avec ce qu'on peut en faire.
+
+Selon l'element, on y trouve :
+- le modifier, ou completer ce qui manque a la journee (activite, transport, hebergement)
+- dire ou on en est d'une activite : faite, annulee, a refaire
+- la monter ou la descendre dans le programme
+- copier une adresse, un nom, une reference de reservation
+- ouvrir la carte, le billet ou la reservation
+- la supprimer, avec une confirmation
+
+Une astuce le rappelle la premiere fois, puis disparait des que le geste a servi.
+
 ### Carte du voyage
 
 Tu peux visualiser ton parcours sur une carte.
