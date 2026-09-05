@@ -26,13 +26,13 @@ Trois garde-fous, dans cet ordre :
 
 | Fichier                                 | Rôle                                                                              |
 | --------------------------------------- | --------------------------------------------------------------------------------- |
-| `src/lib/analytics/events.ts`           | Catalogue : la liste exhaustive des événements et de leurs propriétés.            |
-| `src/lib/analytics/sanitize.ts`         | Filtre : liste blanche d'événements, nettoyage des URL, retrait de tout le reste. |
-| `src/lib/analytics/client.ts`           | Initialisation du SDK, application du consentement, `trackEvent`.                 |
-| `src/lib/analytics/consent.ts`          | Lecture, écriture et diffusion du choix, conservé sur l'appareil.                 |
-| `src/lib/analytics/metrics.ts`          | Transformation d'un itinéraire ou d'un fichier en compteurs.                      |
-| `src/components/analytics/`             | Fournisseur React, bandeau de consentement, Vercel Analytics conditionné.         |
-| `src/app/politique-de-confidentialite/` | Politique publique — la liste des événements y est générée depuis le catalogue.   |
+| `apps/web/src/lib/analytics/events.ts`           | Catalogue : la liste exhaustive des événements et de leurs propriétés.            |
+| `apps/web/src/lib/analytics/sanitize.ts`         | Filtre : liste blanche d'événements, nettoyage des URL, retrait de tout le reste. |
+| `apps/web/src/lib/analytics/client.ts`           | Initialisation du SDK, application du consentement, `trackEvent`.                 |
+| `apps/web/src/lib/analytics/consent.ts`          | Lecture, écriture et diffusion du choix, conservé sur l'appareil.                 |
+| `apps/web/src/lib/analytics/metrics.ts`          | Transformation d'un itinéraire ou d'un fichier en compteurs.                      |
+| `apps/web/src/components/analytics/`             | Fournisseur React, bandeau de consentement, Vercel Analytics conditionné.         |
+| `apps/web/src/app/politique-de-confidentialite/` | Politique publique — la liste des événements y est générée depuis le catalogue.   |
 
 ## Ce qui est coupé, et pourquoi
 
@@ -87,7 +87,7 @@ Le code ne peut pas tout garantir seul. À vérifier dans le projet PostHog :
 
 ## Quand redemander le consentement
 
-`CONSENT_VERSION` dans `src/lib/analytics/consent.ts` matérialise le texte
+`CONSENT_VERSION` dans `apps/web/src/lib/analytics/consent.ts` matérialise le texte
 accepté. L'incrémenter invalide les choix précédents et repose la question :
 à faire dès qu'une finalité, un destinataire ou une catégorie de données
 change.

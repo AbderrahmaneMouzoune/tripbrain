@@ -1,0 +1,21 @@
+{
+  "cli": { "version": ">= 20.2.0", "appVersionSource": "remote" },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_WEBAPP_URL": "https://app.tripbrain.fr"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_WEBAPP_URL": "https://app.tripbrain.fr"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

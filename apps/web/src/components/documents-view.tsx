@@ -1,0 +1,1120 @@
+'use client'
+
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import type React from 'react'
+import {
+  Upload,
+  Trash2,
+  Download,
+  Search,
+  File,
+  FileText,
+  FileImage,
+  FileVideo,
+  FileAudio,
+  SortAsc,
+  SortDesc,
+  LayoutGrid,
+  LayoutList,
+  X,
+  FileArchive,
+  FileSpreadsheet,
+  Eye,
+  ArrowUpRight,
+  PlusCircle,
+  AlertCircle,
+  HelpCircle,
+  PackageOpen,
+  PackagePlus,
+  Loader2,
+} from 'lucide-react'
+import { IconFilePlus } from '@tabler/icons-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+} from '@/components/ui/drawer'
+import { useDocuments, StoredFile } from '@/hooks/use-documents'
+import { trackEvent } from '@/lib/analytics/client'
+import { documentKind, documentKindOf } from '@/lib/analytics/metrics'
+import { isNativeApp, shareFileNatively } from '@/lib/native-app'
+import {
+  SOURCE_CATEGORIES,
+  CATEGORY_COLOR_CLASSES,
+} from '@/lib/document-sources'
+import type { ExportProgress, ImportProgress } from '@/lib/document-zip'
+
+type SortField = 'name' | 'size' | 'addedAt'
+type SortOrder = 'asc' | 'desc'
+type ViewMode = 'grid' | 'list'
+
+const VIEW_MODE_STORAGE_KEY = 'tripbrain:documents-view-mode'
+
+function getSavedViewMode(): ViewMode {
+  if (typeof window === 'undefined') return 'grid'
+  const saved = localStorage.getItem(VIEW_MODE_STORAGE_KEY)
+  return saved === 'list' ? 'list' : 'grid'
+}
+
+// ---------------------------------------------------------------------------
+// DocumentSourcesDrawer
+// ---------------------------------------------------------------------------
+
+interface DocumentSourcesDrawerProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+
+function DocumentSourcesDrawer({
+  open,
+  onOpenChange,
+}: DocumentSourcesDrawerProps) {
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="max-h-[85vh]">
+        <DrawerHeader className="pb-2">
+          <DrawerTitle>Importe depuis tes apps</DrawerTitle>
+          <DrawerDescription>
+            Retrouve tes réservations en 1 clic · Plus besoin de chercher dans
+            tes emails
+          </DrawerDescription>
+        </DrawerHeader>
+
+        <div className="overflow-y-auto px-4 pb-8">
+          {SOURCE_CATEGORIES.map((category) => {
+            const colors =
+              CATEGORY_COLOR_CLASSES[category.color] ??
+              CATEGORY_COLOR_CLASSES['blue']
+            return (
+              <div key={category.label} className="mt-5">
+                {/* Category header */}
+                <div className="mb-3 flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 rounded-full ${colors.dot}`}
+                    aria-hidden
+                  />
+                  <p className="text-foreground text-xs font-semibold tracking-wider uppercase">
+                    {category.label}
+                  </p>
+                </div>
+                {/* Source cards grid */}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {category.items.map((source) => (
+                    <button
+                      key={source.name}
+                      onClick={() =>
+                        window.open(
+                          source.fallback,
+                          '_blank',
+                          'noopener,noreferrer',
+                        )
+                      }
+                      className="hover:border-primary/40 hover:bg-primary/5 group flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition-all"
+                    >
+                      <div className="flex w-full items-start justify-between gap-1">
+                        <span
+                          className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold text-white ${source.bgColor}`}
+                        >
+                          {source.letter}
+                        </span>
+                        <ArrowUpRight className="text-muted-foreground group-hover:text-primary h-3.5 w-3.5 shrink-0 transition-colors" />
+                      </div>
+                      <span className="text-foreground text-sm leading-tight font-medium">
+                        {source.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <DrawerClose className="sr-only">Fermer</DrawerClose>
+      </DrawerContent>
+    </Drawer>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// DocumentsEmptyState
+// ---------------------------------------------------------------------------
+
+interface DocumentsEmptyStateProps {
+  onAddFiles: () => void
+  isDragging: boolean
+  onDrop: (e: React.DragEvent) => void
+  onDragOver: (e: React.DragEvent) => void
+  onDragEnter: (e: React.DragEvent) => void
+  onDragLeave: (e: React.DragEvent) => void
+}
+
+function DocumentsEmptyState({
+  onAddFiles,
+  isDragging,
+  onDrop,
+  onDragOver,
+  onDragEnter,
+  onDragLeave,
+}: DocumentsEmptyStateProps) {
+  // Flatten all sources for the inline list
+  const allSources = SOURCE_CATEGORIES.flatMap((c) => c.items)
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Info banner */}
+      <div className="bg-primary/10 text-primary flex items-start gap-3 rounded-2xl px-4 py-3">
+        <HelpCircle className="mt-0.5 h-4 w-4 shrink-0" />
+        <p className="text-sm font-medium">
+          Garde tous tes documents de voyage au même endroit — billets,
+          réservations et confirmations.
+        </p>
+      </div>
+
+      {/* Primary action — upload zone */}
+      <div
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        onDragEnter={onDragEnter}
+        onDragLeave={onDragLeave}
+        onClick={onAddFiles}
+        className={`flex cursor-pointer flex-col items-center gap-4 rounded-2xl border-2 border-dashed px-6 py-10 text-center transition-all ${
+          isDragging
+            ? 'border-primary bg-primary/5'
+            : 'border-border/50 hover:border-primary/40 hover:bg-muted/30'
+        }`}
+      >
+        <div
+          className={`flex h-14 w-14 items-center justify-center rounded-2xl transition-colors ${
+            isDragging ? 'bg-primary/15' : 'bg-muted'
+          }`}
+        >
+          <Upload
+            className={`h-6 w-6 transition-colors ${
+              isDragging ? 'text-primary' : 'text-muted-foreground'
+            }`}
+          />
+        </div>
+        <div>
+          <p className="text-foreground font-medium">
+            {isDragging
+              ? 'Déposez vos fichiers ici'
+              : 'Dépose ton document ici'}
+          </p>
+          <p className="text-muted-foreground mt-1 text-xs">
+            ou clique pour parcourir · PDF, JPG, PNG — tous formats acceptés
+          </p>
+        </div>
+      </div>
+
+      {/* Secondary — app sources */}
+      {!isDragging && (
+        <>
+          <p className="text-muted-foreground text-center text-sm">
+            tu ne l&apos;as pas sous la main&nbsp;?
+          </p>
+
+          <div className="space-y-1">
+            <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-wider uppercase">
+              Retrouve-le depuis une app
+            </p>
+            {allSources.map((source) => (
+              <button
+                key={source.name}
+                onClick={() =>
+                  window.open(source.fallback, '_blank', 'noopener,noreferrer')
+                }
+                className="hover:bg-muted/60 group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors"
+              >
+                <span
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white ${source.bgColor}`}
+                >
+                  {source.letter}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="text-foreground block text-sm font-medium">
+                    {source.name}
+                  </span>
+                  <span className="text-muted-foreground block text-xs">
+                    {source.description}
+                  </span>
+                </span>
+                <ArrowUpRight className="text-muted-foreground group-hover:text-primary h-4 w-4 shrink-0 transition-colors" />
+              </button>
+            ))}
+          </div>
+
+          {/* Redirection warning */}
+          <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              Ces liens t&apos;ouvrent l&apos;app — télécharge ton document
+              là-bas, puis reviens le déposer ici.
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
+}
+
+function formatDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function getFileIcon(type: string, name: string) {
+  const ext = name.split('.').pop()?.toLowerCase() ?? ''
+
+  if (type.startsWith('image/'))
+    return <FileImage className="h-6 w-6 text-blue-500" />
+  if (type.startsWith('video/'))
+    return <FileVideo className="h-6 w-6 text-purple-500" />
+  if (type.startsWith('audio/'))
+    return <FileAudio className="h-6 w-6 text-pink-500" />
+  if (type === 'application/pdf' || ext === 'pdf')
+    return <FileText className="h-6 w-6 text-red-500" />
+  if (['xls', 'xlsx', 'csv', 'ods'].includes(ext))
+    return <FileSpreadsheet className="h-6 w-6 text-green-500" />
+  if (['doc', 'docx', 'odt', 'txt', 'md'].includes(ext))
+    return <FileText className="h-6 w-6 text-blue-400" />
+  if (['zip', 'tar', 'gz', 'rar', '7z'].includes(ext))
+    return <FileArchive className="h-6 w-6 text-yellow-500" />
+  return <File className="text-muted-foreground h-6 w-6" />
+}
+
+function getFileTypeBadge(type: string, name: string): string {
+  const ext = name.split('.').pop()?.toUpperCase() ?? 'FILE'
+  if (type.startsWith('image/')) return ext || 'IMAGE'
+  if (type.startsWith('video/')) return ext || 'VIDEO'
+  if (type.startsWith('audio/')) return ext || 'AUDIO'
+  return ext || type.split('/').pop()?.toUpperCase() || 'FILE'
+}
+
+/** Returns true for file types the browser can render natively in a new tab. */
+function isPreviewable(type: string, name: string): boolean {
+  if (
+    type.startsWith('image/') ||
+    type.startsWith('video/') ||
+    type.startsWith('audio/') ||
+    type.startsWith('text/')
+  )
+    return true
+  if (type === 'application/pdf') return true
+  const ext = name.split('.').pop()?.toLowerCase() ?? ''
+  return ['pdf', 'txt', 'md', 'csv'].includes(ext)
+}
+
+interface FileCardProps {
+  file: StoredFile
+  viewMode: ViewMode
+  onDelete: (id: string) => void
+  onDownload: (file: StoredFile) => void
+  onPreview: (file: StoredFile) => void
+  previewUrl: string | null
+}
+
+function FileCard({
+  file,
+  viewMode,
+  onDelete,
+  onDownload,
+  onPreview,
+  previewUrl,
+}: FileCardProps) {
+  const previewable = isPreviewable(file.type, file.name)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  /** Shared confirmation dialog — rendered once, used by both list & grid. */
+  const deleteDialog = (trigger: React.ReactNode) => (
+    <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Supprimer ce document ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            <span className="text-foreground font-medium">{file.name}</span>{' '}
+            sera définitivement supprimé. Cette action est irréversible.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Annuler</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={() => onDelete(file.id)}
+          >
+            Supprimer
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+
+  if (viewMode === 'list') {
+    return (
+      <div className="bg-card border-border/60 hover:border-border flex items-center gap-3 rounded-xl border px-4 py-3 transition-all">
+        <div className="shrink-0">
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={previewUrl}
+              alt={file.name}
+              className="h-10 w-10 cursor-pointer rounded-lg object-cover"
+              onClick={() => onPreview(file)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onPreview(file)
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              title="Aperçu"
+            />
+          ) : (
+            <div className="bg-muted flex h-10 w-10 items-center justify-center rounded-lg">
+              {getFileIcon(file.type, file.name)}
+            </div>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-foreground truncate text-sm font-medium">
+            {file.name}
+          </p>
+          <p className="text-muted-foreground text-xs">
+            {formatFileSize(file.size)} · {formatDate(file.addedAt)}
+          </p>
+        </div>
+        <Badge
+          variant="outline"
+          className="text-muted-foreground shrink-0 text-[10px]"
+        >
+          {getFileTypeBadge(file.type, file.name)}
+        </Badge>
+        <div className="flex shrink-0 gap-1">
+          {previewable && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => onPreview(file)}
+            >
+              <Eye className="h-3.5 w-3.5" />
+              <span className="sr-only">Aperçu {file.name}</span>
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => onDownload(file)}
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span className="sr-only">Télécharger {file.name}</span>
+          </Button>
+          {deleteDialog(
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-destructive hover:text-destructive h-8 w-8"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="sr-only">Supprimer {file.name}</span>
+            </Button>,
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-card border-border/60 hover:border-border group relative flex flex-col overflow-hidden rounded-xl border transition-all hover:shadow-sm">
+      {/* Thumbnail / Icon area */}
+      <div
+        className={`bg-muted/40 relative flex h-32 items-center justify-center overflow-hidden ${previewable ? 'cursor-pointer' : ''}`}
+        onClick={previewable ? () => onPreview(file) : undefined}
+        onKeyDown={
+          previewable
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onPreview(file)
+                }
+              }
+            : undefined
+        }
+        role={previewable ? 'button' : undefined}
+        tabIndex={previewable ? 0 : undefined}
+        title={previewable ? 'Cliquer pour prévisualiser' : undefined}
+      >
+        {previewUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={previewUrl}
+            alt={file.name}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-2">
+            {getFileIcon(file.type, file.name)}
+          </div>
+        )}
+        {/* Action overlay */}
+        <div
+          className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 opacity-0 transition-opacity group-hover:opacity-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {previewable && (
+            <Button
+              variant="secondary"
+              size="icon"
+              className="h-8 w-8 shadow-sm"
+              onClick={() => onPreview(file)}
+            >
+              <Eye className="h-3.5 w-3.5" />
+              <span className="sr-only">Aperçu {file.name}</span>
+            </Button>
+          )}
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-8 w-8 shadow-sm"
+            onClick={() => onDownload(file)}
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span className="sr-only">Télécharger {file.name}</span>
+          </Button>
+          {deleteDialog(
+            <Button
+              variant="destructive"
+              size="icon"
+              className="h-8 w-8 shadow-sm"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span className="sr-only">Supprimer {file.name}</span>
+            </Button>,
+          )}
+        </div>
+        {/* Type badge */}
+        <Badge
+          variant="secondary"
+          className="absolute right-2 bottom-2 font-mono text-[10px]"
+        >
+          {getFileTypeBadge(file.type, file.name)}
+        </Badge>
+      </div>
+
+      {/* File info */}
+      <div className="flex flex-col gap-0.5 p-3">
+        <p
+          className="text-foreground truncate text-sm font-medium"
+          title={file.name}
+        >
+          {file.name}
+        </p>
+        <p className="text-muted-foreground text-xs">
+          {formatFileSize(file.size)} · {formatDate(file.addedAt)}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+export function DocumentsView() {
+  const {
+    files,
+    loading,
+    addFiles,
+    deleteFile,
+    downloadFile,
+    exportAll,
+    importZip,
+  } = useDocuments()
+  const [isDragging, setIsDragging] = useState(false)
+  const [search, setSearch] = useState('')
+  const [sortField, setSortField] = useState<SortField>('addedAt')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
+  const [viewMode, setViewMode] = useState<ViewMode>(getSavedViewMode)
+  const changeViewMode = (mode: ViewMode) => {
+    setViewMode(mode)
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode)
+  }
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [sourcesOpen, setSourcesOpen] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const importZipInputRef = useRef<HTMLInputElement>(null)
+  const dragCounterRef = useRef(0)
+  // Track blob URLs opened for preview so we can revoke on unmount
+  const openedPreviewUrlsRef = useRef<Set<string>>(new Set())
+
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(
+    null,
+  )
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(
+    null,
+  )
+  const [importError, setImportError] = useState<string | null>(null)
+
+  /** Duration (ms) to display success/error feedback before clearing it. */
+  const FEEDBACK_DISPLAY_DURATION = 3000
+
+  // Revoke all preview-tab blob URLs on unmount
+  useEffect(() => {
+    const set = openedPreviewUrlsRef.current
+    return () => {
+      for (const url of set) URL.revokeObjectURL(url)
+    }
+  }, [])
+
+  const openPreview = useCallback((file: StoredFile) => {
+    trackEvent('document_opened', { kind: documentKind(file.type) })
+    if (isNativeApp()) {
+      void shareFileNatively(file.blob, file.name)
+      return
+    }
+    const url = URL.createObjectURL(file.blob)
+    openedPreviewUrlsRef.current.add(url)
+    window.open(url, '_blank', 'noopener')
+  }, [])
+
+  /**
+   * Seuls le nombre de fichiers et leur famille sont mesurés : ni le nom, ni le
+   * poids, ni le contenu ne quittent l'appareil.
+   */
+  const trackAddedFiles = useCallback((added: File[]) => {
+    trackEvent('document_added', {
+      count: added.length,
+      kind: documentKindOf(added.map((file) => file.type)),
+    })
+  }, [])
+
+  const handleDownload = useCallback(
+    (file: StoredFile) => {
+      trackEvent('document_downloaded', { kind: documentKind(file.type) })
+      downloadFile(file)
+    },
+    [downloadFile],
+  )
+
+  // Generate preview URLs for image files
+  useEffect(() => {
+    const newUrls: Record<string, string> = {}
+    for (const file of files) {
+      if (file.type.startsWith('image/')) {
+        newUrls[file.id] = URL.createObjectURL(file.blob)
+      }
+    }
+    setPreviewUrls((prev) => {
+      // Revoke old URLs that are no longer needed
+      for (const [id, url] of Object.entries(prev)) {
+        if (!newUrls[id]) URL.revokeObjectURL(url)
+      }
+      return newUrls
+    })
+    return () => {
+      for (const url of Object.values(newUrls)) {
+        URL.revokeObjectURL(url)
+      }
+    }
+  }, [files])
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault()
+      dragCounterRef.current = 0
+      setIsDragging(false)
+      const droppedFiles = Array.from(e.dataTransfer.files)
+      if (droppedFiles.length > 0) {
+        await addFiles(droppedFiles)
+        trackAddedFiles(droppedFiles)
+      }
+    },
+    [addFiles, trackAddedFiles],
+  )
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+  }
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current++
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) setIsDragging(false)
+  }
+
+  const handleFileInput = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const selected = Array.from(e.target.files ?? [])
+      if (selected.length > 0) {
+        await addFiles(selected)
+        trackAddedFiles(selected)
+      }
+      // Reset input to allow re-uploading the same file
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    },
+    [addFiles, trackAddedFiles],
+  )
+
+  const handleDelete = useCallback(
+    async (id: string) => {
+      setDeletingId(id)
+      await deleteFile(id)
+      setDeletingId(null)
+      trackEvent('document_deleted')
+    },
+    [deleteFile],
+  )
+
+  const handleExportAll = useCallback(async () => {
+    setExportProgress({
+      status: 'preparing',
+      message: 'Préparation des documents…',
+    })
+    try {
+      await exportAll((p) => setExportProgress(p))
+      trackEvent('document_downloaded', { kind: 'archive' })
+    } finally {
+      setTimeout(() => setExportProgress(null), FEEDBACK_DISPLAY_DURATION)
+    }
+  }, [exportAll, FEEDBACK_DISPLAY_DURATION])
+
+  const handleImportZipInput = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const zipFile = e.target.files?.[0]
+      if (!zipFile) return
+      if (importZipInputRef.current) importZipInputRef.current.value = ''
+
+      setImportError(null)
+      setImportProgress({
+        status: 'importing',
+        current: 0,
+        total: 0,
+        message: 'Import en cours…',
+      })
+      try {
+        await importZip(zipFile, (p) => setImportProgress(p))
+        setTimeout(() => setImportProgress(null), FEEDBACK_DISPLAY_DURATION)
+      } catch (err) {
+        const msg =
+          err instanceof Error ? err.message : "Erreur lors de l'import"
+        setImportError(msg)
+        setImportProgress(null)
+        setTimeout(() => setImportError(null), FEEDBACK_DISPLAY_DURATION * 2)
+      }
+    },
+    [importZip, FEEDBACK_DISPLAY_DURATION],
+  )
+
+  const filteredAndSorted = files
+    .filter((f) => f.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      let cmp = 0
+      if (sortField === 'name') cmp = a.name.localeCompare(b.name)
+      else if (sortField === 'size') cmp = a.size - b.size
+      else cmp = a.addedAt - b.addedAt
+      return sortOrder === 'asc' ? cmp : -cmp
+    })
+
+  // Une recherche est mesurée par son résultat, jamais par son contenu : le
+  // terme saisi peut nommer un hôtel ou un compagnon de voyage.
+  const resultCount = filteredAndSorted.length
+  useEffect(() => {
+    const term = search.trim()
+    if (!term) return
+
+    const timer = setTimeout(() => {
+      trackEvent('documents_searched', { has_results: resultCount > 0 })
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [search, resultCount])
+
+  const totalSize = useMemo(
+    () => files.reduce((acc, f) => acc + f.size, 0),
+    [files],
+  )
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Hidden file input — always mounted so the ref is stable */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="sr-only"
+        onChange={handleFileInput}
+        aria-label="Ajouter des fichiers"
+      />
+
+      <DocumentSourcesDrawer open={sourcesOpen} onOpenChange={setSourcesOpen} />
+
+      {/* Export / Import actions */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={
+              files.length === 0 || exportProgress?.status === 'preparing'
+            }
+            onClick={handleExportAll}
+          >
+            {exportProgress?.status === 'preparing' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <PackageOpen className="h-4 w-4" />
+            )}
+            Exporter tous mes documents
+          </Button>
+          {exportProgress?.status === 'done' && (
+            <span className="text-xs font-medium text-green-600 dark:text-green-400">
+              ✓ Export terminé
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            disabled={importProgress?.status === 'importing'}
+            onClick={() => importZipInputRef.current?.click()}
+          >
+            {importProgress?.status === 'importing' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <PackagePlus className="h-4 w-4" />
+            )}
+            Importer des documents
+          </Button>
+          {importProgress?.status === 'done' && (
+            <span className="text-xs font-medium text-green-600 dark:text-green-400">
+              ✓ Import terminé
+            </span>
+          )}
+          {importProgress?.status === 'importing' && importProgress.message && (
+            <span className="text-muted-foreground text-xs">
+              {importProgress.message}
+            </span>
+          )}
+        </div>
+
+        <input
+          ref={importZipInputRef}
+          type="file"
+          accept=".zip,application/zip"
+          className="sr-only"
+          onChange={handleImportZipInput}
+          aria-label="Importer un fichier ZIP"
+        />
+
+        {/* Error feedback */}
+        {importError && (
+          <p className="text-destructive text-sm">{importError}</p>
+        )}
+
+        {/* Size warning */}
+        {files.length > 0 && totalSize > 50 * 1024 * 1024 && (
+          <p className="text-muted-foreground text-xs">
+            ⚠️ Le fichier peut être volumineux à partager
+          </p>
+        )}
+      </div>
+
+      {/* ----------------------------------------------------------------- */}
+      {/* Loading */}
+      {/* ----------------------------------------------------------------- */}
+      {loading ? (
+        <div className="flex flex-col items-center gap-3 py-16">
+          <div className="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
+          <p className="text-muted-foreground text-sm">Chargement…</p>
+        </div>
+      ) : files.length === 0 ? (
+        /* ---------------------------------------------------------------- */
+        /* Unified empty state                                               */
+        /* ---------------------------------------------------------------- */
+        <DocumentsEmptyState
+          onAddFiles={() => fileInputRef.current?.click()}
+          isDragging={isDragging}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+        />
+      ) : (
+        /* ---------------------------------------------------------------- */
+        /* Has documents                                                      */
+        /* ---------------------------------------------------------------- */
+        <>
+          {/* Compact import link */}
+          <button
+            onClick={() => setSourcesOpen(true)}
+            className="text-primary hover:text-primary/80 flex items-center gap-1.5 self-start text-sm font-medium transition-colors"
+          >
+            Aller chercher sur mes apps
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </button>
+
+          {/* Stats + toolbar */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Stats */}
+            <div className="flex items-center gap-3">
+              <span className="text-muted-foreground text-sm">
+                <span className="text-foreground font-semibold">
+                  {files.length}
+                </span>{' '}
+                fichier{files.length > 1 ? 's' : ''}
+              </span>
+              <span className="text-border">·</span>
+              <span className="text-muted-foreground text-sm">
+                {formatFileSize(totalSize)} utilisé
+                {totalSize !== 1 ? 's' : ''}
+              </span>
+            </div>
+
+            {/* Toolbar */}
+            <div className="flex items-center gap-2">
+              {/* Search */}
+              <div className="relative">
+                <Search className="text-muted-foreground absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Rechercher…"
+                  className="h-8 w-40 pl-8 text-sm sm:w-52"
+                />
+                {search && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute top-1/2 right-1 h-6 w-6 -translate-y-1/2"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSearch('')
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                    <span className="sr-only">Effacer la recherche</span>
+                  </Button>
+                )}
+              </div>
+
+              {/* Sort */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 gap-1.5">
+                    {sortOrder === 'asc' ? (
+                      <SortAsc className="h-3.5 w-3.5" />
+                    ) : (
+                      <SortDesc className="h-3.5 w-3.5" />
+                    )}
+                    <span className="hidden text-xs sm:inline">Trier</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSortField('addedAt')
+                      setSortOrder('desc')
+                    }}
+                  >
+                    Plus récent
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSortField('addedAt')
+                      setSortOrder('asc')
+                    }}
+                  >
+                    Plus ancien
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSortField('name')
+                      setSortOrder('asc')
+                    }}
+                  >
+                    Nom (A → Z)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSortField('name')
+                      setSortOrder('desc')
+                    }}
+                  >
+                    Nom (Z → A)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSortField('size')
+                      setSortOrder('desc')
+                    }}
+                  >
+                    Taille (grand → petit)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSortField('size')
+                      setSortOrder('asc')
+                    }}
+                  >
+                    Taille (petit → grand)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* View mode toggle */}
+              <div className="border-border/60 flex overflow-hidden rounded-lg border">
+                <Button
+                  variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                  size="icon"
+                  className="h-8 w-8 rounded-none"
+                  onClick={() => changeViewMode('grid')}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span className="sr-only">Vue grille</span>
+                </Button>
+                <Button
+                  variant={viewMode === 'list' ? 'default' : 'ghost'}
+                  size="icon"
+                  className="h-8 w-8 rounded-none border-l"
+                  onClick={() => changeViewMode('list')}
+                >
+                  <LayoutList className="h-3.5 w-3.5" />
+                  <span className="sr-only">Vue liste</span>
+                </Button>
+              </div>
+
+              {/* Add document */}
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <IconFilePlus className="h-4 w-4" />
+                <span className="sr-only">Ajouter des documents</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* File list */}
+          {/* ---------------------------------------------------------------- */}
+          {/* Add more documents button                                         */}
+          {/* ---------------------------------------------------------------- */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed py-4 text-sm font-medium transition-all ${
+              isDragging
+                ? 'border-primary bg-primary/5 text-primary'
+                : 'border-border/50 text-muted-foreground hover:border-primary/50 hover:bg-primary/5 hover:text-primary'
+            }`}
+          >
+            <PlusCircle className="h-4 w-4" />
+            {isDragging
+              ? 'Déposez vos fichiers ici'
+              : "Ajouter d'autres documents"}
+          </button>
+
+          {/* File list */}
+          {filteredAndSorted.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-12">
+              <Search
+                className="text-muted-foreground h-8 w-8"
+                strokeWidth={1.5}
+              />
+              <p className="text-muted-foreground text-sm">
+                Aucun fichier ne correspond à &ldquo;{search}&rdquo;
+              </p>
+              <Button variant="ghost" size="sm" onClick={() => setSearch('')}>
+                Effacer la recherche
+              </Button>
+            </div>
+          ) : viewMode === 'grid' ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+              {filteredAndSorted.map((file) => (
+                <div
+                  key={file.id}
+                  className={`transition-opacity ${deletingId === file.id ? 'opacity-40' : ''}`}
+                >
+                  <FileCard
+                    file={file}
+                    viewMode="grid"
+                    onDelete={handleDelete}
+                    onDownload={handleDownload}
+                    onPreview={openPreview}
+                    previewUrl={previewUrls[file.id] ?? null}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {filteredAndSorted.map((file) => (
+                <div
+                  key={file.id}
+                  className={`transition-opacity ${deletingId === file.id ? 'opacity-40' : ''}`}
+                >
+                  <FileCard
+                    file={file}
+                    viewMode="list"
+                    onDelete={handleDelete}
+                    onDownload={handleDownload}
+                    onPreview={openPreview}
+                    previewUrl={previewUrls[file.id] ?? null}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}

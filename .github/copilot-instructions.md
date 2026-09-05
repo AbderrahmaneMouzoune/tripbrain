@@ -4,6 +4,14 @@
 
 TripBrain is a **local-first Next.js 16 PWA** — a personal travel companion that displays a day-by-day itinerary with a roadbook, interactive map, documents, and offline support. All data lives in IndexedDB; the only server-side code is the sharing API (`src/app/api/share/`), which parks a compressed itinerary in an S3/R2 bucket under a short sync code.
 
+## Repository Layout
+
+- `apps/web` — the Next.js webapp described in this document. **All paths below are relative to `apps/web`** (e.g. `src/lib/share.ts` means `apps/web/src/lib/share.ts`). Run `bun` commands from this directory.
+- `apps/mobile` — the Expo (React Native) iOS/Android app: a full-screen WebView on the webapp plus a small native bridge (system share sheet, file exports, universal links). See `apps/mobile/README.md`. Its own checks: `bun run typecheck`, `bun run lint`, `bun run test`.
+- `docs/` — product and compliance notes.
+
+The two apps are independent (own `package.json`, own `bun.lock`, no workspaces). They only share the bridge protocol: `apps/mobile/lib/bridge-protocol.ts` and `apps/web/src/lib/native-app.ts` must stay in sync.
+
 ## Tech Stack
 
 - **Runtime**: Bun (not npm)
@@ -19,6 +27,7 @@ TripBrain is a **local-first Next.js 16 PWA** — a personal travel companion th
 ## Build, Test, Lint
 
 ```bash
+cd apps/web
 bun install            # install dependencies (CI uses bun, not npm)
 bun run dev            # start Next.js dev server
 bun run build          # production build
@@ -40,6 +49,7 @@ bun run test:watch     # vitest in watch mode
 6. A separate IndexedDB database (`tripbrain-images`) caches images for offline use, managed by `useImageCache` hook.
 7. Documents (PDFs, tickets, etc.) are stored in a third IndexedDB database (`tripbrain-documents`), managed by `useDocuments` hook.
 8. **Sharing** (`src/lib/share.ts`) compresses the itinerary to msgpack + deflate + base64url. Under `SHARE_INLINE_LIMIT` chars the whole trip fits in a self-contained QR code (`/?import=<payload>`) and never leaves the device. Above it — or whenever a code to read out loud is asked for — the payload is POSTed to `/api/share`, which stores it as a bucketcode snapshot under an eight-digit code (digits only, so phones show the numeric keypad) and returns it; the receiving device resolves it through `GET /api/share/[code]` (`/?code=<code>` opens the app straight onto it). Bucket credentials stay on the server: see `.env.example` for the required `R2_*` variables.
+9. **Native app** (`src/lib/native-app.ts`): when the page runs inside the mobile WebView (`window.TripBrainNative` injected, user-agent suffix `TripBrainApp/<version>`), file downloads and the system share sheet go through a `postMessage` bridge. Every download in the webapp must go through `saveFile()` (`src/lib/save-file.ts`), never a hand-rolled `<a download>` — it does nothing in a WebView.
 
 ### Single-page structure
 
