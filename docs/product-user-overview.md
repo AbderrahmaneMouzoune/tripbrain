@@ -5,6 +5,7 @@
 C'est un compagnon de voyage personnel.
 
 En pratique, c'est un endroit unique ou tu retrouves tout ce qui compte pour un voyage donne :
+
 - ton programme jour par jour
 - les lieux a voir
 - les trajets
@@ -17,6 +18,7 @@ L'idee est simple : au lieu d'avoir ton voyage eparpille entre notes, mails, cap
 ## 2. C'est pour qui ?
 
 Ce produit est surtout fait pour :
+
 - les voyageurs qui preparent un itineraire a l'avance
 - les couples ou petits groupes qui veulent partager le plan du voyage
 - les personnes qui veulent garder leurs reservations et infos pratiques sous la main
@@ -27,6 +29,7 @@ Ca convient particulierement bien si tu aimes voyager de facon organisee, sans p
 ## 3. Quel probleme ca resout ?
 
 Quand tu voyages, les infos importantes sont souvent dispersees :
+
 - billets dans un mail
 - reservation d'hotel dans une autre app
 - adresses dans Google Maps
@@ -43,6 +46,7 @@ Ce produit resout ca en transformant ton voyage en guide personnel clair et cons
 ### Avant le voyage
 
 Tu t'en sers pour preparer :
+
 - ton itineraire jour par jour
 - tes etapes
 - tes logements
@@ -56,6 +60,7 @@ Tu peux aussi partager le voyage avec quelqu'un et ajouter les dates a ton calen
 C'est la qu'il devient vraiment utile.
 
 Tu ouvres l'app pour :
+
 - voir ce que tu fais aujourd'hui
 - retrouver l'adresse ou le lieu suivant
 - verifier ton transport
@@ -66,6 +71,7 @@ Tu ouvres l'app pour :
 ### Apres le voyage
 
 Tu peux aussi t'en servir comme archive :
+
 - garder le fil du voyage
 - retrouver les hotels, lieux, documents, photos utiles
 - conserver une trace claire de ce que tu as fait
@@ -75,6 +81,7 @@ Tu peux aussi t'en servir comme archive :
 Parce qu'en voyage, tu n'as pas envie de reflechir plus que necessaire.
 
 Ce type d'outil est utile pour des situations tres concretes :
+
 - a la sortie d'un train, tu veux savoir ou aller ensuite
 - devant un taxi, tu dois retrouver vite l'adresse de l'hotel
 - dans une file d'attente, tu veux verifier le programme du jour
@@ -89,6 +96,7 @@ Bref, ca reduit la charge mentale du voyage.
 ### Itineraire jour par jour
 
 Tu vois ton voyage decoupe par journees, avec pour chaque jour :
+
 - la ville
 - le theme ou l'etape du jour
 - les points importants
@@ -103,6 +111,7 @@ Tu comprends immediatement ou tu en es dans le voyage.
 
 C'est la vue la plus utile sur place.
 Elle te montre la journee comme un mini guide personnel :
+
 - ce qu'il y a a faire
 - ce qu'il ne faut pas oublier
 - les temps de marche
@@ -113,6 +122,7 @@ Elle te montre la journee comme un mini guide personnel :
 
 Un bouton crayon en haut de l'ecran fait passer le roadbook en mode edition.
 Tu peux alors corriger ce qui a change sans repasser par un import :
+
 - les infos de la journee (titre, ville, date, note, points forts, conseils, bagages, plats a gouter)
 - les activites : en ajouter, les modifier, les reordonner ou les supprimer
 - le transport et l'hebergement du jour : les completer, les creer s'ils manquent, ou les retirer
@@ -133,6 +143,7 @@ l'hebergement, ou sur une ligne des listes (points forts, a gouter, bagages, con
 un panneau s'ouvre en bas de l'ecran avec ce qu'on peut en faire.
 
 Selon l'element, on y trouve :
+
 - le modifier, ou completer ce qui manque a la journee (activite, transport, hebergement)
 - dire ou on en est d'une activite : faite, annulee, a refaire
 - la monter ou la descendre dans le programme
@@ -151,6 +162,7 @@ Une astuce le rappelle la premiere fois, puis disparait des que le geste a servi
 
 Tu peux visualiser ton parcours sur une carte.
 Ca aide a :
+
 - te reperer
 - voir l'enchainement des etapes
 - comprendre le trajet global du voyage
@@ -159,6 +171,7 @@ Ca aide a :
 ### Espace documents
 
 Tu peux garder avec toi tes fichiers importants :
+
 - billets
 - reservations
 - confirmations
@@ -172,6 +185,7 @@ L'interet, c'est de tout avoir regroupe dans le meme espace que ton itineraire.
 
 Tes documents ne sont pas juste stockes.
 Tu peux les retrouver plus facilement grace a :
+
 - la recherche
 - le tri
 - l'apercu
@@ -180,6 +194,7 @@ Tu peux les retrouver plus facilement grace a :
 ### Partage simple
 
 Tu peux partager ton voyage :
+
 - avec un QR code a scanner
 - avec un code court a recopier, du type K7QP-2M4X
 - avec un lien
@@ -192,6 +207,24 @@ En face, l'autre appareil scanne le QR code ou saisit le code, verifie le voyage
 l'enregistre.
 
 Pratique pour envoyer ton itineraire a la personne qui voyage avec toi, ou a des proches.
+
+### Partage des documents
+
+Tes documents se partagent de la meme facon, avec un code, un QR code ou un lien.
+
+La difference, c'est que tu choisis quoi envoyer : la fenetre de partage liste tes
+documents avec leur poids, tu coches ceux qui doivent partir, et rien d'autre ne quitte
+l'appareil. Le total est affiche au fur et a mesure, et une selection trop lourde te le dit
+avant l'envoi — il suffit alors d'en decocher, ou de passer par l'export ZIP.
+
+Un meme champ sert a tout recevoir : tu saisis le code, TripBrain reconnait ce qu'il porte
+— un voyage ou des documents — et te montre ce qui va etre enregistre avant de le faire.
+
+Les documents recus s'ajoutent aux tiens : rien n'est remplace, et un nom deja pris est
+simplement numerote.
+
+Pratique pour envoyer les billets a la personne qui voyage avec toi, ou recuperer sur ton
+telephone la reservation telechargee sur ton ordinateur.
 
 ### Export calendrier
 
@@ -208,6 +241,7 @@ Tu gardes l'acces aux infos utiles meme quand la connexion n'est pas bonne ou ab
 Ce qui le distingue, c'est qu'il ne cherche pas a etre une app de reservation ou un guide touristique generique.
 
 Sa difference, c'est plutot ca :
+
 - il est centre sur ton voyage reel, pas sur l'inspiration
 - il rassemble planning, carte, documents et infos pratiques au meme endroit
 - il est pense pour etre consulte rapidement en situation reelle

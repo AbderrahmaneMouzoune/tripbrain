@@ -281,6 +281,9 @@ function HomePageContent() {
     setActiveTab(view)
   }
 
+  /** Des documents viennent d'arriver par un code : on les montre. */
+  const showImportedDocuments = () => openTab('documents', 'tabs')
+
   if (isLoading) {
     return (
       <div className="bg-background flex min-h-screen items-center justify-center">
@@ -302,6 +305,7 @@ function HomePageContent() {
       source={sharedSource}
       hasExistingData={hasData}
       onImport={importSharedItinerary}
+      onDocumentsImported={showImportedDocuments}
     />
   ) : null
 
@@ -405,6 +409,7 @@ function HomePageContent() {
                     selectedDay={selectedDay}
                     onClear={clearData}
                     onImportShared={importSharedItinerary}
+                    onDocumentsImported={showImportedDocuments}
                   />
                 </div>
               </div>
@@ -516,7 +521,10 @@ function HomePageContent() {
                 />
               </div>
             ) : (
-              <DocumentsView />
+              <DocumentsView
+                onImportShared={importSharedItinerary}
+                hasTrip={hasData}
+              />
             )}
           </div>
 

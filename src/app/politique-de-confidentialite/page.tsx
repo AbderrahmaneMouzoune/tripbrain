@@ -119,12 +119,19 @@ export default function PrivacyPolicyPage() {
           stockage sous un code à huit caractères, puis effacé automatiquement
           au bout d’une heure.
         </p>
+        <p>
+          Tes documents peuvent eux aussi être partagés par un code, et
+          seulement de cette façon : tu ouvres « Partager des documents », tu
+          coches un par un ceux que tu veux envoyer, et rien d’autre ne part.
+          Ils suivent exactement le même chemin que l’itinéraire — dépôt sous un
+          code, effacement au bout d’une heure.
+        </p>
         <LegalDefinitionList
           items={[
             {
               term: 'Ce qui est déposé',
               description:
-                'L’itinéraire que tu as choisi de partager, compressé. Tes documents et tes photos ne sont jamais envoyés.',
+                'L’itinéraire que tu as choisi de partager, compressé — ou, pour un partage de documents, uniquement les fichiers que tu as cochés. Rien n’est envoyé sans cette demande explicite : ni tes autres documents, ni le cache de tes photos.',
             },
             {
               term: 'Combien de temps',
@@ -145,7 +152,8 @@ export default function PrivacyPolicyPage() {
         />
         <p>
           Un code de partage est un jeton au porteur : qui l’a peut lire le
-          voyage. Ne le diffuse qu’aux personnes concernées.
+          voyage, ou récupérer les documents déposés avec lui. Ne le diffuse
+          qu’aux personnes concernées.
         </p>
       </LegalSection>
 

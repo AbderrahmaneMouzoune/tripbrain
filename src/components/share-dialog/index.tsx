@@ -14,6 +14,7 @@ import { SHARE_CODE_LENGTH } from '@/lib/share'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { ActionRow } from '@/components/share-dialog/action-row'
 import { ShareExportDialog } from '@/components/share-dialog/share-export-dialog'
+import { DocumentsShareDialog } from '@/components/share-dialog/documents-share-dialog'
 import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog'
 import { ResetConfirmDialog } from '@/components/share-dialog/reset-confirm-dialog'
 import {
@@ -21,6 +22,7 @@ import {
   IconCalendarWeek,
   IconDeviceMobile,
   IconDownload,
+  IconFiles,
   IconKey,
   IconQrcode,
   IconShare2,
@@ -38,6 +40,8 @@ interface ShareDialogProps {
   onClear: () => Promise<void>
   /** Enregistre un itinéraire reçu via un code de partage. */
   onImportShared: (itinerary: DayItinerary[]) => Promise<void>
+  /** Des documents reçus viennent d'être enregistrés sur cet appareil. */
+  onDocumentsImported?: (count: number) => void
 }
 
 /** Intitulé de section : repère visuel, sans peser dans la hiérarchie. */
@@ -55,9 +59,11 @@ export function ShareDialog({
   trigger,
   onClear,
   onImportShared,
+  onDocumentsImported,
 }: ShareDialogProps) {
   const [open, setOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [documentsOpen, setDocumentsOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
 
   const handleClear = async () => {
@@ -92,8 +98,8 @@ export function ShareDialog({
           <DialogHeader className="px-4 pt-5 pb-3 text-left sm:px-6 sm:pt-6">
             <DialogTitle className="pr-8">Partager &amp; données</DialogTitle>
             <DialogDescription>
-              Envoyez votre voyage sur un autre appareil, ajoutez-le à votre
-              agenda ou effacez-le.
+              Envoyez votre voyage ou vos documents sur un autre appareil,
+              ajoutez-le à votre agenda ou effacez-le.
             </DialogDescription>
           </DialogHeader>
 
@@ -122,10 +128,21 @@ export function ShareDialog({
               />
 
               <ActionRow
+                icon={IconFiles}
+                tone="primary"
+                label="Partager des documents"
+                description="Choisir les billets et réservations à envoyer, puis générer un code"
+                onClick={() => {
+                  setOpen(false)
+                  setDocumentsOpen(true)
+                }}
+              />
+
+              <ActionRow
                 icon={IconKey}
                 tone="secondary"
                 label="Recevoir un partage"
-                description={`Saisir les ${SHARE_CODE_LENGTH} chiffres affichés sur l’autre appareil`}
+                description={`Saisir les ${SHARE_CODE_LENGTH} chiffres affichés sur l’autre appareil — itinéraire ou documents`}
                 onClick={() => {
                   setOpen(false)
                   setImportOpen(true)
@@ -197,12 +214,19 @@ export function ShareDialog({
         onNavBack={() => setOpen(true)}
       />
 
+      <DocumentsShareDialog
+        open={documentsOpen}
+        onOpenChange={setDocumentsOpen}
+        onNavBack={() => setOpen(true)}
+      />
+
       <ImportShareDialog
         open={importOpen}
         onOpenChange={setImportOpen}
         source={PROMPT_SOURCE}
         hasExistingData
         onImport={onImportShared}
+        onDocumentsImported={onDocumentsImported}
         onNavBack={() => setOpen(true)}
       />
     </>

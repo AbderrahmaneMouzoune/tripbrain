@@ -3,7 +3,11 @@
 // qu'à /api/share, il n'y a donc ni CORS à configurer ni signature côté client.
 
 import { createBucket, syncCodeAlphabets, type Bucket } from 'bucketcode'
-import { SHARE_CODE_LENGTH } from '@/lib/share'
+import {
+  SHARE_CODE_LENGTH,
+  SHARE_MAX_PAYLOAD_CHARS,
+  type ShareKind,
+} from '@/lib/share'
 
 /** Nom d'application inscrit dans l'enveloppe du snapshot. */
 export const SHARE_APP = 'tripbrain'
@@ -12,18 +16,28 @@ export const SHARE_APP = 'tripbrain'
  * Version du format de `data` stocké dans le snapshot. À incrémenter quand la
  * forme du payload change : une build plus ancienne refusera alors le snapshot
  * au lieu de le lire de travers.
+ *
+ * Version 2 : le snapshot dit ce qu'il transporte (`kind`), l'itinéraire n'étant
+ * plus la seule possibilité. Un serveur en version 1 refuse donc ces snapshots
+ * plutôt que de servir des documents à un client qui attend un itinéraire.
  */
-export const SHARE_SCHEMA_VERSION = 1
+export const SHARE_SCHEMA_VERSION = 2
 
 /** Durée de vie d'un code : le temps de passer d'un appareil à l'autre. */
 export const SHARE_EXPIRES_IN = 60 * 60
 
-/** Taille maximale du payload compressé (base64url) accepté par l'API. */
-export const SHARE_MAX_PAYLOAD_CHARS = 2 * 1024 * 1024
+/** Plafond du bucket : le plus permissif des plafonds par nature de partage. */
+export const SHARE_MAX_SNAPSHOT_CHARS = Math.max(
+  ...Object.values(SHARE_MAX_PAYLOAD_CHARS),
+)
 
-/** Ce que contient le snapshot : l'itinéraire compressé, tel qu'envoyé par le client. */
+/**
+ * Ce que contient le snapshot : le payload compressé tel qu'envoyé par le
+ * client, et sa nature. Le serveur ne le décode jamais.
+ */
 export interface SharedSnapshotData {
   payload: string
+  kind?: ShareKind
 }
 
 function requireEnv(name: string): string {
@@ -60,7 +74,7 @@ export function getShareStore(): Bucket {
         alphabet: syncCodeAlphabets.digits,
         length: SHARE_CODE_LENGTH,
       },
-      maxSize: SHARE_MAX_PAYLOAD_CHARS,
+      maxSize: SHARE_MAX_SNAPSHOT_CHARS,
     })
   }
   return store

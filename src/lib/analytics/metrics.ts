@@ -69,7 +69,9 @@ export function shareFailureReason(
 ): 'too_large' | 'network_error' | 'unavailable' | 'unknown' {
   const message = error instanceof Error ? error.message.toLowerCase() : ''
   if (!message) return 'unknown'
-  if (message.includes('volumineux')) return 'too_large'
+  // « trop volumineux » pour un itinéraire, « trop volumineuse » pour une
+  // sélection de documents : la racine couvre les deux.
+  if (message.includes('volumineu')) return 'too_large'
   if (
     message.includes('network') ||
     message.includes('failed to fetch') ||
@@ -108,7 +110,11 @@ export function shareImportFailureReason(
   ) {
     return 'network_error'
   }
-  if (message.includes('illisible') || message.includes('journée')) {
+  if (
+    message.includes('illisible') ||
+    message.includes('journée') ||
+    message.includes('aucun document')
+  ) {
     return 'invalid_payload'
   }
   return 'unknown'

@@ -4,13 +4,15 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   exportDocumentsAsZip,
   parseDocumentsZip,
-  uniqueFileName,
   type ExportProgress,
   type ImportProgress,
 } from '@/lib/document-zip'
 import {
   DOCUMENTS_STORE as STORE_NAME,
+  notifyDocumentsChanged,
   openDocumentsDB as openDB,
+  saveDocuments,
+  subscribeToDocuments,
   type StoredFile,
 } from '@/lib/documents-db'
 
@@ -48,6 +50,12 @@ export function useDocuments() {
 
   useEffect(() => {
     loadFiles()
+    // Les documents peuvent aussi arriver par un code de partage, depuis une
+    // dialog montée ailleurs : cette liste se remet à jour quelle que soit la
+    // porte d'entrée.
+    return subscribeToDocuments(() => {
+      loadFiles()
+    })
   }, [loadFiles])
 
   const addFiles = useCallback(
@@ -74,6 +82,7 @@ export function useDocuments() {
         tx.onerror = () => reject(tx.error)
       })
 
+      notifyDocumentsChanged()
       await loadFiles()
     },
     [loadFiles],
@@ -91,6 +100,7 @@ export function useDocuments() {
         tx.onerror = () => reject(tx.error)
       })
 
+      notifyDocumentsChanged()
       await loadFiles()
     },
     [loadFiles],
@@ -118,65 +128,13 @@ export function useDocuments() {
       onProgress?: (p: ImportProgress) => void,
     ): Promise<{ imported: number; failed: number }> => {
       const { documents } = await parseDocumentsZip(zipFile)
-
-      const existingNames = new Set(files.map((f) => f.name))
-      const total = documents.length
-      let imported = 0
-      let failed = 0
-
-      const db = await openDB()
-      const tx = db.transaction(STORE_NAME, 'readwrite')
-      const store = tx.objectStore(STORE_NAME)
-
-      for (let i = 0; i < documents.length; i++) {
-        const doc = documents[i]
-        onProgress?.({
-          status: 'importing',
-          current: i + 1,
-          total,
-          message: `Import en cours… (${i + 1}/${total})`,
-        })
-        try {
-          const safeName = uniqueFileName(doc.name, existingNames)
-          existingNames.add(safeName)
-
-          const storedFile: StoredFile = {
-            id: crypto.randomUUID(),
-            name: safeName,
-            size: doc.blob.size,
-            type: doc.type || 'application/octet-stream',
-            lastModified: Date.now(),
-            addedAt: Date.now(),
-            blob: doc.blob,
-          }
-
-          store.put(storedFile)
-          imported++
-        } catch {
-          failed++
-        }
-      }
-
-      await new Promise<void>((resolve, reject) => {
-        tx.oncomplete = () => resolve()
-        tx.onerror = () => reject(tx.error)
-      })
+      const result = await saveDocuments(documents, onProgress)
 
       await loadFiles()
 
-      onProgress?.({
-        status: 'done',
-        current: total,
-        total,
-        message:
-          failed === 0
-            ? 'Documents importés avec succès'
-            : `Certains documents n'ont pas pu être importés`,
-      })
-
-      return { imported, failed }
+      return result
     },
-    [files, loadFiles],
+    [loadFiles],
   )
 
   return {

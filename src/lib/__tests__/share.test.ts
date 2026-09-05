@@ -4,7 +4,7 @@ import {
   compressItinerary,
   createShareCode,
   decompressItinerary,
-  fetchSharedItinerary,
+  fetchShare,
   formatExpiresIn,
   formatShareCode,
   getInlineQrUrl,
@@ -224,6 +224,10 @@ describe('getShareCodeUrl', () => {
   it('retourne l’URL de la page de partage, celle qui porte l’Open Graph', () => {
     expect(getShareCodeUrl('48205137')).toContain('/s/48205137')
   })
+
+  it('envoie un partage de documents vers sa propre page d’atterrissage', () => {
+    expect(getShareCodeUrl('48205137', 'documents')).toContain('/d/48205137')
+  })
 })
 
 // ── Partage natif ─────────────────────────────────────────────────────────────
@@ -352,6 +356,16 @@ describe('createShareCode', () => {
     expect(JSON.parse(init.body).data).toBe(compressed)
   })
 
+  it('annonce un itinéraire par défaut, et la nature demandée sinon', async () => {
+    const fetchMock = stubFetch({ body: { code: '48205137' } })
+
+    await createShareCode('payload')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).kind).toBe('itinerary')
+
+    await createShareCode('payload', 'documents')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).kind).toBe('documents')
+  })
+
   it('retourne le code et son échéance', async () => {
     stubFetch({
       body: { code: '48205137', expiresAt: '2026-05-10T13:00:00.000Z' },
@@ -395,20 +409,48 @@ describe('createShareCode', () => {
   })
 })
 
-describe('fetchSharedItinerary', () => {
-  it('interroge /api/share/<code> et restitue l’itinéraire', async () => {
-    const itinerary = makeLargeItinerary(2)
-    const fetchMock = stubFetch({
-      body: { data: await compressItinerary(itinerary) },
-    })
+describe('fetchShare', () => {
+  it('interroge /api/share/<code> et restitue le payload', async () => {
+    const compressed = await compressItinerary(makeLargeItinerary(2))
+    const fetchMock = stubFetch({ body: { data: compressed } })
 
-    await expect(fetchSharedItinerary('4820-5137')).resolves.toEqual(itinerary)
+    const snapshot = await fetchShare('4820-5137')
+    expect(snapshot.payload).toBe(compressed)
     expect(fetchMock).toHaveBeenCalledWith('/api/share/4820-5137')
+  })
+
+  it('retient un itinéraire quand le serveur ne dit rien de la nature', async () => {
+    stubFetch({ body: { data: 'payload' } })
+    await expect(fetchShare('48205137')).resolves.toMatchObject({
+      kind: 'itinerary',
+    })
+  })
+
+  it('retient la nature annoncée par le serveur', async () => {
+    stubFetch({ body: { data: 'payload', kind: 'documents' } })
+    await expect(fetchShare('48205137')).resolves.toMatchObject({
+      kind: 'documents',
+    })
+  })
+
+  it('ignore une nature inconnue plutôt que de la propager', async () => {
+    stubFetch({ body: { data: 'payload', kind: 'photos' } })
+    await expect(fetchShare('48205137')).resolves.toMatchObject({
+      kind: 'itinerary',
+    })
+  })
+
+  it('rend l’échéance quand le serveur la fournit', async () => {
+    stubFetch({
+      body: { data: 'payload', expiresAt: '2026-05-10T13:00:00.000Z' },
+    })
+    const snapshot = await fetchShare('48205137')
+    expect(snapshot.expiresAt?.toISOString()).toBe('2026-05-10T13:00:00.000Z')
   })
 
   it('refuse un code vide sans appeler le serveur', async () => {
     const fetchMock = stubFetch({ body: {} })
-    await expect(fetchSharedItinerary('   ')).rejects.toThrow(
+    await expect(fetchShare('   ')).rejects.toThrow(
       'Saisissez un code de partage.',
     )
     expect(fetchMock).not.toHaveBeenCalled()
@@ -420,14 +462,14 @@ describe('fetchSharedItinerary', () => {
       status: 404,
       body: { error: 'Code inconnu ou expiré.' },
     })
-    await expect(fetchSharedItinerary('48205137')).rejects.toThrow(
+    await expect(fetchShare('48205137')).rejects.toThrow(
       'Code inconnu ou expiré.',
     )
   })
 
   it('rejette une réponse sans données', async () => {
     stubFetch({ body: { data: '' } })
-    await expect(fetchSharedItinerary('48205137')).rejects.toThrow(
+    await expect(fetchShare('48205137')).rejects.toThrow(
       'Le partage ne contient aucune donnée.',
     )
   })

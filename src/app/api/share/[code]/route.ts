@@ -1,9 +1,10 @@
 // Lecture d'un partage : le code saisi (ou scanné) est normalisé puis résolu en
-// itinéraire compressé. Le contenu reste opaque pour le serveur — c'est le
-// navigateur qui le décompresse.
+// payload compressé, accompagné de sa nature (itinéraire ou documents). Le
+// contenu reste opaque pour le serveur — c'est le navigateur qui le décompresse.
 
 import { isBucketCodeError, type Bucket } from 'bucketcode'
 import { createRateLimiter, getClientKey } from '@/lib/rate-limit'
+import { DEFAULT_SHARE_KIND, isShareKind } from '@/lib/share'
 import {
   SHARE_SCHEMA_VERSION,
   getShareStore,
@@ -66,6 +67,11 @@ export async function GET(
     return Response.json(
       {
         data: payload,
+        // Les snapshots écrits avant le partage de documents n'ont pas de
+        // nature : ils ne peuvent contenir qu'un itinéraire.
+        kind: isShareKind(snapshot.data?.kind)
+          ? snapshot.data.kind
+          : DEFAULT_SHARE_KIND,
         createdAt: snapshot.createdAt.toISOString(),
         expiresAt: snapshot.expiresAt?.toISOString() ?? null,
       },

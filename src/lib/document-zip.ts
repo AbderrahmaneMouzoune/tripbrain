@@ -24,6 +24,14 @@ export interface ImportProgress {
   message: string
 }
 
+/** A document as it goes into a ZIP — what both the export and the share need. */
+export interface ZippableDocument {
+  name: string
+  type: string
+  size: number
+  blob: Blob
+}
+
 /** Turn a Blob into a Uint8Array. */
 async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
   const buf = await blob.arrayBuffer()
@@ -31,15 +39,15 @@ async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
 }
 
 /**
- * Export an array of StoredFile-like objects into a downloadable ZIP.
- * Calls `onProgress` at key steps so the UI can show feedback.
+ * Pack documents into a ZIP archive, in memory.
+ *
+ * Shared by the download export and the code share (`@/lib/document-share`):
+ * both produce the exact same archive, so an archive received either way is
+ * read back by `readDocumentsZip`.
  */
-export async function exportDocumentsAsZip(
-  documents: Array<{ name: string; type: string; size: number; blob: Blob }>,
-  onProgress?: (p: ExportProgress) => void,
-): Promise<void> {
-  onProgress?.({ status: 'preparing', message: 'Préparation des documents…' })
-
+export async function buildDocumentsZip(
+  documents: ZippableDocument[],
+): Promise<Uint8Array> {
   const manifest: ZipManifest = {
     version: '1.0',
     exportedAt: new Date().toISOString(),
@@ -66,12 +74,25 @@ export async function exportDocumentsAsZip(
   }
 
   // Compress asynchronously (level 6 = balanced speed/size)
-  const zipData = await new Promise<Uint8Array>((resolve, reject) => {
+  return new Promise<Uint8Array>((resolve, reject) => {
     zip(fileMap, { level: 6 }, (err, data) => {
       if (err) reject(err)
       else resolve(data)
     })
   })
+}
+
+/**
+ * Export an array of StoredFile-like objects into a downloadable ZIP.
+ * Calls `onProgress` at key steps so the UI can show feedback.
+ */
+export async function exportDocumentsAsZip(
+  documents: ZippableDocument[],
+  onProgress?: (p: ExportProgress) => void,
+): Promise<void> {
+  onProgress?.({ status: 'preparing', message: 'Préparation des documents…' })
+
+  const zipData = await buildDocumentsZip(documents)
 
   // Trigger download
   const blob = new Blob([zipData], { type: 'application/zip' })
@@ -98,15 +119,10 @@ export interface ParsedZip {
 }
 
 /**
- * Parse a ZIP file and return the manifest + documents as Blobs.
+ * Read a documents archive from raw bytes and return the manifest + documents.
  * Throws descriptive errors on invalid input.
  */
-export async function parseDocumentsZip(file: File): Promise<ParsedZip> {
-  if (!file.name.endsWith('.zip') && file.type !== 'application/zip') {
-    throw new Error('Fichier non valide')
-  }
-
-  const data = await blobToUint8Array(file)
+export async function readDocumentsZip(data: Uint8Array): Promise<ParsedZip> {
   const entries = await new Promise<Record<string, Uint8Array>>(
     (resolve, reject) => {
       unzip(data, (err, result) => {
@@ -128,6 +144,12 @@ export async function parseDocumentsZip(file: File): Promise<ParsedZip> {
     throw new Error('Format non supporté')
   }
 
+  // The archive can come from the network (a shared code), so the manifest is
+  // checked rather than trusted: a listing that is not one stops here.
+  if (!Array.isArray(manifest?.documents)) {
+    throw new Error('Format non supporté')
+  }
+
   const documents: ParsedZipDocument[] = []
   for (const docMeta of manifest.documents) {
     const entry = entries[`documents/${docMeta.name}`]
@@ -139,6 +161,18 @@ export async function parseDocumentsZip(file: File): Promise<ParsedZip> {
   }
 
   return { documents, manifest }
+}
+
+/**
+ * Parse a ZIP file picked by the user and return the manifest + documents.
+ * Throws descriptive errors on invalid input.
+ */
+export async function parseDocumentsZip(file: File): Promise<ParsedZip> {
+  if (!file.name.endsWith('.zip') && file.type !== 'application/zip') {
+    throw new Error('Fichier non valide')
+  }
+
+  return readDocumentsZip(await blobToUint8Array(file))
 }
 
 /**

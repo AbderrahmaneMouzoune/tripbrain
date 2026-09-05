@@ -1,12 +1,12 @@
-// Page d'atterrissage d'un lien de partage : `/s/<code>`.
+// Page d'atterrissage d'un lien de partage de documents : `/d/<code>`.
 //
-// Elle existe pour deux raisons. D'abord l'aperçu : rendue par le serveur, elle
-// porte les métadonnées Open Graph qu'une messagerie affiche à la place d'une
-// URL nue. Ensuite l'ouverture : elle bascule vers `/?code=<code>`, le chemin
-// que l'application traite déjà pour proposer l'import.
+// Jumelle de `/s/<code>`, pour la même raison : l'aperçu affiché par une
+// messagerie doit annoncer ce qui a été partagé, ici des documents et non un
+// itinéraire. L'ouverture, elle, passe par le même chemin — `/?code=<code>`,
+// que l'application résout ensuite selon ce que le serveur renvoie.
 //
 // Le code n'est jamais résolu ici : ni le titre, ni l'image, ni la page ne
-// disent quoi que ce soit du voyage. Un robot d'aperçu ne voit donc rien
+// disent quoi que ce soit des documents. Un robot d'aperçu ne voit donc rien
 // d'autre que la carte générique de TripBrain.
 
 import type { Metadata } from 'next'
@@ -14,17 +14,17 @@ import { notFound } from 'next/navigation'
 import { ShareHandoff } from '@/components/share-handoff'
 import { SHARE_URL_CODE_PATTERN } from '@/lib/share'
 
-const TITLE = 'Un voyage vous a été partagé'
+const TITLE = 'Des documents vous ont été partagés'
 const DESCRIPTION =
-  'Ouvrez ce lien pour récupérer l’itinéraire dans TripBrain : jour par jour, hébergements, transports et documents, sur votre téléphone comme sur votre ordinateur.'
+  'Ouvrez ce lien pour récupérer ces documents de voyage dans TripBrain : billets, réservations et confirmations, consultables hors connexion sur votre téléphone comme sur votre ordinateur.'
 
-interface SharePageProps {
+interface DocumentsSharePageProps {
   params: Promise<{ code: string }>
 }
 
 export async function generateMetadata({
   params,
-}: SharePageProps): Promise<Metadata> {
+}: DocumentsSharePageProps): Promise<Metadata> {
   const { code } = await params
 
   return {
@@ -35,13 +35,13 @@ export async function generateMetadata({
     robots: { index: false, follow: false },
     // Sans cette ligne, la page hériterait du canonique de l'accueil : certains
     // robots d'aperçu le suivent et montreraient la mauvaise carte.
-    alternates: { canonical: `/s/${encodeURIComponent(code)}` },
+    alternates: { canonical: `/d/${encodeURIComponent(code)}` },
     openGraph: {
       type: 'website',
       siteName: 'TripBrain',
       title: TITLE,
       description: DESCRIPTION,
-      url: `/s/${encodeURIComponent(code)}`,
+      url: `/d/${encodeURIComponent(code)}`,
       locale: 'fr_FR',
     },
     twitter: {
@@ -52,7 +52,9 @@ export async function generateMetadata({
   }
 }
 
-export default async function SharePage({ params }: SharePageProps) {
+export default async function DocumentsSharePage({
+  params,
+}: DocumentsSharePageProps) {
   const { code } = await params
   if (!SHARE_URL_CODE_PATTERN.test(code)) notFound()
 
@@ -60,8 +62,8 @@ export default async function SharePage({ params }: SharePageProps) {
     <ShareHandoff
       code={code}
       title={TITLE}
-      waiting="Ouverture de l’itinéraire dans TripBrain…"
-      cta="Ouvrir le voyage"
+      waiting="Ouverture des documents dans TripBrain…"
+      cta="Ouvrir les documents"
     />
   )
 }
