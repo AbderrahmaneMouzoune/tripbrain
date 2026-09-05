@@ -223,6 +223,23 @@ export const analyticsEvents = {
     description: "Suppression d'un document.",
     properties: {},
   },
+  documents_shared: {
+    description:
+      'Un partage de documents a été déposé : combien de fichiers ont été choisis, jamais lesquels.',
+    properties: { count: count() },
+  },
+  documents_share_failed: {
+    description:
+      "Échec de la fabrication d'un partage de documents, avec sa cause.",
+    properties: {
+      reason: choice('too_large', 'network_error', 'unavailable', 'unknown'),
+    },
+  },
+  documents_share_received: {
+    description:
+      'Des documents reçus par code ont été enregistrés sur cet appareil.',
+    properties: { count: count() },
+  },
   documents_searched: {
     description:
       'Une recherche a eu lieu dans les documents, et a donné ou non des résultats. Le texte cherché reste sur l’appareil.',

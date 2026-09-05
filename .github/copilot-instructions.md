@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-TripBrain is a **local-first Next.js 16 PWA** — a personal travel companion that displays a day-by-day itinerary with a roadbook, interactive map, documents, and offline support. All data lives in IndexedDB; the only server-side code is the sharing API (`src/app/api/share/`), which parks a compressed itinerary in an S3/R2 bucket under a short sync code.
+TripBrain is a **local-first Next.js 16 PWA** — a personal travel companion that displays a day-by-day itinerary with a roadbook, interactive map, documents, and offline support. All data lives in IndexedDB; the only server-side code is the sharing API (`src/app/api/share/`), which parks a compressed payload — an itinerary, or a hand-picked selection of documents — in an S3/R2 bucket under a short sync code.
 
 ## Tech Stack
 
@@ -40,6 +40,7 @@ bun run test:watch     # vitest in watch mode
 6. A separate IndexedDB database (`tripbrain-images`) caches images for offline use, managed by `useImageCache` hook.
 7. Documents (PDFs, tickets, etc.) are stored in a third IndexedDB database (`tripbrain-documents`), managed by `useDocuments` hook.
 8. **Sharing** (`src/lib/share.ts`) compresses the itinerary to msgpack + deflate + base64url. Under `SHARE_INLINE_LIMIT` chars the whole trip fits in a self-contained QR code (`/?import=<payload>`) and never leaves the device. Above it — or whenever a code to read out loud is asked for — the payload is POSTed to `/api/share`, which stores it as a bucketcode snapshot under an eight-digit code (digits only, so phones show the numeric keypad) and returns it; the receiving device resolves it through `GET /api/share/[code]` (`/?code=<code>` opens the app straight onto it). Bucket credentials stay on the server: see `.env.example` for the required `R2_*` variables.
+9. **Document sharing** (`src/lib/document-share.ts`) rides the same transport: the documents ticked in `DocumentsShareDialog` are zipped (same archive format as the ZIP export, `src/lib/document-zip.ts`), base64url-encoded and POSTed with `kind: 'documents'`. A snapshot therefore says what it carries, and `fetchShare` returns that `kind` so a single code prompt (`ImportShareDialog`) handles both natures. Landing pages differ only for the link preview: `/s/<code>` for a trip, `/d/<code>` for documents, both handing off to `/?code=<code>`. Received documents are written by `saveDocuments` (`src/lib/documents-db.ts`), which renames collisions and notifies every mounted `useDocuments`.
 
 ### Single-page structure
 

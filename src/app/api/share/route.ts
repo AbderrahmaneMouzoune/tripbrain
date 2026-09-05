@@ -4,9 +4,13 @@
 import { isBucketCodeError, type Bucket } from 'bucketcode'
 import { createRateLimiter, getClientKey } from '@/lib/rate-limit'
 import {
+  DEFAULT_SHARE_KIND,
+  SHARE_MAX_PAYLOAD_CHARS,
+  isShareKind,
+} from '@/lib/share'
+import {
   SHARE_APP,
   SHARE_EXPIRES_IN,
-  SHARE_MAX_PAYLOAD_CHARS,
   SHARE_SCHEMA_VERSION,
   getShareStore,
   type SharedSnapshotData,
@@ -37,16 +41,31 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Requête illisible.' }, { status: 400 })
   }
 
-  const payload = (body as { data?: unknown } | null)?.data
+  const { data: payload, kind: rawKind } =
+    (body as { data?: unknown; kind?: unknown } | null) ?? {}
+
   if (typeof payload !== 'string' || payload.length === 0) {
     return Response.json(
       { error: 'Aucune donnée à partager.' },
       { status: 400 },
     )
   }
-  if (payload.length > SHARE_MAX_PAYLOAD_CHARS) {
+
+  // Sans mention de nature, c'est un itinéraire : les clients d'avant le
+  // partage de documents n'envoient pas ce champ.
+  if (rawKind !== undefined && !isShareKind(rawKind)) {
+    return Response.json({ error: 'Type de partage inconnu.' }, { status: 400 })
+  }
+  const kind = isShareKind(rawKind) ? rawKind : DEFAULT_SHARE_KIND
+
+  if (payload.length > SHARE_MAX_PAYLOAD_CHARS[kind]) {
     return Response.json(
-      { error: 'Itinéraire trop volumineux pour être partagé.' },
+      {
+        error:
+          kind === 'documents'
+            ? 'Sélection de documents trop volumineuse pour être partagée.'
+            : 'Itinéraire trop volumineux pour être partagé.',
+      },
       { status: 413 },
     )
   }
@@ -62,7 +81,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const data: SharedSnapshotData = { payload }
+  const data: SharedSnapshotData = { payload, kind }
 
   try {
     for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt++) {

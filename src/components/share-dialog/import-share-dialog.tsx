@@ -21,19 +21,30 @@ import {
   IconArrowLeft,
   IconCalendarEvent,
   IconDownload,
+  IconFile,
+  IconFiles,
+  IconFileTypePdf,
   IconKey,
   IconMapPin,
+  IconPhoto,
   IconRoute,
 } from '@tabler/icons-react'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import {
   SHARE_CODE_LENGTH,
   decompressItinerary,
-  fetchSharedItinerary,
+  fetchShare,
   summarizeSharedItinerary,
 } from '@/lib/share'
+import {
+  receivedDocumentsSize,
+  unpackDocuments,
+  type ParsedZipDocument,
+} from '@/lib/document-share'
+import { saveDocuments } from '@/lib/documents-db'
 import { trackEvent } from '@/lib/analytics/client'
 import { shareImportFailureReason } from '@/lib/analytics/metrics'
+import { formatFileSize } from '@/lib/utils'
 
 /** D'où vient le partage à importer. */
 export type ImportShareSource =
@@ -44,6 +55,11 @@ export type ImportShareSource =
   /** Itinéraire embarqué dans l'URL — arrivée par `?import=`. */
   | { kind: 'payload'; payload: string }
 
+/** Ce qu'un code a rendu : le serveur dit lequel des deux, l'écran s'adapte. */
+type SharedContent =
+  | { kind: 'itinerary'; itinerary: DayItinerary[] }
+  | { kind: 'documents'; documents: ParsedZipDocument[] }
+
 interface ImportShareDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -51,6 +67,8 @@ interface ImportShareDialogProps {
   /** Un itinéraire est déjà enregistré : l'import va le remplacer. */
   hasExistingData?: boolean
   onImport: (itinerary: DayItinerary[]) => Promise<void>
+  /** Des documents viennent d'être enregistrés sur cet appareil. */
+  onDocumentsImported?: (count: number) => void
   /** Appelé quand l'utilisateur veut revenir à la dialog précédente. */
   onNavBack?: () => void
 }
@@ -58,8 +76,8 @@ interface ImportShareDialogProps {
 type ImportState =
   | { status: 'prompt' }
   | { status: 'resolving' }
-  | { status: 'preview'; itinerary: DayItinerary[] }
-  | { status: 'importing'; itinerary: DayItinerary[] }
+  | { status: 'preview'; content: SharedContent }
+  | { status: 'importing'; content: SharedContent }
   | { status: 'error'; message: string }
 
 function toFrenchError(err: unknown): string {
@@ -94,12 +112,23 @@ function formatDate(iso: string): string {
   })
 }
 
+function DocumentIcon({ type }: { type: string }) {
+  if (type === 'application/pdf') {
+    return <IconFileTypePdf className="h-4 w-4 shrink-0 text-red-500" />
+  }
+  if (type.startsWith('image/')) {
+    return <IconPhoto className="h-4 w-4 shrink-0 text-blue-500" />
+  }
+  return <IconFile className="text-muted-foreground h-4 w-4 shrink-0" />
+}
+
 export function ImportShareDialog({
   open,
   onOpenChange,
   source,
   hasExistingData = false,
   onImport,
+  onDocumentsImported,
   onNavBack,
 }: ImportShareDialogProps) {
   const [state, setState] = useState<ImportState>({ status: 'prompt' })
@@ -114,9 +143,22 @@ export function ImportShareDialog({
       setState({ status: 'resolving' })
       trackEvent('share_import_started', { source: analyticsSource })
       try {
+        // Un code ne dit pas ce qu'il porte : c'est la réponse du serveur qui
+        // le dit, et l'écran suivant s'accorde à ce qui a été reçu.
+        const snapshot = await fetchShare(value)
+
         setState({
           status: 'preview',
-          itinerary: await fetchSharedItinerary(value),
+          content:
+            snapshot.kind === 'documents'
+              ? {
+                  kind: 'documents',
+                  documents: await unpackDocuments(snapshot.payload),
+                }
+              : {
+                  kind: 'itinerary',
+                  itinerary: decompressItinerary(snapshot.payload),
+                },
         })
       } catch (err) {
         setState({ status: 'error', message: toFrenchError(err) })
@@ -139,9 +181,14 @@ export function ImportShareDialog({
     if (source.kind === 'payload') {
       trackEvent('share_import_started', { source: 'payload' })
       try {
+        // Un QR code autonome n'embarque jamais que l'itinéraire : les
+        // documents sont bien trop lourds pour y tenir.
         setState({
           status: 'preview',
-          itinerary: decompressItinerary(source.payload),
+          content: {
+            kind: 'itinerary',
+            itinerary: decompressItinerary(source.payload),
+          },
         })
       } catch (err) {
         setState({ status: 'error', message: toFrenchError(err) })
@@ -164,15 +211,21 @@ export function ImportShareDialog({
 
   const handleImport = useCallback(async () => {
     if (state.status !== 'preview') return
-    const { itinerary } = state
+    const { content } = state
 
-    setState({ status: 'importing', itinerary })
+    setState({ status: 'importing', content })
     try {
-      await onImport(itinerary)
-      trackEvent('share_import_completed', {
-        source: analyticsSource,
-        days_count: itinerary.length,
-      })
+      if (content.kind === 'documents') {
+        const { imported } = await saveDocuments(content.documents)
+        trackEvent('documents_share_received', { count: imported })
+        onDocumentsImported?.(imported)
+      } else {
+        await onImport(content.itinerary)
+        trackEvent('share_import_completed', {
+          source: analyticsSource,
+          days_count: content.itinerary.length,
+        })
+      }
       onOpenChange(false)
     } catch (err) {
       setState({ status: 'error', message: toFrenchError(err) })
@@ -181,7 +234,7 @@ export function ImportShareDialog({
         reason: shareImportFailureReason(err),
       })
     }
-  }, [state, onImport, onOpenChange, analyticsSource])
+  }, [state, onImport, onDocumentsImported, onOpenChange, analyticsSource])
 
   const handleRetry = useCallback(() => {
     // Une saisie manuelle repart du champ ; un lien n'a rien à ressaisir.
@@ -202,17 +255,38 @@ export function ImportShareDialog({
     onNavBack?.()
   }, [onOpenChange, onNavBack])
 
-  const summary =
+  const content =
     state.status === 'preview' || state.status === 'importing'
-      ? summarizeSharedItinerary(state.itinerary)
+      ? state.content
       : null
 
-  const description =
-    state.status === 'preview' || state.status === 'importing'
-      ? 'Vérifiez le voyage reçu avant de l’enregistrer.'
-      : source.kind === 'prompt'
-        ? `Saisissez les ${SHARE_CODE_LENGTH} chiffres affichés sur l’autre appareil.`
-        : 'Récupération du voyage partagé.'
+  const summary =
+    content?.kind === 'itinerary'
+      ? summarizeSharedItinerary(content.itinerary)
+      : null
+
+  const description = content
+    ? content.kind === 'documents'
+      ? 'Vérifiez les documents reçus avant de les enregistrer.'
+      : 'Vérifiez le voyage reçu avant de l’enregistrer.'
+    : source.kind === 'prompt'
+      ? `Saisissez les ${SHARE_CODE_LENGTH} chiffres affichés sur l’autre appareil.`
+      : 'Récupération du partage.'
+
+  /** Repli quand il n'y a rien à importer : même mise en page que l'erreur. */
+  const emptyShare = (message: string) => (
+    <>
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+        <div className="bg-destructive/10 rounded-full p-4">
+          <IconAlertTriangle className="text-destructive h-8 w-8" />
+        </div>
+        <p className="text-destructive text-sm">{message}</p>
+      </div>
+      <Button variant="outline" onClick={handleRetry} className="w-full">
+        {source.kind === 'payload' ? 'Fermer' : 'Réessayer'}
+      </Button>
+    </>
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -293,7 +367,7 @@ export function ImportShareDialog({
               </InputOTP>
               <p className="text-muted-foreground text-center text-xs text-pretty">
                 Le code se trouve dans « Partager &amp; données » sur l’appareil
-                qui possède le voyage.
+                qui possède le voyage ou les documents.
               </p>
             </div>
           )}
@@ -303,7 +377,7 @@ export function ImportShareDialog({
               <div className="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
               <p className="text-muted-foreground text-sm">
                 {state.status === 'resolving'
-                  ? 'Récupération du voyage…'
+                  ? 'Récupération du partage…'
                   : 'Enregistrement en cours…'}
               </p>
             </div>
@@ -329,38 +403,100 @@ export function ImportShareDialog({
             </>
           )}
 
-          {state.status === 'preview' && summary && (
+          {/* ── Aperçu d'un itinéraire reçu ── */}
+          {state.status === 'preview' && content?.kind === 'itinerary' && (
             <>
-              <div className="border-border bg-muted/40 flex flex-col gap-2 rounded-lg border p-4">
+              {summary ? (
+                <>
+                  <div className="border-border bg-muted/40 flex flex-col gap-2 rounded-lg border p-4">
+                    <p className="text-foreground flex items-center gap-2 text-sm font-medium">
+                      <IconRoute className="text-primary h-4 w-4 shrink-0" />
+                      {summary.dayCount} jour{summary.dayCount > 1 ? 's' : ''}{' '}
+                      de voyage
+                    </p>
+                    <p className="text-muted-foreground flex items-start gap-2 text-sm">
+                      <IconMapPin className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span className="min-w-0 break-words">
+                        {summary.firstCity === summary.lastCity
+                          ? summary.firstCity
+                          : `${summary.firstCity} → ${summary.lastCity}`}
+                      </span>
+                    </p>
+                    <p className="text-muted-foreground flex items-start gap-2 text-sm">
+                      <IconCalendarEvent className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span className="min-w-0 text-pretty">
+                        Du {formatDate(summary.startDate)} au{' '}
+                        {formatDate(summary.endDate)}
+                      </span>
+                    </p>
+                  </div>
+
+                  {hasExistingData && (
+                    <p className="bg-warning/10 text-foreground flex items-start gap-2 rounded-lg px-3 py-2 text-xs leading-relaxed">
+                      <IconAlertTriangle className="text-warning mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      Cet import remplacera l’itinéraire actuellement enregistré
+                      sur cet appareil.
+                    </p>
+                  )}
+
+                  <div className="flex w-full gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => onOpenChange(false)}
+                      className="flex-1"
+                    >
+                      Annuler
+                    </Button>
+                    <Button onClick={handleImport} className="flex-1 gap-2">
+                      <IconDownload className="h-4 w-4" />
+                      {hasExistingData ? 'Remplacer' : 'Importer'}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                // Le résumé manque (partage vide) : rien à importer.
+                emptyShare('Ce partage ne contient aucune journée.')
+              )}
+            </>
+          )}
+
+          {/* ── Aperçu de documents reçus ── */}
+          {state.status === 'preview' && content?.kind === 'documents' && (
+            <>
+              <div className="flex flex-col gap-2">
                 <p className="text-foreground flex items-center gap-2 text-sm font-medium">
-                  <IconRoute className="text-primary h-4 w-4 shrink-0" />
-                  {summary.dayCount} jour{summary.dayCount > 1 ? 's' : ''} de
-                  voyage
+                  <IconFiles className="text-primary h-4 w-4 shrink-0" />
+                  {content.documents.length} document
+                  {content.documents.length > 1 ? 's' : ''} ·{' '}
+                  {formatFileSize(receivedDocumentsSize(content.documents))}
                 </p>
-                <p className="text-muted-foreground flex items-start gap-2 text-sm">
-                  <IconMapPin className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span className="min-w-0 break-words">
-                    {summary.firstCity === summary.lastCity
-                      ? summary.firstCity
-                      : `${summary.firstCity} → ${summary.lastCity}`}
-                  </span>
-                </p>
-                <p className="text-muted-foreground flex items-start gap-2 text-sm">
-                  <IconCalendarEvent className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span className="min-w-0 text-pretty">
-                    Du {formatDate(summary.startDate)} au{' '}
-                    {formatDate(summary.endDate)}
-                  </span>
-                </p>
+                <ul className="border-border/70 divide-border/60 max-h-52 divide-y overflow-y-auto rounded-lg border">
+                  {content.documents.map((document) => (
+                    <li
+                      key={document.name}
+                      className="flex items-center gap-3 px-3 py-2"
+                    >
+                      <DocumentIcon type={document.type} />
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className="text-foreground block truncate text-sm"
+                          title={document.name}
+                        >
+                          {document.name}
+                        </span>
+                        <span className="text-muted-foreground block text-xs">
+                          {formatFileSize(document.blob.size)}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               </div>
 
-              {hasExistingData && (
-                <p className="bg-warning/10 text-foreground flex items-start gap-2 rounded-lg px-3 py-2 text-xs leading-relaxed">
-                  <IconAlertTriangle className="text-warning mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  Cet import remplacera l’itinéraire actuellement enregistré sur
-                  cet appareil.
-                </p>
-              )}
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                Ces documents s’ajoutent à ceux déjà présents sur l’appareil :
+                rien n’est remplacé, un nom déjà pris est simplement numéroté.
+              </p>
 
               <div className="flex w-full gap-2">
                 <Button
@@ -372,30 +508,9 @@ export function ImportShareDialog({
                 </Button>
                 <Button onClick={handleImport} className="flex-1 gap-2">
                   <IconDownload className="h-4 w-4" />
-                  {hasExistingData ? 'Remplacer' : 'Importer'}
+                  Importer
                 </Button>
               </div>
-            </>
-          )}
-
-          {/* Le résumé manque (partage vide) : rien à importer. */}
-          {state.status === 'preview' && !summary && (
-            <>
-              <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-                <div className="bg-destructive/10 rounded-full p-4">
-                  <IconAlertTriangle className="text-destructive h-8 w-8" />
-                </div>
-                <p className="text-destructive text-sm">
-                  Ce partage ne contient aucune journée.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleRetry}
-                className="w-full"
-              >
-                {source.kind === 'payload' ? 'Fermer' : 'Réessayer'}
-              </Button>
             </>
           )}
         </div>

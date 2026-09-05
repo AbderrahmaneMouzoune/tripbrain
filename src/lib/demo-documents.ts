@@ -13,6 +13,7 @@
 
 import {
   DOCUMENTS_STORE,
+  notifyDocumentsChanged,
   openDocumentsDB,
   type StoredFile,
 } from './documents-db'
@@ -683,6 +684,8 @@ export async function seedDemoDocuments(): Promise<void> {
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
+
+  notifyDocumentsChanged()
 }
 
 /** Delete every demo document, leaving the user's own files untouched. */
@@ -707,4 +710,6 @@ export async function removeDemoDocuments(): Promise<void> {
     tx.oncomplete = () => resolve()
     tx.onerror = () => reject(tx.error)
   })
+
+  notifyDocumentsChanged()
 }

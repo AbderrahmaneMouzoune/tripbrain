@@ -1,6 +1,10 @@
-// Partage d'un itinéraire, côté navigateur.
+// Partage, côté navigateur.
 //
-// Pipeline : données → msgpack → deflate → base64url.
+// Deux natures de partage empruntent le même tuyau : l'itinéraire et une
+// sélection de documents (voir `document-share.ts`). Toutes deux finissent en
+// base64url, sous un code de partage.
+//
+// Pipeline de l'itinéraire : données → msgpack → deflate → base64url.
 //   • payload ≤ SHARE_INLINE_LIMIT : tout tient dans un QR code autonome
 //     (<origin>/?import=<données>) — rien ne quitte l'appareil.
 //   • sinon, ou dès qu'un code à recopier est demandé : le payload part vers
@@ -19,6 +23,36 @@ export const SHARE_INLINE_LIMIT = 2000
  */
 export const SHARE_CODE_LENGTH = 8
 
+/**
+ * Forme admise dans une URL de partage : chiffres et séparateurs de lecture.
+ *
+ * Volontairement tolérant — ce filtre n'est là que pour écarter les adresses
+ * fantaisistes ; c'est `/api/share/[code]` qui valide vraiment le code.
+ */
+export const SHARE_URL_CODE_PATTERN = /^[A-Za-z0-9-]{4,24}$/
+
+/** Ce qu'un code de partage peut contenir. */
+export type ShareKind = 'itinerary' | 'documents'
+
+/** Nature retenue quand rien n'est précisé : les partages d'avant les documents. */
+export const DEFAULT_SHARE_KIND: ShareKind = 'itinerary'
+
+/**
+ * Taille maximale du payload base64url accepté, par nature de partage.
+ *
+ * Les documents sont des fichiers déjà compressés (PDF, JPEG) : ils pèsent
+ * bien plus qu'un itinéraire, mais la requête doit rester sous la limite de
+ * corps que les hébergeurs serverless imposent (4,5 Mo chez Vercel).
+ */
+export const SHARE_MAX_PAYLOAD_CHARS: Record<ShareKind, number> = {
+  itinerary: 2 * 1024 * 1024,
+  documents: 4 * 1024 * 1024,
+}
+
+export function isShareKind(value: unknown): value is ShareKind {
+  return value === 'itinerary' || value === 'documents'
+}
+
 export interface ShareCode {
   /** Code canonique, chiffres seuls et sans séparateur : `48205137`. */
   code: string
@@ -28,15 +62,21 @@ export interface ShareCode {
 
 // ── Encodage ──────────────────────────────────────────────────────────────────
 
-function toBase64Url(bytes: Uint8Array): string {
+/** Assez petit pour ne pas dépasser la pile d'arguments, assez grand pour rester rapide. */
+const BASE64_CHUNK_SIZE = 0x8000
+
+export function toBase64Url(bytes: Uint8Array): string {
+  // Le payload d'un partage de documents pèse plusieurs mégaoctets : la
+  // conversion se fait par tranches, une concaténation caractère par caractère
+  // y passerait un temps déraisonnable.
   let binary = ''
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i])
+  for (let i = 0; i < bytes.length; i += BASE64_CHUNK_SIZE) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + BASE64_CHUNK_SIZE))
   }
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
 }
 
-function fromBase64Url(value: string): Uint8Array {
+export function fromBase64Url(value: string): Uint8Array {
   const base64 = value.replace(/-/g, '+').replace(/_/g, '/')
   const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='))
   const bytes = new Uint8Array(binary.length)
@@ -107,15 +147,21 @@ export function getInlineQrUrl(compressed: string): string {
 }
 
 /**
- * URL d'ouverture d'un code de partage : `<origin>/s/<code>`.
+ * URL d'ouverture d'un code de partage : `<origin>/s/<code>` pour un
+ * itinéraire, `<origin>/d/<code>` pour des documents.
  *
- * Cette page est rendue par le serveur : c'est elle qui porte les métadonnées
- * Open Graph, pour qu'un lien collé dans une messagerie s'affiche en aperçu au
- * lieu d'une adresse nue. Elle bascule ensuite vers `/?code=<code>`, que
- * l'application sait déjà traiter.
+ * Ces pages sont rendues par le serveur : ce sont elles qui portent les
+ * métadonnées Open Graph, pour qu'un lien collé dans une messagerie s'affiche
+ * en aperçu au lieu d'une adresse nue — et l'annonce correspond alors à ce qui
+ * a été partagé. Elles basculent ensuite vers `/?code=<code>`, que
+ * l'application sait déjà traiter, quelle que soit la nature du partage.
  */
-export function getShareCodeUrl(code: string): string {
-  return `${getOrigin()}/s/${encodeURIComponent(code)}`
+export function getShareCodeUrl(
+  code: string,
+  kind: ShareKind = DEFAULT_SHARE_KIND,
+): string {
+  const segment = kind === 'documents' ? 'd' : 's'
+  return `${getOrigin()}/${segment}/${encodeURIComponent(code)}`
 }
 
 /** Découpe le code en groupes de quatre — plus facile à lire et à dicter. */
@@ -199,12 +245,15 @@ async function readError(
   return fallback
 }
 
-/** Dépose l'itinéraire compressé sur le serveur et retourne le code à partager. */
-export async function createShareCode(compressed: string): Promise<ShareCode> {
+/** Dépose le payload compressé sur le serveur et retourne le code à partager. */
+export async function createShareCode(
+  compressed: string,
+  kind: ShareKind = DEFAULT_SHARE_KIND,
+): Promise<ShareCode> {
   const response = await fetch('/api/share', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: compressed }),
+    body: JSON.stringify({ data: compressed, kind }),
   })
 
   if (!response.ok) {
@@ -227,10 +276,22 @@ export async function createShareCode(compressed: string): Promise<ShareCode> {
   return { code: body.code, expiresAt }
 }
 
-/** Résout un code de partage en itinéraire prêt à être enregistré. */
-export async function fetchSharedItinerary(
-  code: string,
-): Promise<DayItinerary[]> {
+/** Ce qu'un code de partage rend : un payload et de quoi savoir le lire. */
+export interface SharedSnapshot {
+  kind: ShareKind
+  /** Payload compressé (base64url), à décoder selon `kind`. */
+  payload: string
+  expiresAt: Date | null
+}
+
+/**
+ * Résout un code de partage en payload brut.
+ *
+ * La nature du partage vient du serveur : celui qui saisit un code n'a pas à
+ * savoir s'il porte un itinéraire ou des documents, c'est la réponse qui le
+ * dit et l'interface qui s'adapte.
+ */
+export async function fetchShare(code: string): Promise<SharedSnapshot> {
   const trimmed = code.trim()
   if (!trimmed) {
     throw new Error('Saisissez un code de partage.')
@@ -242,12 +303,21 @@ export async function fetchSharedItinerary(
     throw new Error(await readError(response, 'Code inconnu ou expiré.'))
   }
 
-  const body = (await response.json()) as { data?: unknown }
+  const body = (await response.json()) as {
+    data?: unknown
+    kind?: unknown
+    expiresAt?: unknown
+  }
   if (typeof body.data !== 'string' || !body.data) {
     throw new Error('Le partage ne contient aucune donnée.')
   }
 
-  return decompressItinerary(body.data)
+  return {
+    kind: isShareKind(body.kind) ? body.kind : DEFAULT_SHARE_KIND,
+    payload: body.data,
+    expiresAt:
+      typeof body.expiresAt === 'string' ? new Date(body.expiresAt) : null,
+  }
 }
 
 // ── Résumé d'un partage reçu ──────────────────────────────────────────────────

@@ -28,7 +28,7 @@ import {
   PackagePlus,
   Loader2,
 } from 'lucide-react'
-import { IconFilePlus } from '@tabler/icons-react'
+import { IconFilePlus, IconKey, IconQrcode } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -58,6 +58,8 @@ import {
   DrawerDescription,
 } from '@/components/ui/drawer'
 import { useDocuments, StoredFile } from '@/hooks/use-documents'
+import { DocumentsShareDialog } from '@/components/share-dialog/documents-share-dialog'
+import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog'
 import { trackEvent } from '@/lib/analytics/client'
 import { documentKind, documentKindOf } from '@/lib/analytics/metrics'
 import {
@@ -65,12 +67,17 @@ import {
   CATEGORY_COLOR_CLASSES,
 } from '@/lib/document-sources'
 import type { ExportProgress, ImportProgress } from '@/lib/document-zip'
+import type { DayItinerary } from '@/lib/itinerary-data'
+import { formatFileSize } from '@/lib/utils'
 
 type SortField = 'name' | 'size' | 'addedAt'
 type SortOrder = 'asc' | 'desc'
 type ViewMode = 'grid' | 'list'
 
 const VIEW_MODE_STORAGE_KEY = 'tripbrain:documents-view-mode'
+
+/** Réception depuis cet onglet : le code est toujours saisi à la main. */
+const SHARE_PROMPT_SOURCE = { kind: 'prompt' } as const
 
 function getSavedViewMode(): ViewMode {
   if (typeof window === 'undefined') return 'grid'
@@ -278,14 +285,6 @@ function DocumentsEmptyState({
       )}
     </div>
   )
-}
-
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
 
 function formatDate(timestamp: number): string {
@@ -553,7 +552,21 @@ function FileCard({
   )
 }
 
-export function DocumentsView() {
+interface DocumentsViewProps {
+  /**
+   * Enregistre un itinéraire reçu par code : un code de partage ne dit pas ce
+   * qu'il porte, et celui saisi depuis cet onglet peut très bien être celui
+   * d'un voyage.
+   */
+  onImportShared: (itinerary: DayItinerary[]) => Promise<void>
+  /** Un itinéraire est déjà enregistré : un import le remplacerait. */
+  hasTrip?: boolean
+}
+
+export function DocumentsView({
+  onImportShared,
+  hasTrip = false,
+}: DocumentsViewProps) {
   const {
     files,
     loading,
@@ -563,6 +576,8 @@ export function DocumentsView() {
     exportAll,
     importZip,
   } = useDocuments()
+  const [shareOpen, setShareOpen] = useState(false)
+  const [receiveOpen, setReceiveOpen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [search, setSearch] = useState('')
   const [sortField, setSortField] = useState<SortField>('addedAt')
@@ -783,8 +798,40 @@ export function DocumentsView() {
 
       <DocumentSourcesDrawer open={sourcesOpen} onOpenChange={setSourcesOpen} />
 
+      {/* Partage par code — choix des documents dans la dialog */}
+      <DocumentsShareDialog open={shareOpen} onOpenChange={setShareOpen} />
+
+      <ImportShareDialog
+        open={receiveOpen}
+        onOpenChange={setReceiveOpen}
+        source={SHARE_PROMPT_SOURCE}
+        hasExistingData={hasTrip}
+        onImport={onImportShared}
+      />
+
       {/* Export / Import actions */}
       <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          disabled={files.length === 0}
+          onClick={() => setShareOpen(true)}
+        >
+          <IconQrcode className="h-4 w-4" />
+          Partager par code
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => setReceiveOpen(true)}
+        >
+          <IconKey className="h-4 w-4" />
+          Recevoir par code
+        </Button>
+
         <div className="flex items-center gap-1.5">
           <Button
             variant="outline"
