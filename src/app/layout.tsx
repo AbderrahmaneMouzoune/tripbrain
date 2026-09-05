@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Nunito, Paytone_One, Geist_Mono } from 'next/font/google'
 import { PWARegister } from '@/components/pwa-register'
 import { AnalyticsProvider } from '@/components/analytics/analytics-provider'
@@ -32,18 +32,10 @@ export const metadata: Metadata = {
   description:
     'Planifiez et consultez votre itineraire de voyage avec TripBrain',
   manifest: '/manifest.json',
-  themeColor: '#2268c7',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
     title: 'TripBrain',
-  },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-    viewportFit: 'cover',
   },
   icons: {
     apple: '/apple-icon.png',
@@ -66,6 +58,25 @@ export const metadata: Metadata = {
   alternates: {
     canonical: 'https://app.tripbrain.fr',
   },
+}
+
+/**
+ * Réglage de la fenêtre d'affichage.
+ *
+ * Il vit dans son propre export : depuis Next 15, `metadata.viewport` est
+ * ignoré, et l'application se retrouvait avec le viewport par défaut. Sur iOS,
+ * cela laissait Safari zoomer tout seul dès qu'un champ prenait le focus — le
+ * champ de code du partage, par exemple — sans moyen évident de revenir en
+ * arrière. `maximumScale` coupe ce zoom automatique ; le zoom à deux doigts,
+ * lui, reste possible, parce qu'un texte trop petit doit toujours pouvoir être
+ * agrandi.
+ */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#2268c7',
 }
 
 export default function RootLayout({

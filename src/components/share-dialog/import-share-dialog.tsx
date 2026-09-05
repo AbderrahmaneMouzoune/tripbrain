@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -71,6 +71,18 @@ function toFrenchError(err: unknown): string {
   return err.message
 }
 
+/**
+ * Le pointeur est-il fin (souris, trackpad) ?
+ *
+ * Sur un écran tactile, ouvrir le clavier d'office déplace toute la page à
+ * l'ouverture de la dialog. On ne prend donc la main sur le focus que là où le
+ * clavier est physique.
+ */
+function hasFinePointer(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia('(pointer: fine)').matches
+}
+
 function formatDate(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return iso
@@ -91,6 +103,7 @@ export function ImportShareDialog({
 }: ImportShareDialogProps) {
   const [state, setState] = useState<ImportState>({ status: 'prompt' })
   const [code, setCode] = useState('')
+  const codeInputRef = useRef<HTMLInputElement>(null)
 
   // Le code lui-même n'est jamais mesuré : seule sa provenance l'est.
   const analyticsSource = source.kind
@@ -203,7 +216,17 @@ export function ImportShareDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* En-tête fixe, corps défilant : la dialog tient sur tous les écrans. */}
-      <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-sm">
+      <DialogContent
+        className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-sm"
+        onOpenAutoFocus={(event) => {
+          // Au clavier physique, on va droit au champ. Ailleurs, on laisse
+          // Radix poser le focus sur le premier bouton : le clavier virtuel ne
+          // s'ouvre pas tout seul, et l'écran ne saute pas à l'ouverture.
+          if (!hasFinePointer() || source.kind !== 'prompt') return
+          event.preventDefault()
+          codeInputRef.current?.focus()
+        }}
+      >
         <DialogHeader className="px-4 pt-5 pb-3 text-left sm:px-6 sm:pt-6">
           <div className="flex items-center gap-2 pr-8">
             {/* Retour — ferme cette dialog et ré-ouvre la précédente */}
@@ -233,9 +256,16 @@ export function ImportShareDialog({
           {state.status === 'prompt' && (
             <div className="flex flex-1 flex-col items-center justify-center gap-4">
               <InputOTP
-                autoFocus
+                ref={codeInputRef}
                 maxLength={SHARE_CODE_LENGTH}
                 pattern="[0-9A-Za-z]*"
+                // Un code mêle chiffres et lettres : le pavé numérique — celui
+                // que la bibliothèque propose par défaut — ne permettrait pas
+                // de saisir les lettres sur mobile.
+                inputMode="text"
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
                 value={code}
                 onChange={(value) => setCode(value.toUpperCase())}
                 onComplete={(value) => resolveCode(value)}
