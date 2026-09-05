@@ -18,7 +18,11 @@ import type {
   DayItinerary,
   Transport,
 } from './itinerary-data'
-import { ACTIVITY_STATUS_CYCLE, type ActivityStatus } from './itinerary-edit'
+import {
+  ACTIVITY_STATUS_CYCLE,
+  type ActivityStatus,
+  type DayTextList,
+} from './itinerary-edit'
 
 /** Éléments du roadbook qui répondent à l'appui long. */
 export type QuickActionEntity =
@@ -33,6 +37,7 @@ export type QuickActionIcon =
   | 'plus'
   | 'copy'
   | 'navigation'
+  | 'search'
   | 'external'
   | 'check'
   | 'skip'
@@ -83,6 +88,26 @@ export function mapsSearchUrl(query: string): string {
 /** Itinéraire Google Maps vers une destination. */
 export function mapsDirectionsUrl(destination: string): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`
+}
+
+/** Recherche Google : ce qu'on fait de toute façon, en un tap de moins. */
+export function googleSearchUrl(query: string): string {
+  return `https://www.google.com/search?q=${encodeURIComponent(query)}`
+}
+
+/**
+ * Garde le nom, jette l'explication : les listes du roadbook s'écrivent
+ * souvent « Xiaolongbao (小笼包) — raviolis vapeur », et chercher la phrase
+ * entière ne donne rien de bon.
+ */
+export function searchTerm(item: string): string {
+  const [head] = item.split(/\s[—–-]\s/)
+  return (head ?? item).trim()
+}
+
+/** Requête posée à Google ou à la carte : les morceaux vides sautent. */
+function query(...parts: (string | undefined)[]): string {
+  return parts.filter(filled).join(' ')
 }
 
 function coordinatesQuery(
@@ -161,6 +186,128 @@ export function buildDayActions(
       handlers.onCopy([day.title, day.city].filter(filled).join(' — ')),
   })
 
+  if (filled(day.city)) {
+    actions.push({
+      id: 'day-search',
+      kind: 'open',
+      label: 'Rechercher la ville sur Google',
+      icon: 'search',
+      href: googleSearchUrl(day.city),
+    })
+  }
+
+  return actions
+}
+
+/** En-têtes du menu selon la liste dont la ligne vient. */
+const DAY_LIST_LABELS: Record<
+  DayTextList,
+  { item: string; edit: string; remove: string }
+> = {
+  highlights: {
+    item: 'Point fort de la journée',
+    edit: 'Modifier les points forts',
+    remove: 'Retirer des points forts',
+  },
+  foodRecommendations: {
+    item: 'À goûter dans la journée',
+    edit: 'Modifier la liste à goûter',
+    remove: 'Retirer de la liste',
+  },
+  packingTips: {
+    item: 'Bagages de la journée',
+    edit: 'Modifier la liste des bagages',
+    remove: 'Retirer des bagages',
+  },
+  tips: {
+    item: 'Conseil de la journée',
+    edit: 'Modifier les conseils',
+    remove: 'Retirer des conseils',
+  },
+}
+
+/** Nom de la liste, pour coiffer le menu d'une de ses lignes. */
+export function dayListItemLabel(list: DayTextList): string {
+  return DAY_LIST_LABELS[list].item
+}
+
+export interface DayListItemHandlers {
+  /** Ouvre le formulaire de la journée, où la liste entière se retouche */
+  onEditList: () => void
+  onRemove: () => void
+  onCopy: (text: string) => void
+}
+
+/**
+ * Ligne d'une liste de la journée : un plat, un point fort, un conseil.
+ *
+ * Ce ne sont que des phrases, mais ce sont les informations qu'on veut
+ * chercher en chemin — d'où la recherche Google en tête, et la carte pour
+ * celles qui désignent un lieu ou un plat. Le nom est nettoyé de son
+ * explication avant d'être cherché.
+ */
+export function buildDayListItemActions(
+  item: string,
+  { list, city }: { list: DayTextList; city?: string },
+  handlers: DayListItemHandlers,
+): QuickAction[] {
+  const term = searchTerm(item)
+  const labels = DAY_LIST_LABELS[list]
+  const placeBound = list === 'highlights' || list === 'foodRecommendations'
+
+  const actions: QuickAction[] = []
+
+  if (filled(term)) {
+    actions.push({
+      id: 'day-item-search',
+      kind: 'open',
+      label: 'Rechercher sur Google',
+      hint: term,
+      icon: 'search',
+      href: googleSearchUrl(placeBound ? query(term, city) : term),
+    })
+
+    if (placeBound) {
+      actions.push({
+        id: 'day-item-map',
+        kind: 'open',
+        label:
+          list === 'foodRecommendations'
+            ? 'Trouver où en manger'
+            : 'Voir sur la carte',
+        icon: 'navigation',
+        href: mapsSearchUrl(query(term, city)),
+      })
+    }
+  }
+
+  actions.push({
+    id: 'day-item-copy',
+    kind: 'copy',
+    label: 'Copier',
+    icon: 'copy',
+    run: () => handlers.onCopy(item),
+  })
+
+  actions.push({
+    id: 'day-item-edit',
+    kind: 'edit',
+    label: labels.edit,
+    icon: 'edit',
+    run: handlers.onEditList,
+  })
+
+  actions.push({
+    id: 'day-item-remove',
+    kind: 'delete',
+    label: labels.remove,
+    icon: 'trash',
+    destructive: true,
+    confirm: true,
+    confirmLabel: 'Confirmer le retrait',
+    run: handlers.onRemove,
+  })
+
   return actions
 }
 
@@ -186,6 +333,8 @@ export interface ActivityQuickActionHandlers {
 export interface ActivityQuickActionOptions {
   canMoveUp?: boolean
   canMoveDown?: boolean
+  /** Ville de la journée, ajoutée à la recherche pour la resserrer */
+  city?: string
 }
 
 /**
@@ -196,7 +345,11 @@ export interface ActivityQuickActionOptions {
 export function buildActivityActions(
   activity: Activity,
   handlers: ActivityQuickActionHandlers,
-  { canMoveUp = false, canMoveDown = false }: ActivityQuickActionOptions = {},
+  {
+    canMoveUp = false,
+    canMoveDown = false,
+    city,
+  }: ActivityQuickActionOptions = {},
 ): QuickAction[] {
   const status: ActivityStatus = activity.status ?? 'planned'
 
@@ -271,6 +424,16 @@ export function buildActivityActions(
       label: 'Voir sur la carte',
       icon: 'navigation',
       href: mapsSearchUrl(mapQuery),
+    })
+  }
+
+  if (filled(name)) {
+    actions.push({
+      id: 'activity-search',
+      kind: 'open',
+      label: 'Rechercher sur Google',
+      icon: 'search',
+      href: googleSearchUrl(query(name, city)),
     })
   }
 
@@ -362,6 +525,23 @@ export function buildTransportActions(
     })
   }
 
+  // Un numéro de train ou de vol se cherche sur Google plus souvent qu'on ne
+  // le croit : horaires du jour, quai, retard.
+  const searchQuery = filled(transport.details)
+    ? query(transport.provider, transport.details)
+    : query(transport.provider, transport.from, transport.to)
+
+  if (filled(searchQuery)) {
+    actions.push({
+      id: 'transport-search',
+      kind: 'open',
+      label: 'Rechercher sur Google',
+      hint: searchQuery,
+      icon: 'search',
+      href: googleSearchUrl(searchQuery),
+    })
+  }
+
   actions.push({
     id: 'transport-delete',
     kind: 'delete',
@@ -424,9 +604,7 @@ export function buildAccommodationActions(
     })
   }
 
-  const destination = [accommodation.name, accommodation.address]
-    .filter(filled)
-    .join(' ')
+  const destination = query(accommodation.name, accommodation.address)
 
   if (filled(destination)) {
     actions.push({
@@ -435,6 +613,14 @@ export function buildAccommodationActions(
       label: 'Itinéraire vers le logement',
       icon: 'navigation',
       href: mapsDirectionsUrl(destination),
+    })
+
+    actions.push({
+      id: 'accommodation-search',
+      kind: 'open',
+      label: 'Rechercher sur Google',
+      icon: 'search',
+      href: googleSearchUrl(destination),
     })
   }
 

@@ -22,16 +22,20 @@ import {
   createEmptyTransport,
   moveActivity,
   removeActivity,
+  removeDayTextListItem,
   setAccommodation,
   setActivityStatus,
   setTransport,
   upsertActivity,
+  type DayTextList,
 } from '@/lib/itinerary-edit'
 import {
   buildAccommodationActions,
   buildActivityActions,
   buildDayActions,
+  buildDayListItemActions,
   buildTransportActions,
+  dayListItemLabel,
 } from '@/lib/quick-actions'
 import { trackEvent } from '@/lib/analytics/client'
 import { useClipboard } from '@/hooks/use-clipboard'
@@ -186,6 +190,27 @@ export function DayDetail({
           },
           onCopy: copyText,
         })
+      : []
+
+  /**
+   * Lignes des listes de la journée (points forts, plats, bagages, conseils) :
+   * ce sont des phrases, pas des entités, mais ce sont elles qu'on veut
+   * chercher ou retirer en chemin.
+   */
+  const listItemActions = (list: DayTextList, item: string, index: number) =>
+    isMutable
+      ? buildDayListItemActions(
+          item,
+          { list, city: day.city },
+          {
+            onEditList: editDay,
+            onRemove: () => {
+              trackEvent('entity_edited', { entity: 'day', action: 'update' })
+              onDayChange?.(removeDayTextListItem(day, list, index))
+            },
+            onCopy: copyText,
+          },
+        )
       : []
 
   const [carouselApi, setCarouselApi] = useState<CarouselApi>()
@@ -393,17 +418,23 @@ export function DayDetail({
             <CardContent className="relative px-5 pt-0 pb-5">
               <ol className="divide-border/45 flex flex-col divide-y">
                 {day.highlights.map((item, i) => (
-                  <li
+                  <QuickActionsTarget
                     key={i}
-                    className="flex items-start gap-3 py-3 first:pt-0 last:pb-0"
+                    asChild
+                    entity="day"
+                    title={item}
+                    description={dayListItemLabel('highlights')}
+                    actions={listItemActions('highlights', item, i)}
                   >
-                    <span className="text-muted-foreground/75 font-display mt-0.5 text-xs tracking-[0.16em] tabular-nums">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <p className="text-foreground text-sm leading-relaxed">
-                      {item}
-                    </p>
-                  </li>
+                    <li className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                      <span className="text-muted-foreground/75 font-display mt-0.5 text-xs tracking-[0.16em] tabular-nums">
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <p className="text-foreground text-sm leading-relaxed">
+                        {item}
+                      </p>
+                    </li>
+                  </QuickActionsTarget>
                 ))}
               </ol>
             </CardContent>
@@ -500,6 +531,7 @@ export function DayDetail({
                           {
                             canMoveUp: index > 0,
                             canMoveDown: index < day.activities.length - 1,
+                            city: day.city,
                           },
                         )
                       : []
@@ -534,9 +566,18 @@ export function DayDetail({
             <CardContent className="px-4 pt-0 pb-4">
               <div className="flex flex-wrap gap-2">
                 {day.foodRecommendations.map((item, i) => (
-                  <Badge key={i} variant="outline" className="text-xs">
-                    {item}
-                  </Badge>
+                  <QuickActionsTarget
+                    key={i}
+                    asChild
+                    entity="day"
+                    title={item}
+                    description={dayListItemLabel('foodRecommendations')}
+                    actions={listItemActions('foodRecommendations', item, i)}
+                  >
+                    <Badge variant="outline" className="text-xs">
+                      {item}
+                    </Badge>
+                  </QuickActionsTarget>
                 ))}
               </div>
             </CardContent>
@@ -558,13 +599,19 @@ export function DayDetail({
             <CardContent className="px-4 pt-0 pb-4">
               <ul className="divide-border/40 flex flex-col divide-y">
                 {day.packingTips.map((tip, i) => (
-                  <li
+                  <QuickActionsTarget
                     key={i}
-                    className="text-foreground flex items-center gap-2 py-2 text-sm first:pt-0 last:pb-0"
+                    asChild
+                    entity="day"
+                    title={tip}
+                    description={dayListItemLabel('packingTips')}
+                    actions={listItemActions('packingTips', tip, i)}
                   >
-                    <span className="bg-secondary/20 h-1.5 w-1.5 shrink-0 rounded-full" />
-                    {tip}
-                  </li>
+                    <li className="text-foreground flex items-center gap-2 py-2 text-sm first:pt-0 last:pb-0">
+                      <span className="bg-secondary/20 h-1.5 w-1.5 shrink-0 rounded-full" />
+                      {tip}
+                    </li>
+                  </QuickActionsTarget>
                 ))}
               </ul>
             </CardContent>
@@ -572,7 +619,12 @@ export function DayDetail({
         )}
 
         {/* Tips */}
-        {day.tips && day.tips.length > 0 && <TipsCard tips={day.tips} />}
+        {day.tips && day.tips.length > 0 && (
+          <TipsCard
+            tips={day.tips}
+            itemActions={(tip, index) => listItemActions('tips', tip, index)}
+          />
+        )}
       </div>
 
       {dayDraft && (

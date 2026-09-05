@@ -128,16 +128,22 @@ Chaque modification est enregistree immediatement sur ton appareil, comme le res
 ### Appui long sur une information
 
 Pas besoin de passer par le mode edition pour une correction rapide.
-Garde le doigt appuye (ou fais un clic droit) sur la journee, une activite, le transport
-ou l'hebergement : un panneau s'ouvre en bas de l'ecran avec ce qu'on peut en faire.
+Garde le doigt appuye (ou fais un clic droit) sur la journee, une activite, le transport,
+l'hebergement, ou sur une ligne des listes (points forts, a gouter, bagages, conseils) :
+un panneau s'ouvre en bas de l'ecran avec ce qu'on peut en faire.
 
 Selon l'element, on y trouve :
 - le modifier, ou completer ce qui manque a la journee (activite, transport, hebergement)
 - dire ou on en est d'une activite : faite, annulee, a refaire
 - la monter ou la descendre dans le programme
 - copier une adresse, un nom, une reference de reservation
+- le rechercher sur Google : un plat, un lieu, un numero de train
 - ouvrir la carte, le billet ou la reservation
-- la supprimer, avec une confirmation
+- le supprimer ou le retirer d'une liste, avec une confirmation
+
+Sur un plat de la liste « a gouter », la recherche ajoute la ville et laisse de cote
+l'explication qui suit le tiret : « Xiaolongbao (小笼包) — raviolis vapeur » se cherche
+comme « Xiaolongbao (小笼包) Shanghai ».
 
 Une astuce le rappelle la premiere fois, puis disparait des que le geste a servi.
 

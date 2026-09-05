@@ -9,7 +9,9 @@ import {
   buildAccommodationActions,
   buildActivityActions,
   buildDayActions,
+  buildDayListItemActions,
   buildTransportActions,
+  searchTerm,
   type QuickAction,
 } from '../quick-actions'
 
@@ -106,7 +108,9 @@ describe('buildDayActions', () => {
     const handlers = dayHandlers()
 
     find(buildDayActions(makeDay(), handlers), 'day-copy').run?.()
-    expect(handlers.onCopy).toHaveBeenCalledWith('Arrivée à Shanghai — Shanghai')
+    expect(handlers.onCopy).toHaveBeenCalledWith(
+      'Arrivée à Shanghai — Shanghai',
+    )
 
     const handlersSansVille = dayHandlers()
     find(
@@ -284,5 +288,156 @@ describe('buildAccommodationActions', () => {
 
     remove.run?.()
     expect(handlers.onDelete).toHaveBeenCalledOnce()
+  })
+})
+
+describe('searchTerm', () => {
+  it("garde le nom et jette l'explication qui suit le tiret", () => {
+    expect(
+      searchTerm('Xiaolongbao (小笼包) — raviolis vapeur au bouillon'),
+    ).toBe('Xiaolongbao (小笼包)')
+    expect(searchTerm('Cong you bing - galettes aux oignons')).toBe(
+      'Cong you bing',
+    )
+  })
+
+  it('laisse intact ce qui ne porte pas d’explication', () => {
+    expect(searchTerm('Skyline du Bund')).toBe('Skyline du Bund')
+    expect(searchTerm('Wi-Fi de l’hôtel')).toBe('Wi-Fi de l’hôtel')
+  })
+})
+
+describe('buildDayListItemActions', () => {
+  function listHandlers() {
+    return { onEditList: vi.fn(), onRemove: vi.fn(), onCopy: vi.fn() }
+  }
+
+  it('cherche le plat avec la ville, et où en manger', () => {
+    const actions = buildDayListItemActions(
+      'Xiaolongbao (小笼包) — raviolis vapeur',
+      { list: 'foodRecommendations', city: 'Shanghai' },
+      listHandlers(),
+    )
+
+    const search = find(actions, 'day-item-search')
+    expect(search.href).toContain('/search?q=')
+    expect(search.href).toContain(encodeURIComponent('Xiaolongbao (小笼包)'))
+    expect(search.href).toContain('Shanghai')
+    // L'explication ne part pas dans la requête.
+    expect(search.href).not.toContain('raviolis')
+
+    expect(find(actions, 'day-item-map').label).toBe('Trouver où en manger')
+  })
+
+  it('ne propose pas de carte pour un conseil ou un bagage', () => {
+    const conseil = buildDayListItemActions(
+      'Installer Alipay',
+      { list: 'tips', city: 'Shanghai' },
+      listHandlers(),
+    )
+
+    expect(ids(conseil)).not.toContain('day-item-map')
+    // Un conseil se cherche seul : la ville ne l'éclaire pas.
+    expect(find(conseil, 'day-item-search').href).not.toContain('Shanghai')
+  })
+
+  it('copie la ligne entière, explication comprise', () => {
+    const handlers = listHandlers()
+    const item = 'Xiaolongbao — raviolis vapeur'
+
+    find(
+      buildDayListItemActions(item, { list: 'foodRecommendations' }, handlers),
+      'day-item-copy',
+    ).run?.()
+
+    expect(handlers.onCopy).toHaveBeenCalledWith(item)
+  })
+
+  it('ouvre le formulaire de la journée pour retoucher la liste', () => {
+    const handlers = listHandlers()
+
+    find(
+      buildDayListItemActions('Le Bund', { list: 'highlights' }, handlers),
+      'day-item-edit',
+    ).run?.()
+
+    expect(handlers.onEditList).toHaveBeenCalledOnce()
+  })
+
+  it('termine par un retrait, à confirmer', () => {
+    const handlers = listHandlers()
+    const actions = buildDayListItemActions(
+      'Le Bund',
+      { list: 'highlights' },
+      handlers,
+    )
+    const remove = actions[actions.length - 1]
+
+    expect(remove.id).toBe('day-item-remove')
+    expect(remove.confirm).toBe(true)
+    expect(remove.destructive).toBe(true)
+
+    remove.run?.()
+    expect(handlers.onRemove).toHaveBeenCalledOnce()
+  })
+})
+
+describe('recherche Google', () => {
+  it("ajoute la ville à la recherche d'une activité", () => {
+    const actions = buildActivityActions(makeActivity(), activityHandlers(), {
+      city: 'Shanghai',
+    })
+
+    const search = find(actions, 'activity-search')
+    expect(search.href).toContain(encodeURIComponent('Temple Jing’an'))
+    expect(search.href).toContain('Shanghai')
+  })
+
+  it('cherche le numéro de train plutôt que la compagnie seule', () => {
+    const actions = buildTransportActions(
+      makeTransport({
+        provider: 'China Railway',
+        details: 'Train G195',
+        from: 'Shanghai',
+        to: 'Qingdao',
+      }),
+      entityHandlers(),
+    )
+
+    const search = find(actions, 'transport-search')
+    expect(search.href).toContain(
+      encodeURIComponent('China Railway Train G195'),
+    )
+    expect(search.href).not.toContain('Qingdao')
+  })
+
+  it('se rabat sur le trajet quand le transport n’a pas de détail', () => {
+    const actions = buildTransportActions(
+      makeTransport({ from: 'Shanghai', to: 'Qingdao' }),
+      entityHandlers(),
+    )
+
+    expect(find(actions, 'transport-search').href).toContain(
+      encodeURIComponent('Shanghai Qingdao'),
+    )
+  })
+
+  it("ne cherche rien quand le transport n'a que son type", () => {
+    const actions = buildTransportActions(makeTransport(), entityHandlers())
+
+    expect(ids(actions)).not.toContain('transport-search')
+  })
+
+  it("cherche l'hébergement avec son adresse, et la ville de la journée", () => {
+    const logement = buildAccommodationActions(
+      makeAccommodation(),
+      entityHandlers(),
+    )
+    expect(find(logement, 'accommodation-search').href).toContain(
+      encodeURIComponent('B&B Jing’an 123 rue de Shanghai'),
+    )
+
+    const journee = buildDayActions(makeDay(), dayHandlers())
+    expect(find(journee, 'day-search').href).toContain('Shanghai')
   })
 })

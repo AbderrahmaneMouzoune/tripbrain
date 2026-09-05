@@ -29,6 +29,7 @@ import {
   Plus,
   Pointer,
   RotateCcw,
+  Search,
   Train,
   Trash2,
   X,
@@ -99,6 +100,7 @@ const QUICK_ACTION_ICONS: Record<QuickActionIcon, LucideIcon> = {
   plus: Plus,
   copy: Copy,
   navigation: Navigation,
+  search: Search,
   external: ExternalLink,
   check: Check,
   skip: X,
@@ -204,7 +206,7 @@ export function QuickActionsTarget({
           onCloseAutoFocus={(event) => event.preventDefault()}
         >
           <SheetHeader className="border-border/60 border-b pr-12">
-            <SheetTitle className="truncate text-base">{title}</SheetTitle>
+            <SheetTitle className="line-clamp-2 text-base">{title}</SheetTitle>
             <SheetDescription className="text-xs">
               {description ?? 'Que faire de cette information ?'}
             </SheetDescription>
