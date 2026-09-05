@@ -9,6 +9,7 @@ import {
   formatShareCode,
   getInlineQrUrl,
   getShareCodeUrl,
+  readIncomingShare,
   shareNatively,
   summarizeSharedItinerary,
 } from '@/lib/share'
@@ -217,6 +218,49 @@ describe('decompressItinerary', () => {
 describe('getInlineQrUrl', () => {
   it('retourne une URL contenant /?import= avec le payload compressé', () => {
     expect(getInlineQrUrl('abc123')).toContain('/?import=abc123')
+  })
+})
+
+describe('readIncomingShare', () => {
+  it('ne voit rien dans une URL sans partage', () => {
+    expect(readIncomingShare('?demo=true', '')).toBeNull()
+  })
+
+  it('lit l’itinéraire embarqué dans la query (QR code autonome)', () => {
+    expect(readIncomingShare('?import=abc123', '')).toEqual({
+      payload: 'abc123',
+    })
+  })
+
+  it('lit un code de partage', () => {
+    expect(readIncomingShare('?code=48205137', '')).toEqual({
+      code: '48205137',
+    })
+  })
+
+  it('lit l’itinéraire déposé dans le fragment, avec sa provenance', () => {
+    expect(readIncomingShare('', '#import=abc123&from=generator')).toEqual({
+      payload: 'abc123',
+      origin: 'generator',
+    })
+  })
+
+  it('ignore une provenance inconnue', () => {
+    expect(readIncomingShare('', '#import=abc123&from=ailleurs')).toEqual({
+      payload: 'abc123',
+    })
+  })
+
+  it('préfère le fragment à la query quand les deux portent un itinéraire', () => {
+    expect(readIncomingShare('?import=ancien', '#import=recent')).toEqual({
+      payload: 'recent',
+    })
+  })
+
+  it('laisse de côté le code quand un itinéraire complet est déjà là', () => {
+    expect(readIncomingShare('?code=48205137', '#import=abc123')).toEqual({
+      payload: 'abc123',
+    })
   })
 })
 

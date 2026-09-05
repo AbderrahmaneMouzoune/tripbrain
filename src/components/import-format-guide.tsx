@@ -21,14 +21,18 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
+  ArrowUpRight,
   Download,
   HelpCircle,
   FileSpreadsheet,
   Table,
   Braces,
   Lightbulb,
+  Sparkles,
   TriangleAlert,
 } from 'lucide-react'
+import { trackEvent } from '@/lib/analytics/client'
+import { getGeneratorUrl } from '@/lib/site-links'
 import type { TripData } from '@/hooks/use-trip-data'
 import type {
   DayItinerary,
@@ -1178,6 +1182,37 @@ export function ImportFormatGuideContent() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-0">
+      {/*
+        Ce guide décrit trois formats de fichier — encore faut-il en avoir un.
+        Sans itinéraire sous la main, c'est le générateur qu'il faut, pas un
+        modèle Excel à remplir à la main.
+      */}
+      <div className="border-primary/20 bg-primary/5 mx-5 mt-4 mb-1 flex shrink-0 flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center sm:gap-3">
+        <span className="bg-primary/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+          <Sparkles className="text-primary h-4 w-4" />
+        </span>
+        <p className="text-muted-foreground min-w-0 flex-1 text-xs leading-relaxed">
+          <span className="text-foreground font-medium">
+            Vous n’avez aucun fichier ?
+          </span>{' '}
+          Le générateur de tripbrain.fr construit l’itinéraire avec l’IA et le
+          renvoie ici, sans passer par un tableur.
+        </p>
+        <Button size="sm" variant="outline" className="shrink-0" asChild>
+          <a
+            href={getGeneratorUrl('import_guide')}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() =>
+              trackEvent('generator_opened', { surface: 'import_guide' })
+            }
+          >
+            Générer
+            <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
+          </a>
+        </Button>
+      </div>
+
       {/* ── Format tabs + scrollable content ── */}
       <Tabs
         value={activeTab}

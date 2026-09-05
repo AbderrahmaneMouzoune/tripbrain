@@ -3,7 +3,14 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { AppIcon } from '@/components/app-icon'
-import { AlertCircle, KeyRound, PlayCircle, Upload } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowUpRight,
+  KeyRound,
+  PlayCircle,
+  Sparkles,
+  Upload,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { ImportFormatGuide } from '@/components/import-format-guide'
@@ -11,6 +18,7 @@ import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog
 import { PwaInstallEntry } from '@/components/pwa-install-prompt'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { trackEvent } from '@/lib/analytics/client'
+import { getGeneratorUrl } from '@/lib/site-links'
 
 const PROMPT_SOURCE = { kind: 'prompt' } as const
 
@@ -168,6 +176,44 @@ export function OnboardingScreen({
         {/* Main card */}
         <Card className="overflow-hidden">
           <CardContent className="space-y-4 p-4 sm:p-5">
+            {/*
+              Première question de quelqu'un qui ouvre l'app sans voyage :
+              « où est-ce que je fabrique mon itinéraire ? ». Elle se traitait
+              jusqu'ici en dehors de l'app, sans que rien ne le dise ici. Le
+              renvoi vers le générateur passe donc avant l'import : c'est le
+              seul chemin praticable quand on n'a encore aucun fichier.
+            */}
+            <div className="border-primary/25 bg-primary/5 rounded-xl border p-4 text-center">
+              <div className="bg-primary/10 mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl">
+                <Sparkles className="text-primary h-5 w-5" />
+              </div>
+              <p className="text-foreground text-sm font-semibold">
+                Je n’ai pas encore d’itinéraire
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                Décrivez votre voyage sur <strong>tripbrain.fr</strong> :
+                ChatGPT ou Claude en fait un programme jour par jour, que vous
+                renvoyez ici d’un clic. Gratuit, sans compte.
+              </p>
+              <Button
+                size="sm"
+                className="mt-4"
+                asChild
+                onClick={() =>
+                  trackEvent('generator_opened', { surface: 'onboarding' })
+                }
+              >
+                <a
+                  href={getGeneratorUrl('onboarding')}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Créer mon itinéraire
+                  <ArrowUpRight className="ml-2 h-4 w-4" />
+                </a>
+              </Button>
+            </div>
+
             {/* Drop zone */}
             <div
               className={`rounded-xl border border-dashed p-4 text-center transition-all sm:p-5 ${
@@ -183,7 +229,7 @@ export function OnboardingScreen({
                 <Upload className="text-primary h-5 w-5" />
               </div>
               <p className="text-foreground text-sm font-semibold">
-                Importer mes données
+                J’ai déjà un itinéraire à importer
               </p>
               <p className="text-muted-foreground mt-1 text-xs">
                 Formats acceptés : <strong>.json</strong> (export TripBrain),{' '}

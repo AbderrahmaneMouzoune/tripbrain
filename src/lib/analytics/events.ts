@@ -43,6 +43,13 @@ function flag(): { readonly kind: 'flag' } {
   return { kind: 'flag' }
 }
 
+/**
+ * D'où arrive un itinéraire à importer : un code saisi (`prompt`), un code déjà
+ * connu (`code`), un itinéraire embarqué dans l'URL (`payload`), ou le
+ * générateur du site vitrine (`generator`), qui emprunte le même chemin.
+ */
+const SHARE_IMPORT_SOURCE = choice('code', 'prompt', 'payload', 'generator')
+
 export const analyticsEvents = {
   app_opened: {
     description:
@@ -177,19 +184,19 @@ export const analyticsEvents = {
   },
   share_import_started: {
     description: "Tentative de récupération d'un partage reçu.",
-    properties: { source: choice('code', 'prompt', 'payload') },
+    properties: { source: SHARE_IMPORT_SOURCE },
   },
   share_import_completed: {
     description: 'Un partage reçu a été enregistré sur cet appareil.',
     properties: {
-      source: choice('code', 'prompt', 'payload'),
+      source: SHARE_IMPORT_SOURCE,
       days_count: count(),
     },
   },
   share_import_failed: {
     description: "Échec de la récupération d'un partage, avec sa cause.",
     properties: {
-      source: choice('code', 'prompt', 'payload'),
+      source: SHARE_IMPORT_SOURCE,
       reason: choice(
         'invalid_code',
         'expired',
@@ -197,6 +204,13 @@ export const analyticsEvents = {
         'network_error',
         'unknown',
       ),
+    },
+  },
+  generator_opened: {
+    description:
+      "Départ vers le générateur d'itinéraire du site, et depuis quel écran de l'app.",
+    properties: {
+      surface: choice('onboarding', 'share_dialog', 'import_guide'),
     },
   },
   calendar_exported: {
