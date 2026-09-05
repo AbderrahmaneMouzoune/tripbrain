@@ -16,10 +16,12 @@ import { ActionRow } from '@/components/share-dialog/action-row'
 import { ShareExportDialog } from '@/components/share-dialog/share-export-dialog'
 import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog'
 import { ResetConfirmDialog } from '@/components/share-dialog/reset-confirm-dialog'
+import { usePwaInstall } from '@/components/pwa-install-provider'
 import {
   IconCalendarPlus,
   IconCalendarWeek,
   IconDeviceMobile,
+  IconDeviceMobilePlus,
   IconDownload,
   IconKey,
   IconQrcode,
@@ -59,6 +61,8 @@ export function ShareDialog({
   const [open, setOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  // L'installation disparaît de la liste dès que l'app tourne déjà installée.
+  const { canInstall, open: openInstallPrompt } = usePwaInstall()
 
   const handleClear = async () => {
     trackEvent('data_cleared', { surface: 'share_dialog' })
@@ -170,6 +174,24 @@ export function ShareDialog({
                 />
               )}
             </section>
+
+            {/* ── Application ── */}
+            {canInstall && (
+              <section className="flex flex-col gap-2">
+                <SectionTitle>Application</SectionTitle>
+
+                <ActionRow
+                  icon={IconDeviceMobilePlus}
+                  tone="secondary"
+                  label="Installer l’application"
+                  description="Sur l’écran d’accueil, en plein écran et consultable hors ligne"
+                  onClick={() => {
+                    setOpen(false)
+                    openInstallPrompt('manual')
+                  }}
+                />
+              </section>
+            )}
 
             {/* ── Vos données ── */}
             <section className="flex flex-col gap-2">

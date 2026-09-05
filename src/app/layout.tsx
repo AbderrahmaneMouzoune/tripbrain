@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from 'next'
 import { Nunito, Paytone_One, Geist_Mono } from 'next/font/google'
 import { PWARegister } from '@/components/pwa-register'
+import { PwaInstallProvider } from '@/components/pwa-install-provider'
+import { PwaInstallPrompt } from '@/components/pwa-install-prompt'
+import { INSTALL_EVENT_CAPTURE_SCRIPT } from '@/lib/pwa-install'
 import { AnalyticsProvider } from '@/components/analytics/analytics-provider'
 import { ConsentedVercelAnalytics } from '@/components/analytics/vercel-analytics'
 import { getSiteUrl } from '@/lib/site-url'
@@ -39,6 +42,10 @@ export const metadata: Metadata = {
   },
   icons: {
     apple: '/apple-icon.png',
+  },
+  other: {
+    // Équivalent standard de `apple-mobile-web-app-capable`, lu par Chrome/Edge.
+    'mobile-web-app-capable': 'yes',
   },
   openGraph: {
     type: 'website',
@@ -86,12 +93,25 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr">
+      <head>
+        {/*
+          `beforeinstallprompt` peut se déclencher avant l'hydratation React :
+          on le met de côté dès le chargement du document.
+        */}
+        <script
+          id="pwa-install-capture"
+          dangerouslySetInnerHTML={{ __html: INSTALL_EVENT_CAPTURE_SCRIPT }}
+        />
+      </head>
       <body
         className={`${nunito.variable} ${paytoneOne.variable} font-sans antialiased`}
       >
         <AnalyticsProvider>
           <PWARegister />
-          {children}
+          <PwaInstallProvider>
+            {children}
+            <PwaInstallPrompt />
+          </PwaInstallProvider>
           <ConsentedVercelAnalytics />
         </AnalyticsProvider>
       </body>

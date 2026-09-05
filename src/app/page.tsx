@@ -37,6 +37,8 @@ import { MapOverlay } from '@/components/map-overlay'
 import { cn } from '@/lib/utils'
 import { AppIcon } from '@/components/app-icon'
 import { DemoBanner } from '@/components/demo-banner'
+import { usePwaInstall } from '@/components/pwa-install-provider'
+import { useAnalytics } from '@/hooks/use-analytics'
 import { trackEvent } from '@/lib/analytics/client'
 
 /** Gestes possibles pour changer de journée : sert la mesure d'usage. */
@@ -102,6 +104,8 @@ function HomePageContent() {
   } = useTripData()
 
   const searchParams = useSearchParams()
+  const { armAutoPrompt } = usePwaInstall()
+  const { consent, isConfigured: isAnalyticsConfigured } = useAnalytics()
 
   // Partage reçu via l'URL, en attente de confirmation de l'utilisateur.
   const [sharedSource, setSharedSource] = useState<ImportShareSource | null>(
@@ -201,6 +205,15 @@ function HomePageContent() {
       loadMockData()
     }
   }, [hasData, isLoading, searchParams, loadMockData])
+
+  // On ne propose l'installation qu'une fois le voyage chargé : avant, la
+  // proposition arriverait sans que l'app ait rendu le moindre service. Tant
+  // que la bannière de consentement attend une réponse, elle occupe déjà le bas
+  // de l'écran : une seule demande à la fois.
+  const consentSettled = !isAnalyticsConfigured || consent !== null
+  useEffect(() => {
+    armAutoPrompt(hasData && !isLoading && consentSettled)
+  }, [armAutoPrompt, hasData, isLoading, consentSettled])
 
   // Arrivée par un partage : `?import=` embarque l'itinéraire complet, `?code=`
   // pointe vers un partage déposé sur le serveur. L'URL est nettoyée aussitôt
