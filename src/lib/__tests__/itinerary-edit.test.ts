@@ -8,6 +8,7 @@ import {
   moveActivity,
   nextActivityStatus,
   removeActivity,
+  removeDayTextListItem,
   replaceDay,
   setAccommodation,
   setActivityStatus,
@@ -245,5 +246,36 @@ describe('setActivityStatus', () => {
     const day = makeDay()
 
     expect(setActivityStatus(day, 'inconnu', 'done')).toBe(day)
+  })
+})
+
+describe('removeDayTextListItem', () => {
+  it("retire l'entrée demandée et garde l'ordre des autres", () => {
+    const day = makeDay({
+      foodRecommendations: ['Xiaolongbao', 'Shengjianbao', 'Wonton'],
+    })
+
+    const next = removeDayTextListItem(day, 'foodRecommendations', 1)
+
+    expect(next.foodRecommendations).toEqual(['Xiaolongbao', 'Wonton'])
+    expect(day.foodRecommendations).toHaveLength(3)
+  })
+
+  it('ne touche pas au reste de la journée', () => {
+    const day = makeDay({ tips: ['Installer Alipay'], highlights: ['Le Bund'] })
+
+    const next = removeDayTextListItem(day, 'tips', 0)
+
+    expect(next.tips).toEqual([])
+    expect(next.highlights).toBe(day.highlights)
+    expect(next.activities).toBe(day.activities)
+  })
+
+  it('laisse la journée inchangée hors des bornes ou sans liste', () => {
+    const day = makeDay({ packingTips: ['Chaussures'] })
+
+    expect(removeDayTextListItem(day, 'packingTips', 3)).toBe(day)
+    expect(removeDayTextListItem(day, 'packingTips', -1)).toBe(day)
+    expect(removeDayTextListItem(day, 'highlights', 0)).toBe(day)
   })
 })

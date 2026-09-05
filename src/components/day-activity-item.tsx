@@ -2,8 +2,10 @@
 
 import { type Activity, type DayItinerary } from '@/lib/itinerary-data'
 import { nextActivityStatus, type ActivityStatus } from '@/lib/itinerary-edit'
+import type { QuickAction } from '@/lib/quick-actions'
 import { cn } from '@/lib/utils'
 import { useClipboard } from '@/hooks/use-clipboard'
+import { QuickActionsTarget } from '@/components/quick-actions'
 import {
   AccordionContent,
   AccordionItem,
@@ -43,6 +45,8 @@ interface DayActivityItemProps {
    * ouvrir le formulaire complet.
    */
   onStatusChange?: (status: ActivityStatus) => void
+  /** Menu d'appui long ; sans action, le geste reste inerte */
+  actions?: readonly QuickAction[]
 }
 
 /** Libellés courts affichés sur la pastille et dans les infobulles. */
@@ -108,6 +112,7 @@ export function DayActivityItem({
   canMoveUp = false,
   canMoveDown = false,
   onStatusChange,
+  actions = [],
 }: DayActivityItemProps) {
   const Icon = getActivityIcon(activity.type)
   const activityItemId = activity.id ?? `activity-${index}`
@@ -126,229 +131,239 @@ export function DayActivityItem({
   const { copied, copy } = useClipboard()
 
   return (
-    <AccordionItem
-      value={activityItemId}
-      className="border-b-0 py-3 first:pt-0 last:pb-0"
+    <QuickActionsTarget
+      asChild
+      entity="activity"
+      title={activity.name}
+      description="Activité du programme"
+      actions={actions}
     >
-      <div className="flex gap-3">
-        <div className="mt-0.5 flex shrink-0 items-center gap-2 self-start">
-          {onStatusChange && (
-            <button
-              type="button"
-              onClick={() => onStatusChange(nextStatus)}
-              title={`${STATUS_LABELS[status]} — appuyer pour marquer « ${STATUS_LABELS[nextStatus]} »`}
-              aria-label={`${activity.name} : ${STATUS_LABELS[status]}. Appuyer pour marquer « ${STATUS_LABELS[nextStatus]} »`}
-              className={cn(
-                'flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 transition-colors active:scale-90',
-                getStatusToggleClass(status),
-              )}
-            >
-              {status === 'skipped' ? (
-                <X className="h-3.5 w-3.5" strokeWidth={3} />
-              ) : (
-                <Check className="h-3.5 w-3.5" strokeWidth={3} />
-              )}
-            </button>
-          )}
+      <AccordionItem
+        value={activityItemId}
+        className="border-b-0 py-3 first:pt-0 last:pb-0"
+      >
+        <div className="flex gap-3">
+          <div className="mt-0.5 flex shrink-0 items-center gap-2 self-start">
+            {onStatusChange && (
+              <button
+                type="button"
+                onClick={() => onStatusChange(nextStatus)}
+                title={`${STATUS_LABELS[status]} — appuyer pour marquer « ${STATUS_LABELS[nextStatus]} »`}
+                aria-label={`${activity.name} : ${STATUS_LABELS[status]}. Appuyer pour marquer « ${STATUS_LABELS[nextStatus]} »`}
+                className={cn(
+                  'flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-2 transition-colors active:scale-90',
+                  getStatusToggleClass(status),
+                )}
+              >
+                {status === 'skipped' ? (
+                  <X className="h-3.5 w-3.5" strokeWidth={3} />
+                ) : (
+                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                )}
+              </button>
+            )}
 
-          <div className="bg-primary/10 flex h-7 w-7 items-center justify-center rounded-lg">
-            <Icon className="text-primary h-3.5 w-3.5" strokeWidth={1.75} />
+            <div className="bg-primary/10 flex h-7 w-7 items-center justify-center rounded-lg">
+              <Icon className="text-primary h-3.5 w-3.5" strokeWidth={1.75} />
+            </div>
           </div>
-        </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-2">
-            <AccordionTrigger
-              className={cn(
-                'min-w-0 flex-1 py-0 pr-0 text-left hover:no-underline [&>svg]:mt-1 [&>svg]:size-3.5',
-                !hasDetails && 'pointer-events-none [&>svg]:hidden',
-              )}
-            >
-              <div className="min-w-0 space-y-1.5">
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <p
-                    className={cn(
-                      'text-foreground text-sm leading-snug font-semibold',
-                      status === 'done' && 'text-muted-foreground',
-                      status === 'skipped' &&
-                        'text-muted-foreground line-through',
-                    )}
-                  >
-                    {activity.name}
-                  </p>
-                  {status !== 'planned' && (
-                    <span
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-2">
+              <AccordionTrigger
+                className={cn(
+                  'min-w-0 flex-1 py-0 pr-0 text-left hover:no-underline [&>svg]:mt-1 [&>svg]:size-3.5',
+                  !hasDetails && 'pointer-events-none [&>svg]:hidden',
+                )}
+              >
+                <div className="min-w-0 space-y-1.5">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <p
                       className={cn(
-                        'rounded-full border px-1.5 py-0.5 text-[10px] font-medium',
-                        getActivityStatusClass(status),
+                        'text-foreground text-sm leading-snug font-semibold',
+                        status === 'done' && 'text-muted-foreground',
+                        status === 'skipped' &&
+                          'text-muted-foreground line-through',
                       )}
                     >
-                      {STATUS_LABELS[status]}
-                    </span>
+                      {activity.name}
+                    </p>
+                    {status !== 'planned' && (
+                      <span
+                        className={cn(
+                          'rounded-full border px-1.5 py-0.5 text-[10px] font-medium',
+                          getActivityStatusClass(status),
+                        )}
+                      >
+                        {STATUS_LABELS[status]}
+                      </span>
+                    )}
+                  </div>
+
+                  {(activity.duration || activity.openAt) && (
+                    <div className="text-muted-foreground/70 flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <Clock className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                      {activity.openAt ? (
+                        <span>
+                          {activity.openAt}
+                          {activity.duration && ` · ${activity.duration}`}
+                        </span>
+                      ) : (
+                        <span>{activity.duration}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {activity.description && (
+                    <p className="text-muted-foreground line-clamp-1 text-xs leading-relaxed">
+                      {activity.description}
+                    </p>
                   )}
                 </div>
+              </AccordionTrigger>
 
-                {(activity.duration || activity.openAt) && (
-                  <div className="text-muted-foreground/70 flex flex-wrap items-center gap-1.5 text-[11px]">
-                    <Clock className="h-3 w-3 shrink-0" strokeWidth={1.75} />
-                    {activity.openAt ? (
-                      <span>
-                        {activity.openAt}
-                        {activity.duration && ` · ${activity.duration}`}
-                      </span>
+              {onEdit ? (
+                <>
+                  {onMove && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => onMove(-1)}
+                        disabled={!canMoveUp}
+                        aria-label={`Monter ${activity.name}`}
+                        className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors disabled:pointer-events-none disabled:opacity-30"
+                      >
+                        <ArrowUp className="h-3.5 w-3.5" strokeWidth={1.75} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onMove(1)}
+                        disabled={!canMoveDown}
+                        aria-label={`Descendre ${activity.name}`}
+                        className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors disabled:pointer-events-none disabled:opacity-30"
+                      >
+                        <ArrowDown className="h-3.5 w-3.5" strokeWidth={1.75} />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={onEdit}
+                    aria-label={`Modifier ${activity.name}`}
+                    className="text-primary hover:text-primary/80 mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
+                  >
+                    <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  {activity.coordinates && (
+                    <a
+                      href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
+                      aria-label={`Voir ${activity.name} sur la carte`}
+                    >
+                      <Navigation className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    </a>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void copy(activity.name)
+                    }}
+                    title={
+                      activity.address
+                        ? "Copier l'adresse"
+                        : "Copier le nom de l'activité"
+                    }
+                    aria-label={
+                      activity.address
+                        ? `Copier l'adresse de ${activity.name}`
+                        : `Copier le nom de ${activity.name}`
+                    }
+                    className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
+                  >
+                    {copied ? (
+                      <Check className="h-3.5 w-3.5 text-green-500" />
                     ) : (
-                      <span>{activity.duration}</span>
+                      <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+
+            {hasDetails && (
+              <AccordionContent className="pt-2 pb-0">
+                {activity.address && (
+                  <div className="text-muted-foreground/70 mt-1 flex items-start gap-1 text-[11px]">
+                    <MapPin
+                      className="mt-0.5 h-3 w-3 shrink-0"
+                      strokeWidth={1.5}
+                    />
+                    <span className="leading-relaxed">{activity.address}</span>
+                  </div>
+                )}
+
+                {activity.rating !== undefined && (
+                  <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-500">
+                    <Star className="h-3 w-3 fill-current" strokeWidth={0} />
+                    <span className="font-medium">{activity.rating}</span>
+                  </div>
+                )}
+
+                {activity.tags && activity.tags.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {activity.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="border-border/50 text-muted-foreground/70 rounded-full border px-1.5 py-0.5 text-[10px]"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {activity.price !== undefined && (
+                  <div className="text-muted-foreground/70 mt-1 flex items-center gap-1 text-[11px]">
+                    <Banknote className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                    <span>
+                      {formatPrice(activity.price, activity.currency)}
+                    </span>
+                    {activity.reservationRequired && (
+                      <span className="text-muted-foreground/50">
+                        · réservation requise
+                      </span>
                     )}
                   </div>
                 )}
 
-                {activity.description && (
-                  <p className="text-muted-foreground line-clamp-1 text-xs leading-relaxed">
-                    {activity.description}
-                  </p>
-                )}
-              </div>
-            </AccordionTrigger>
-
-            {onEdit ? (
-              <>
-                {onMove && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => onMove(-1)}
-                      disabled={!canMoveUp}
-                      aria-label={`Monter ${activity.name}`}
-                      className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors disabled:pointer-events-none disabled:opacity-30"
-                    >
-                      <ArrowUp className="h-3.5 w-3.5" strokeWidth={1.75} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onMove(1)}
-                      disabled={!canMoveDown}
-                      aria-label={`Descendre ${activity.name}`}
-                      className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors disabled:pointer-events-none disabled:opacity-30"
-                    >
-                      <ArrowDown className="h-3.5 w-3.5" strokeWidth={1.75} />
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={onEdit}
-                  aria-label={`Modifier ${activity.name}`}
-                  className="text-primary hover:text-primary/80 mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
-                >
-                  <Pencil className="h-3.5 w-3.5" strokeWidth={1.75} />
-                </button>
-              </>
-            ) : (
-              <>
-                {activity.coordinates && (
+                {activity.bookingUrl && (
                   <a
-                    href={`https://www.google.com/maps?q=${activity.coordinates[0]},${activity.coordinates[1]}`}
+                    href={activity.bookingUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
-                    aria-label={`Voir ${activity.name} sur la carte`}
+                    className="text-primary hover:text-primary/80 mt-1 inline-flex items-center gap-1 text-xs font-medium transition-colors hover:underline"
                   >
-                    <Navigation className="h-3.5 w-3.5" strokeWidth={1.5} />
+                    Réserver
+                    <ExternalLink className="h-2.5 w-2.5" />
                   </a>
                 )}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    void copy(activity.name)
-                  }}
-                  title={
-                    activity.address
-                      ? "Copier l'adresse"
-                      : "Copier le nom de l'activité"
-                  }
-                  aria-label={
-                    activity.address
-                      ? `Copier l'adresse de ${activity.name}`
-                      : `Copier le nom de ${activity.name}`
-                  }
-                  className="text-muted-foreground/50 hover:text-primary mt-0.5 shrink-0 pt-1.5 pr-1.5 transition-colors"
-                >
-                  {copied ? (
-                    <Check className="h-3.5 w-3.5 text-green-500" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" strokeWidth={1.5} />
-                  )}
-                </button>
-              </>
+                {activity.tips && (
+                  <p className="text-muted-foreground/70 mt-1 text-[11px] leading-relaxed italic">
+                    💡 {activity.tips}
+                  </p>
+                )}
+              </AccordionContent>
             )}
           </div>
-
-          {hasDetails && (
-            <AccordionContent className="pt-2 pb-0">
-              {activity.address && (
-                <div className="text-muted-foreground/70 mt-1 flex items-start gap-1 text-[11px]">
-                  <MapPin
-                    className="mt-0.5 h-3 w-3 shrink-0"
-                    strokeWidth={1.5}
-                  />
-                  <span className="leading-relaxed">{activity.address}</span>
-                </div>
-              )}
-
-              {activity.rating !== undefined && (
-                <div className="mt-1 flex items-center gap-1 text-[11px] text-amber-500">
-                  <Star className="h-3 w-3 fill-current" strokeWidth={0} />
-                  <span className="font-medium">{activity.rating}</span>
-                </div>
-              )}
-
-              {activity.tags && activity.tags.length > 0 && (
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  {activity.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="border-border/50 text-muted-foreground/70 rounded-full border px-1.5 py-0.5 text-[10px]"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {activity.price !== undefined && (
-                <div className="text-muted-foreground/70 mt-1 flex items-center gap-1 text-[11px]">
-                  <Banknote className="h-3 w-3 shrink-0" strokeWidth={1.5} />
-                  <span>{formatPrice(activity.price, activity.currency)}</span>
-                  {activity.reservationRequired && (
-                    <span className="text-muted-foreground/50">
-                      · réservation requise
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {activity.bookingUrl && (
-                <a
-                  href={activity.bookingUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:text-primary/80 mt-1 inline-flex items-center gap-1 text-xs font-medium transition-colors hover:underline"
-                >
-                  Réserver
-                  <ExternalLink className="h-2.5 w-2.5" />
-                </a>
-              )}
-
-              {activity.tips && (
-                <p className="text-muted-foreground/70 mt-1 text-[11px] leading-relaxed italic">
-                  💡 {activity.tips}
-                </p>
-              )}
-            </AccordionContent>
-          )}
         </div>
-      </div>
-    </AccordionItem>
+      </AccordionItem>
+    </QuickActionsTarget>
   )
 }

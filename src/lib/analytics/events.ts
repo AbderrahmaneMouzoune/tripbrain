@@ -128,6 +128,29 @@ export const analyticsEvents = {
       action: choice('create', 'update', 'delete', 'reorder'),
     },
   },
+  quick_actions_opened: {
+    description:
+      "Ouverture du menu d'appui long sur un élément du roadbook : dit si le geste est trouvé, et sur quel type d'élément.",
+    properties: {
+      entity: choice('day', 'activity', 'transport', 'accommodation'),
+    },
+  },
+  quick_action_used: {
+    description:
+      "Action lancée depuis le menu d'appui long : la famille d'action, jamais ce sur quoi elle a porté.",
+    properties: {
+      entity: choice('day', 'activity', 'transport', 'accommodation'),
+      action: choice(
+        'edit',
+        'create',
+        'status',
+        'move',
+        'copy',
+        'open',
+        'delete',
+      ),
+    },
+  },
   share_opened: {
     description: 'Ouverture du panneau « Partager & données ».',
     properties: {},
