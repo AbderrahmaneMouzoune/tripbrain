@@ -188,16 +188,28 @@ export function OnboardingScreen({
         */}
         <Card className="overflow-hidden">
           <CardContent className="space-y-3 p-4 sm:p-5">
-            {/* Drop zone */}
-            <div
-              className={`rounded-xl border p-4 transition-all ${
-                isDragging
-                  ? 'border-primary bg-primary/10 ring-primary/30 ring-2'
-                  : 'border-primary/25 bg-primary/5 hover:border-primary/50'
-              }`}
+            {/*
+              Zone de dépôt — cliquable de bout en bout : viser le bouton sur
+              un écran tactile est le geste le plus étroit de cet écran, alors
+              que le bloc entier dit déjà ce qu'il fait. Le contour en
+              pointillés reste la seule chose qui annonce qu'on peut y lâcher
+              un fichier.
+            */}
+            <button
+              type="button"
+              onClick={() => {
+                setError(null)
+                fileInputRef.current?.click()
+              }}
+              disabled={loading}
               onDrop={handleDrop}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
+              className={`focus-visible:ring-ring/50 block w-full cursor-pointer rounded-xl border border-dashed p-4 text-left transition-all outline-none focus-visible:ring-[3px] disabled:cursor-default ${
+                isDragging
+                  ? 'border-primary bg-primary/5 ring-primary/30 ring-2'
+                  : 'hover:border-primary/50 hover:bg-muted/40'
+              }`}
             >
               <div className="flex items-start gap-3">
                 <span className="bg-primary/10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
@@ -214,29 +226,31 @@ export function OnboardingScreen({
                   </p>
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-2">
-                <Button
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => {
-                    setError(null)
-                    fileInputRef.current?.click()
-                  }}
-                  disabled={loading}
-                >
-                  {loading ? 'Chargement…' : 'Choisir un fichier'}
-                </Button>
-                {/* Le guide se range sous la zone qu'il explique. */}
-                <ImportFormatGuide />
-              </div>
+              {/*
+                Rendu en <span> : le clic appartient au bloc, et un bouton
+                dans un bouton n'existe pas en HTML.
+              */}
+              <Button
+                asChild
+                size="sm"
+                className="pointer-events-none mt-3 w-full"
+              >
+                <span>{loading ? 'Chargement…' : 'Choisir un fichier'}</span>
+              </Button>
+            </button>
+
+            {/* Le guide se range sous la zone qu'il explique, hors du clic. */}
+            <div className="flex justify-center">
+              <ImportFormatGuide />
             </div>
 
             {/* Partage reçu depuis un autre appareil */}
             <ActionRow
               icon={KeyRound}
-              tone="secondary"
+              tone="primary"
               label="J’ai un code de partage"
               description="Récupérez le voyage préparé sur un autre appareil"
+              className="bg-primary/5 hover:bg-primary/10"
               onClick={() => {
                 setError(null)
                 setShareImportOpen(true)
@@ -246,9 +260,10 @@ export function OnboardingScreen({
             {/* Demo data */}
             <ActionRow
               icon={PlayCircle}
-              tone="neutral"
+              tone="secondary"
               label={loadingMock ? 'Chargement…' : 'Essayer avec la démo'}
               description="Pour découvrir l’app en 30 secondes"
+              className="bg-secondary/10 hover:bg-secondary/15"
               disabled={loadingMock}
               onClick={handleMockData}
             />

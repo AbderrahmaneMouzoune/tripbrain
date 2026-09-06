@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -30,9 +30,82 @@ import {
   Lightbulb,
   Sparkles,
   TriangleAlert,
+  X,
 } from 'lucide-react'
 import { trackEvent } from '@/lib/analytics/client'
 import { getGeneratorUrl } from '@/lib/site-links'
+
+/**
+ * Le renvoi vers le générateur ne sert qu'une fois : celui qui revient dans ce
+ * guide sait déjà où se fabrique un itinéraire, et vient chercher un format.
+ */
+const GENERATOR_BANNER_KEY = 'tripbrain:generator-banner'
+
+/**
+ * Bandeau « pas de fichier ? » du guide de format, refermable.
+ *
+ * Il commence caché et n'apparaît qu'après le montage : lire le stockage au
+ * premier rendu ferait diverger le HTML du serveur et celui du navigateur.
+ */
+function GeneratorBanner() {
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    try {
+      setVisible(window.localStorage.getItem(GENERATOR_BANNER_KEY) !== 'hidden')
+    } catch {
+      // Stockage refusé (navigation privée) : le bandeau reste discret.
+      setVisible(false)
+    }
+  }, [])
+
+  if (!visible) return null
+
+  return (
+    <div className="border-primary/20 bg-primary/5 mx-5 mt-4 mb-1 flex shrink-0 items-start gap-3 rounded-xl border p-3">
+      <span className="bg-primary/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
+        <Sparkles className="text-primary h-4 w-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-muted-foreground text-xs leading-relaxed">
+          <span className="text-foreground font-medium">
+            Vous n’avez aucun fichier ?
+          </span>{' '}
+          Le générateur de tripbrain.fr construit l’itinéraire avec l’IA et le
+          renvoie ici, sans passer par un tableur.
+        </p>
+        <Button size="sm" variant="outline" className="mt-2" asChild>
+          <a
+            href={getGeneratorUrl('import_guide')}
+            target="_blank"
+            rel="noreferrer"
+            onClick={() =>
+              trackEvent('generator_opened', { surface: 'import_guide' })
+            }
+          >
+            Générer
+            <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
+          </a>
+        </Button>
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          try {
+            window.localStorage.setItem(GENERATOR_BANNER_KEY, 'hidden')
+          } catch {
+            // Sans stockage, le bandeau reviendra à la prochaine ouverture.
+          }
+          setVisible(false)
+        }}
+        aria-label="Masquer cette suggestion"
+        className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer transition-colors"
+      >
+        <X className="h-4 w-4" strokeWidth={1.75} />
+      </button>
+    </div>
+  )
+}
 import type { TripData } from '@/hooks/use-trip-data'
 import type {
   DayItinerary,
@@ -1187,31 +1260,7 @@ export function ImportFormatGuideContent() {
         Sans itinéraire sous la main, c'est le générateur qu'il faut, pas un
         modèle Excel à remplir à la main.
       */}
-      <div className="border-primary/20 bg-primary/5 mx-5 mt-4 mb-1 flex shrink-0 flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center sm:gap-3">
-        <span className="bg-primary/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-          <Sparkles className="text-primary h-4 w-4" />
-        </span>
-        <p className="text-muted-foreground min-w-0 flex-1 text-xs leading-relaxed">
-          <span className="text-foreground font-medium">
-            Vous n’avez aucun fichier ?
-          </span>{' '}
-          Le générateur de tripbrain.fr construit l’itinéraire avec l’IA et le
-          renvoie ici, sans passer par un tableur.
-        </p>
-        <Button size="sm" variant="outline" className="shrink-0" asChild>
-          <a
-            href={getGeneratorUrl('import_guide')}
-            target="_blank"
-            rel="noreferrer"
-            onClick={() =>
-              trackEvent('generator_opened', { surface: 'import_guide' })
-            }
-          >
-            Générer
-            <ArrowUpRight className="ml-1.5 h-3.5 w-3.5" />
-          </a>
-        </Button>
-      </div>
+      <GeneratorBanner />
 
       {/* ── Format tabs + scrollable content ── */}
       <Tabs
