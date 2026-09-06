@@ -382,25 +382,20 @@ function HomePageContent() {
           >
             <div className="mx-auto max-w-4xl px-4 py-3">
               <div className="flex items-center justify-between">
-                <div className="flex min-w-0 items-center gap-3">
+                <div className="flex items-center gap-3">
                   {/* Geometric tile emblem */}
                   <AppIcon size="sm" />
-                  <div className="min-w-0">
+                  <div>
                     <h1 className="text-foreground font-display text-base leading-tight font-bold tracking-[0.08em] uppercase">
                       TripBrain
                     </h1>
-                    {/*
-                      Une seule ligne : passée à deux, cette mention repoussait
-                      tout l'écran vers le bas sur chaque journée d'un voyage
-                      terminé, pour une information de contexte.
-                    */}
-                    <p className="text-muted-foreground truncate text-[11px] font-medium tracking-wider uppercase">
+                    <p className="text-muted-foreground text-[11px] font-medium tracking-wider uppercase">
                       {countdown.type === 'before' &&
                         `Départ dans ${countdown.days} jour${countdown.days > 1 ? 's' : ''}`}
                       {countdown.type === 'during' &&
                         `Jour ${countdown.days} du voyage`}
                       {countdown.type === 'after' &&
-                        `Terminé il y a ${countdown.days} jour${countdown.days > 1 ? 's' : ''}`}
+                        `Voyage terminé il y a ${countdown.days} jour${countdown.days > 1 ? 's' : ''}`}
                     </p>
                   </div>
                 </div>
@@ -470,14 +465,8 @@ function HomePageContent() {
             className="mx-auto max-w-4xl px-4 py-6"
             {...swipeHandlers}
           >
-            {/*
-              Barre de navigation du haut — réservée aux écrans larges.
-              Sur mobile, elle proposait exactement les quatre mêmes actions
-              que la barre du bas (précédent, roadbook, docs, suivant), à un
-              écran de distance l'une de l'autre : deux fois le même choix, et
-              soixante-dix pixels pris sur le contenu.
-            */}
-            <div className="mb-6 hidden items-center justify-between md:flex">
+            {/* Navigation + tabs bar */}
+            <div className="mb-6 flex items-center justify-between">
               {activeTab === 'documents' ? (
                 <div className="w-22" aria-hidden />
               ) : (

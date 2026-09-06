@@ -178,60 +178,22 @@ export function OnboardingScreen({
           ── Les quatre façons de commencer ──
           Elles occupaient quatre pavés centrés, soit un écran et demi à faire
           défiler pour découvrir la dernière. Elles tiennent maintenant en un
-          écran : le générateur garde son bloc — c'est la seule issue quand on
-          n'a aucun fichier — la zone de dépôt reste une cible de glisser-
-          déposer, et les deux dernières deviennent des lignes.
+          écran.
+
+          L'ordre suit qui arrive ici : quelqu'un qui ouvre l'app sans voyage a
+          le plus souvent déjà préparé son itinéraire sur le site, et vient le
+          récupérer — par le fichier qu'il a téléchargé, ou par le code envoyé
+          depuis l'ordinateur. Le générateur ferme la marche : il ne sert
+          qu'à ceux qui arrivent les mains vides.
         */}
         <Card className="overflow-hidden">
           <CardContent className="space-y-3 p-4 sm:p-5">
-            {/*
-              Première question de quelqu'un qui ouvre l'app sans voyage :
-              « où est-ce que je fabrique mon itinéraire ? ». Elle se traitait
-              jusqu'ici en dehors de l'app, sans que rien ne le dise ici. Le
-              renvoi vers le générateur passe donc avant l'import : c'est le
-              seul chemin praticable quand on n'a encore aucun fichier.
-            */}
-            <div className="border-primary/25 bg-primary/5 rounded-xl border p-4">
-              <div className="flex items-start gap-3">
-                <span className="bg-primary/10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
-                  <Sparkles className="text-primary h-4.5 w-4.5" />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-foreground text-sm font-semibold">
-                    Je n’ai pas encore d’itinéraire
-                  </p>
-                  <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-                    Décrivez votre voyage sur <strong>tripbrain.fr</strong> :
-                    ChatGPT ou Claude en fait un programme jour par jour, que
-                    vous renvoyez ici d’un clic. Gratuit, sans compte.
-                  </p>
-                </div>
-              </div>
-              <Button
-                size="sm"
-                className="mt-3 w-full"
-                asChild
-                onClick={() =>
-                  trackEvent('generator_opened', { surface: 'onboarding' })
-                }
-              >
-                <a
-                  href={getGeneratorUrl('onboarding')}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Créer mon itinéraire
-                  <ArrowUpRight className="ml-2 h-4 w-4" />
-                </a>
-              </Button>
-            </div>
-
             {/* Drop zone */}
             <div
-              className={`rounded-xl border border-dashed p-3 transition-all ${
+              className={`rounded-xl border p-4 transition-all ${
                 isDragging
-                  ? 'border-primary bg-primary/5 ring-primary/30 ring-2'
-                  : 'hover:border-primary/50'
+                  ? 'border-primary bg-primary/10 ring-primary/30 ring-2'
+                  : 'border-primary/25 bg-primary/5 hover:border-primary/50'
               }`}
               onDrop={handleDrop}
               onDragOver={handleDragOver}
@@ -251,21 +213,20 @@ export function OnboardingScreen({
                     <strong>3 .csv</strong> à la fois.
                   </p>
                 </div>
+              </div>
+              <div className="mt-3 flex items-center gap-2">
                 <Button
-                  variant="outline"
                   size="sm"
-                  className="shrink-0"
+                  className="flex-1"
                   onClick={() => {
                     setError(null)
                     fileInputRef.current?.click()
                   }}
                   disabled={loading}
                 >
-                  {loading ? 'Chargement…' : 'Choisir'}
+                  {loading ? 'Chargement…' : 'Choisir un fichier'}
                 </Button>
-              </div>
-              {/* Le guide se range sous la zone qu'il explique. */}
-              <div className="mt-1 flex justify-start pl-12">
+                {/* Le guide se range sous la zone qu'il explique. */}
                 <ImportFormatGuide />
               </div>
             </div>
@@ -291,8 +252,30 @@ export function OnboardingScreen({
               disabled={loadingMock}
               onClick={handleMockData}
             />
+
+            {/*
+              Le générateur reste signalé — sans lui, personne ne devine où se
+              fabrique un itinéraire — mais en pied de carte : c'est le cas
+              minoritaire, et il emmène hors de l'app.
+            */}
+            <div className="border-border/60 border-t pt-3 text-center">
+              <a
+                href={getGeneratorUrl('onboarding')}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() =>
+                  trackEvent('generator_opened', { surface: 'onboarding' })
+                }
+                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs underline-offset-4 transition-colors hover:underline"
+              >
+                <Sparkles className="text-primary h-3.5 w-3.5" />
+                Pas encore d’itinéraire ? Créez-le sur tripbrain.fr
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </a>
+            </div>
           </CardContent>
         </Card>
+
         {/* Installation sur l'écran d'accueil, discrète tant qu'aucun voyage n'est chargé */}
         <div className="flex justify-center">
           <PwaInstallEntry />
