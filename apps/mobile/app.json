@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "tripbrain",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "backgroundColor": "#f3f7fd",
     "ios": {
       "supportsTablet": true,
@@ -23,7 +22,6 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#f3f7fd"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "fr.tripbrain.app",
       "intentFilters": [
@@ -54,7 +52,9 @@
             "backgroundColor": "#0d172b"
           }
         }
-      ]
+      ],
+      "expo-sharing",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true,

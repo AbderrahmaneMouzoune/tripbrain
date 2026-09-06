@@ -11,6 +11,8 @@ bun install
 bunx expo start
 ```
 
+Le projet suit le **SDK Expo 57**, celui de l'Expo Go publié sur les stores : Expo Go n'existe que pour le dernier SDK sur iOS, un projet en retard d'un SDK ne s'y ouvre plus (« Project is incompatible with this version of Expo Go »). Pour monter de version : `bunx expo install expo@latest --fix && bunx expo-doctor`, puis retirer d'`app.json` les champs que le nouveau SDK a supprimés.
+
 Toutes les dépendances natives sont incluses dans [Expo Go](https://expo.dev/go) : scanner le QR code suffit pour développer. Un [build de développement](https://docs.expo.dev/develop/development-builds/introduction/) n'est nécessaire que pour tester le schéma `tripbrain://` et les liens universels.
 
 Par défaut, la WebView charge `http://localhost:3000` (voir `.env`). Sur un appareil physique, remplacer par l'adresse de la machine sur le réseau local, celle qu'affiche `bun run dev` dans `apps/web`.
