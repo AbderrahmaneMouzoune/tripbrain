@@ -46,7 +46,12 @@ import {
 import { EntityEditSheet } from '@/components/edit/entity-edit-sheet'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Accordion } from '@/components/ui/accordion'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
 import {
   Carousel,
   CarouselContent,
@@ -59,7 +64,6 @@ import { Lightbox } from '@/components/lightbox'
 import { Badge } from '@/components/ui/badge'
 import { TransportCard } from '@/components/transport-card'
 import { AccommodationCard } from '@/components/accommodation-card'
-import { TipsCard } from '@/components/tips-card'
 import { DayActivityItem } from '@/components/day-activity-item'
 import {
   MapPin,
@@ -70,9 +74,11 @@ import {
   Footprints,
   StickyNote,
   Backpack,
+  Lightbulb,
   Tag,
   Pencil,
   Plus,
+  type LucideIcon,
 } from 'lucide-react'
 import { CachedImage } from '@/components/cached-image'
 
@@ -213,6 +219,17 @@ export function DayDetail({
         )
       : []
 
+  /**
+   * Le bloc replié n'a de raison d'être que s'il contient quelque chose : sans
+   * ce garde-fou, une journée dépouillée afficherait un accordéon vide.
+   */
+  const hasDetails =
+    dayImages.length > 0 ||
+    (day.highlights?.length ?? 0) > 0 ||
+    (day.foodRecommendations?.length ?? 0) > 0 ||
+    (day.packingTips?.length ?? 0) > 0 ||
+    (day.tips?.length ?? 0) > 0
+
   const [carouselApi, setCarouselApi] = useState<CarouselApi>()
   const [currentSlide, setCurrentSlide] = useState(0)
   const [dayLightboxOpen, setDayLightboxOpen] = useState(false)
@@ -245,7 +262,7 @@ export function DayDetail({
         isOpen={dayLightboxOpen}
         onClose={() => setDayLightboxOpen(false)}
       />
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-4">
         {/* Header — editorial style */}
         <QuickActionsTarget
           asChild
@@ -254,40 +271,13 @@ export function DayDetail({
           description={`Jour ${day.dayNumber} · ${day.city}`}
           actions={dayActions}
         >
-          <div className="border-border/60 flex flex-col gap-1.5 border-b pb-4">
-            <div className="flex items-start gap-2">
-              <div className="space-x-1.5">
-                {day.dayType && (
-                  <Badge
-                    variant="outline"
-                    className="gap-1 font-medium capitalize"
-                  >
-                    <Tag className="h-3 w-3" strokeWidth={1.75} />
-                    {day.dayType}
-                  </Badge>
-                )}
-                {day.walkingDistance && (
-                  <Badge variant="outline" className="gap-1 font-medium">
-                    <Footprints className="h-3 w-3" strokeWidth={1.75} />
-                    {day.walkingDistance}
-                  </Badge>
-                )}
-              </div>
-
-              {isEditing && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={editDay}
-                  className="ml-auto h-7 shrink-0 gap-1.5 rounded-full px-2.5 text-[11px]"
-                >
-                  <Pencil className="h-3 w-3" strokeWidth={1.75} />
-                  Modifier la journée
-                </Button>
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2.5">
+          <div className="border-border/60 flex flex-col gap-1.5 border-b pb-3">
+            {/*
+              Rang du jour, date, nature de la journée et distance de marche
+              tiennent sur une seule ligne : ce sont quatre repères courts, et
+              les empiler coûtait une ligne entière en haut de chaque journée.
+            */}
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
               <span
                 className={cn(
                   'inline-flex items-center gap-1 rounded-md px-2.5 py-0.5 text-xs font-semibold tracking-wider uppercase',
@@ -303,6 +293,33 @@ export function DayDetail({
               <span className="text-muted-foreground text-xs tracking-widest uppercase">
                 {formatDate(day.date)}
               </span>
+              {day.dayType && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 font-medium capitalize"
+                >
+                  <Tag className="h-3 w-3" strokeWidth={1.75} />
+                  {day.dayType}
+                </Badge>
+              )}
+              {day.walkingDistance && (
+                <Badge variant="outline" className="gap-1 font-medium">
+                  <Footprints className="h-3 w-3" strokeWidth={1.75} />
+                  {day.walkingDistance}
+                </Badge>
+              )}
+
+              {isEditing && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={editDay}
+                  className="ml-auto h-7 shrink-0 gap-1.5 rounded-full px-2.5 text-[11px]"
+                >
+                  <Pencil className="h-3 w-3" strokeWidth={1.75} />
+                  Modifier la journée
+                </Button>
+              )}
             </div>
             <h2 className="text-foreground font-display text-2xl leading-tight font-bold tracking-[0.03em]">
               {day.title}
@@ -329,119 +346,13 @@ export function DayDetail({
           </div>
         )}
 
-        {/* Day places & activities carousel */}
-        {dayImages.length > 0 && (
-          <Card className="border-border/60 bg-card/80 gap-0 overflow-hidden py-0 shadow-none">
-            <CardHeader className="px-4 pt-4">
-              <CardTitle className="text-muted-foreground flex items-center gap-2 text-sm font-semibold tracking-wide uppercase">
-                <Images
-                  className="text-secondary h-3.5 w-3.5"
-                  strokeWidth={1.75}
-                />
-                Photos du jour
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-0 pt-0 pb-0">
-              <div className="relative">
-                <Carousel
-                  opts={{ loop: true }}
-                  setApi={setCarouselApi}
-                  className="w-full"
-                >
-                  <CarouselContent>
-                    {dayImages.map((img, i) => (
-                      <CarouselItem key={i}>
-                        <div
-                          className="relative aspect-video w-full cursor-zoom-in overflow-hidden"
-                          onClick={() => setDayLightboxOpen(true)}
-                        >
-                          <CachedImage
-                            src={img.url}
-                            alt={img.caption}
-                            className="h-full w-full object-cover"
-                            fallbackClassName="h-full w-full aspect-video"
-                          />
-                          <div className="bg-primary/70 absolute inset-x-0 bottom-0 px-4 py-3">
-                            <p className="text-primary-foreground text-xs leading-snug font-medium drop-shadow">
-                              {img.caption}
-                            </p>
-                          </div>
-                        </div>
-                      </CarouselItem>
-                    ))}
-                  </CarouselContent>
-                  {dayImages.length > 1 && (
-                    <>
-                      <CarouselPrevious className="border-border/70 bg-background/70 text-foreground hover:bg-background/90 hover:text-foreground left-2 h-7 w-7 backdrop-blur-sm" />
-                      <CarouselNext className="border-border/70 bg-background/70 text-foreground hover:bg-background/90 hover:text-foreground right-2 h-7 w-7 backdrop-blur-sm" />
-                    </>
-                  )}
-                </Carousel>
-                {dayImages.length > 1 && (
-                  <div className="absolute bottom-8 left-1/2 flex -translate-x-1/2 gap-1.5">
-                    {dayImages.map((_, i) => (
-                      <Button
-                        key={i}
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => carouselApi?.scrollTo(i)}
-                        className={cn(
-                          'h-1.5 rounded-full transition-all duration-200',
-                          i === currentSlide
-                            ? 'bg-primary w-4'
-                            : 'bg-primary/35 w-1.5',
-                        )}
-                        aria-label={`Aller à la photo ${i + 1}`}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Highlights */}
-        {/* Highlights */}
-        {day.highlights && day.highlights.length > 0 && (
-          <Card className="border-border/70 bg-card/90 bg-tile-pattern relative overflow-hidden shadow-none">
-            <div className="bg-background/55 pointer-events-none absolute inset-0" />
-            <CardHeader className="relative px-5 pt-4 pb-2">
-              <CardTitle className="text-muted-foreground flex items-center gap-2 text-xs font-semibold uppercase">
-                <Star
-                  className="text-secondary h-3.5 w-3.5"
-                  strokeWidth={1.75}
-                />
-                Points forts
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="relative px-5 pt-0 pb-5">
-              <ol className="divide-border/45 flex flex-col divide-y">
-                {day.highlights.map((item, i) => (
-                  <QuickActionsTarget
-                    key={i}
-                    asChild
-                    entity="day"
-                    title={item}
-                    description={dayListItemLabel('highlights')}
-                    actions={listItemActions('highlights', item, i)}
-                  >
-                    <li className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-                      <span className="text-muted-foreground/75 font-display mt-0.5 text-xs tracking-[0.16em] tabular-nums">
-                        {String(i + 1).padStart(2, '0')}
-                      </span>
-                      <p className="text-foreground text-sm leading-relaxed">
-                        {item}
-                      </p>
-                    </li>
-                  </QuickActionsTarget>
-                ))}
-              </ol>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Transport info */}
+        {/*
+          ── Ce qu'il y a à faire aujourd'hui ──
+          Transport, programme, hébergement : l'ordre suit la journée, du
+          départ du matin au lit du soir. Tout le reste — photos, points forts,
+          plats, bagages, conseils — se lit avant de partir, pas sur le quai :
+          ça descend dans « Le jour en détail », plus bas.
+        */}
         {transport ? (
           <TransportCard
             transport={transport}
@@ -453,24 +364,6 @@ export function DayDetail({
             <AddEntityButton
               label="Ajouter un transport"
               onClick={() => editTransport(createEmptyTransport())}
-            />
-          )
-        )}
-
-        {/* Accommodation */}
-        {accommodation ? (
-          <AccommodationCard
-            accommodation={accommodation}
-            onEdit={
-              isEditing ? () => editAccommodation(accommodation) : undefined
-            }
-            actions={accommodationActions}
-          />
-        ) : (
-          isEditing && (
-            <AddEntityButton
-              label="Ajouter un hébergement"
-              onClick={() => editAccommodation(createEmptyAccommodation(day))}
             />
           )
         )}
@@ -551,79 +444,221 @@ export function DayDetail({
           </CardContent>
         </Card>
 
-        {/* Food recommendations */}
-        {day.foodRecommendations && day.foodRecommendations.length > 0 && (
-          <Card className="border-border/60 bg-card/80 shadow-none">
-            <CardHeader className="px-4 py-2">
-              <CardTitle className="text-muted-foreground flex items-center gap-2 text-sm font-semibold tracking-wide uppercase">
-                <Utensils
-                  className="text-secondary h-3.5 w-3.5"
-                  strokeWidth={1.75}
-                />
-                À goûter
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pt-0 pb-4">
-              <div className="flex flex-wrap gap-2">
-                {day.foodRecommendations.map((item, i) => (
-                  <QuickActionsTarget
-                    key={i}
-                    asChild
-                    entity="day"
-                    title={item}
-                    description={dayListItemLabel('foodRecommendations')}
-                    actions={listItemActions('foodRecommendations', item, i)}
-                  >
-                    <Badge variant="outline" className="text-xs">
-                      {item}
-                    </Badge>
-                  </QuickActionsTarget>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Packing tips */}
-        {day.packingTips && day.packingTips.length > 0 && (
-          <Card className="border-border/60 bg-card/80 shadow-none">
-            <CardHeader className="px-4 py-2">
-              <CardTitle className="text-muted-foreground flex items-center gap-2 text-sm font-semibold tracking-wide uppercase">
-                <Backpack
-                  className="text-secondary h-3.5 w-3.5"
-                  strokeWidth={1.75}
-                />
-                Bagages
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pt-0 pb-4">
-              <ul className="divide-border/40 flex flex-col divide-y">
-                {day.packingTips.map((tip, i) => (
-                  <QuickActionsTarget
-                    key={i}
-                    asChild
-                    entity="day"
-                    title={tip}
-                    description={dayListItemLabel('packingTips')}
-                    actions={listItemActions('packingTips', tip, i)}
-                  >
-                    <li className="text-foreground flex items-center gap-2 py-2 text-sm first:pt-0 last:pb-0">
-                      <span className="bg-secondary/20 h-1.5 w-1.5 shrink-0 rounded-full" />
-                      {tip}
-                    </li>
-                  </QuickActionsTarget>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Tips */}
-        {day.tips && day.tips.length > 0 && (
-          <TipsCard
-            tips={day.tips}
-            itemActions={(tip, index) => listItemActions('tips', tip, index)}
+        {/* Accommodation — la fin de la journée, donc après le programme */}
+        {accommodation ? (
+          <AccommodationCard
+            accommodation={accommodation}
+            onEdit={
+              isEditing ? () => editAccommodation(accommodation) : undefined
+            }
+            actions={accommodationActions}
           />
+        ) : (
+          isEditing && (
+            <AddEntityButton
+              label="Ajouter un hébergement"
+              onClick={() => editAccommodation(createEmptyAccommodation(day))}
+            />
+          )
+        )}
+
+        {/*
+          ── Le jour en détail ──
+          Cinq blocs qui pesaient huit cents pixels quand ils étaient tous
+          déployés, soit une journée entière à faire défiler avant d'arriver au
+          programme. Repliés, ils annoncent ce qu'ils contiennent et s'ouvrent
+          d'un geste. Le compteur suffit à savoir s'il y a quelque chose à
+          regarder.
+        */}
+        {hasDetails && (
+          <Card className="border-border/60 bg-card/80 gap-0 overflow-hidden py-0 shadow-none">
+            <Accordion type="multiple" className="px-4">
+              {day.highlights && day.highlights.length > 0 && (
+                <DaySection
+                  value="highlights"
+                  icon={Star}
+                  label="Points forts"
+                  count={day.highlights.length}
+                >
+                  <ol className="divide-border/45 flex flex-col divide-y">
+                    {day.highlights.map((item, i) => (
+                      <QuickActionsTarget
+                        key={i}
+                        asChild
+                        entity="day"
+                        title={item}
+                        description={dayListItemLabel('highlights')}
+                        actions={listItemActions('highlights', item, i)}
+                      >
+                        <li className="flex items-start gap-3 py-2.5 first:pt-0 last:pb-0">
+                          <span className="text-muted-foreground/75 font-display mt-0.5 text-xs tracking-[0.16em] tabular-nums">
+                            {String(i + 1).padStart(2, '0')}
+                          </span>
+                          <p className="text-foreground text-sm leading-relaxed">
+                            {item}
+                          </p>
+                        </li>
+                      </QuickActionsTarget>
+                    ))}
+                  </ol>
+                </DaySection>
+              )}
+
+              {dayImages.length > 0 && (
+                <DaySection
+                  value="photos"
+                  icon={Images}
+                  label="Photos"
+                  count={dayImages.length}
+                >
+                  <div className="relative overflow-hidden rounded-xl">
+                    <Carousel
+                      opts={{ loop: true }}
+                      setApi={setCarouselApi}
+                      className="w-full"
+                    >
+                      <CarouselContent>
+                        {dayImages.map((img, i) => (
+                          <CarouselItem key={i}>
+                            <div
+                              className="relative aspect-video w-full cursor-zoom-in overflow-hidden"
+                              onClick={() => setDayLightboxOpen(true)}
+                            >
+                              <CachedImage
+                                src={img.url}
+                                alt={img.caption}
+                                className="h-full w-full object-cover"
+                                fallbackClassName="h-full w-full aspect-video"
+                              />
+                              <div className="bg-primary/70 absolute inset-x-0 bottom-0 px-4 py-3">
+                                <p className="text-primary-foreground text-xs leading-snug font-medium drop-shadow">
+                                  {img.caption}
+                                </p>
+                              </div>
+                            </div>
+                          </CarouselItem>
+                        ))}
+                      </CarouselContent>
+                      {dayImages.length > 1 && (
+                        <>
+                          <CarouselPrevious className="border-border/70 bg-background/70 text-foreground hover:bg-background/90 hover:text-foreground left-2 h-7 w-7 backdrop-blur-sm" />
+                          <CarouselNext className="border-border/70 bg-background/70 text-foreground hover:bg-background/90 hover:text-foreground right-2 h-7 w-7 backdrop-blur-sm" />
+                        </>
+                      )}
+                    </Carousel>
+                    {dayImages.length > 1 && (
+                      <div className="absolute bottom-8 left-1/2 flex -translate-x-1/2 gap-1.5">
+                        {dayImages.map((_, i) => (
+                          <Button
+                            key={i}
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => carouselApi?.scrollTo(i)}
+                            className={cn(
+                              'h-1.5 rounded-full transition-all duration-200',
+                              i === currentSlide
+                                ? 'bg-primary w-4'
+                                : 'bg-primary/35 w-1.5',
+                            )}
+                            aria-label={`Aller à la photo ${i + 1}`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </DaySection>
+              )}
+
+              {day.foodRecommendations &&
+                day.foodRecommendations.length > 0 && (
+                  <DaySection
+                    value="food"
+                    icon={Utensils}
+                    label="À goûter"
+                    count={day.foodRecommendations.length}
+                  >
+                    <div className="flex flex-wrap gap-2">
+                      {day.foodRecommendations.map((item, i) => (
+                        <QuickActionsTarget
+                          key={i}
+                          asChild
+                          entity="day"
+                          title={item}
+                          description={dayListItemLabel('foodRecommendations')}
+                          actions={listItemActions(
+                            'foodRecommendations',
+                            item,
+                            i,
+                          )}
+                        >
+                          <Badge variant="outline" className="text-xs">
+                            {item}
+                          </Badge>
+                        </QuickActionsTarget>
+                      ))}
+                    </div>
+                  </DaySection>
+                )}
+
+              {day.packingTips && day.packingTips.length > 0 && (
+                <DaySection
+                  value="packing"
+                  icon={Backpack}
+                  label="Bagages"
+                  count={day.packingTips.length}
+                >
+                  <ul className="divide-border/40 flex flex-col divide-y">
+                    {day.packingTips.map((tip, i) => (
+                      <QuickActionsTarget
+                        key={i}
+                        asChild
+                        entity="day"
+                        title={tip}
+                        description={dayListItemLabel('packingTips')}
+                        actions={listItemActions('packingTips', tip, i)}
+                      >
+                        <li className="text-foreground flex items-center gap-2 py-2 text-sm first:pt-0 last:pb-0">
+                          <span className="bg-secondary/20 h-1.5 w-1.5 shrink-0 rounded-full" />
+                          {tip}
+                        </li>
+                      </QuickActionsTarget>
+                    ))}
+                  </ul>
+                </DaySection>
+              )}
+
+              {day.tips && day.tips.length > 0 && (
+                <DaySection
+                  value="tips"
+                  icon={Lightbulb}
+                  label="Conseils pratiques"
+                  count={day.tips.length}
+                >
+                  <ul className="flex flex-col gap-2">
+                    {day.tips.map((tip, i) => (
+                      <QuickActionsTarget
+                        key={i}
+                        asChild
+                        entity="day"
+                        title={tip}
+                        description={dayListItemLabel('tips')}
+                        actions={listItemActions('tips', tip, i)}
+                      >
+                        <li className="flex items-start gap-2 text-sm">
+                          <span className="text-secondary mt-0.5 shrink-0">
+                            →
+                          </span>
+                          <span className="text-foreground leading-snug">
+                            {tip}
+                          </span>
+                        </li>
+                      </QuickActionsTarget>
+                    ))}
+                  </ul>
+                </DaySection>
+              )}
+            </Accordion>
+          </Card>
         )}
       </div>
 
@@ -729,6 +764,42 @@ export function DayDetail({
         />
       )}
     </>
+  )
+}
+
+/**
+ * Une section de « Le jour en détail » : un titre qui dit ce qu'il y a
+ * dedans et combien, et le contenu en dessous une fois ouvert.
+ *
+ * Le compteur est là pour qu'on n'ait pas à ouvrir pour savoir : c'est ce qui
+ * rend le repli acceptable plutôt que frustrant.
+ */
+function DaySection({
+  value,
+  icon: Icon,
+  label,
+  count,
+  children,
+}: {
+  value: string
+  icon: LucideIcon
+  label: string
+  count: number
+  children: React.ReactNode
+}) {
+  return (
+    <AccordionItem value={value} className="border-border/45">
+      <AccordionTrigger className="py-3 hover:no-underline">
+        <span className="text-muted-foreground flex items-center gap-2 text-sm font-semibold tracking-wide uppercase">
+          <Icon className="text-secondary h-3.5 w-3.5" strokeWidth={1.75} />
+          {label}
+          <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-0.5 text-[10px] leading-none font-semibold tabular-nums">
+            {count}
+          </span>
+        </span>
+      </AccordionTrigger>
+      <AccordionContent className="pb-4">{children}</AccordionContent>
+    </AccordionItem>
   )
 }
 

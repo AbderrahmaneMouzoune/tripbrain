@@ -49,10 +49,15 @@ export function Timeline({
   return (
     <div
       ref={scrollContainerRef}
-      className="w-full overflow-x-auto scroll-smooth pb-4"
+      className="w-full overflow-x-auto scroll-smooth pb-2"
       style={{ scrollbarWidth: 'none' }}
     >
-      <div className="flex min-w-max items-center gap-0 px-4 py-5">
+      {/*
+        La frise est en haut de chaque journée : ce qu'elle prend en hauteur,
+        le roadbook ne l'a plus. Le rembourrage laisse juste la place à l'anneau
+        de sélection, qui déborde de la pastille.
+      */}
+      <div className="flex min-w-max items-center gap-0 px-4 py-3">
         {itinerary.map((day, index) => {
           const status = getDayStatus(day.date)
           const isSelected = selectedDay === index

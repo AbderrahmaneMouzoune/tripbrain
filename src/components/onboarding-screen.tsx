@@ -14,6 +14,7 @@ import {
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { ImportFormatGuide } from '@/components/import-format-guide'
+import { ActionRow } from '@/components/share-dialog/action-row'
 import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog'
 import { PwaInstallEntry } from '@/components/pwa-install-prompt'
 import type { DayItinerary } from '@/lib/itinerary-data'
@@ -173,9 +174,16 @@ export function OnboardingScreen({
           </div>
         )}
 
-        {/* Main card */}
+        {/*
+          ── Les quatre façons de commencer ──
+          Elles occupaient quatre pavés centrés, soit un écran et demi à faire
+          défiler pour découvrir la dernière. Elles tiennent maintenant en un
+          écran : le générateur garde son bloc — c'est la seule issue quand on
+          n'a aucun fichier — la zone de dépôt reste une cible de glisser-
+          déposer, et les deux dernières deviennent des lignes.
+        */}
         <Card className="overflow-hidden">
-          <CardContent className="space-y-4 p-4 sm:p-5">
+          <CardContent className="space-y-3 p-4 sm:p-5">
             {/*
               Première question de quelqu'un qui ouvre l'app sans voyage :
               « où est-ce que je fabrique mon itinéraire ? ». Elle se traitait
@@ -183,21 +191,25 @@ export function OnboardingScreen({
               renvoi vers le générateur passe donc avant l'import : c'est le
               seul chemin praticable quand on n'a encore aucun fichier.
             */}
-            <div className="border-primary/25 bg-primary/5 rounded-xl border p-4 text-center">
-              <div className="bg-primary/10 mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl">
-                <Sparkles className="text-primary h-5 w-5" />
+            <div className="border-primary/25 bg-primary/5 rounded-xl border p-4">
+              <div className="flex items-start gap-3">
+                <span className="bg-primary/10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+                  <Sparkles className="text-primary h-4.5 w-4.5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-foreground text-sm font-semibold">
+                    Je n’ai pas encore d’itinéraire
+                  </p>
+                  <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                    Décrivez votre voyage sur <strong>tripbrain.fr</strong> :
+                    ChatGPT ou Claude en fait un programme jour par jour, que
+                    vous renvoyez ici d’un clic. Gratuit, sans compte.
+                  </p>
+                </div>
               </div>
-              <p className="text-foreground text-sm font-semibold">
-                Je n’ai pas encore d’itinéraire
-              </p>
-              <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-                Décrivez votre voyage sur <strong>tripbrain.fr</strong> :
-                ChatGPT ou Claude en fait un programme jour par jour, que vous
-                renvoyez ici d’un clic. Gratuit, sans compte.
-              </p>
               <Button
                 size="sm"
-                className="mt-4"
+                className="mt-3 w-full"
                 asChild
                 onClick={() =>
                   trackEvent('generator_opened', { surface: 'onboarding' })
@@ -216,7 +228,7 @@ export function OnboardingScreen({
 
             {/* Drop zone */}
             <div
-              className={`rounded-xl border border-dashed p-4 text-center transition-all sm:p-5 ${
+              className={`rounded-xl border border-dashed p-3 transition-all ${
                 isDragging
                   ? 'border-primary bg-primary/5 ring-primary/30 ring-2'
                   : 'hover:border-primary/50'
@@ -225,84 +237,62 @@ export function OnboardingScreen({
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
             >
-              <div className="bg-primary/10 mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl">
-                <Upload className="text-primary h-5 w-5" />
+              <div className="flex items-start gap-3">
+                <span className="bg-primary/10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+                  <Upload className="text-primary h-4.5 w-4.5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-foreground text-sm font-semibold">
+                    J’ai déjà un itinéraire
+                  </p>
+                  <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                    <strong>.json</strong> (export TripBrain),{' '}
+                    <strong>.xlsx</strong> (3 onglets) ou{' '}
+                    <strong>3 .csv</strong> à la fois.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => {
+                    setError(null)
+                    fileInputRef.current?.click()
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? 'Chargement…' : 'Choisir'}
+                </Button>
               </div>
-              <p className="text-foreground text-sm font-semibold">
-                J’ai déjà un itinéraire à importer
-              </p>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Formats acceptés : <strong>.json</strong> (export TripBrain),{' '}
-                <strong>.xlsx</strong> (Excel avec 3 onglets), ou{' '}
-                <strong>3 fichiers .csv</strong> simultanément.
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={() => {
-                  setError(null)
-                  fileInputRef.current?.click()
-                }}
-                disabled={loading}
-              >
-                {loading ? 'Chargement…' : 'Choisir un fichier'}
-              </Button>
-            </div>
-
-            {/* Format guide — right after the upload zone */}
-            <div className="flex justify-center">
-              <ImportFormatGuide />
+              {/* Le guide se range sous la zone qu'il explique. */}
+              <div className="mt-1 flex justify-start pl-12">
+                <ImportFormatGuide />
+              </div>
             </div>
 
             {/* Partage reçu depuis un autre appareil */}
-            <div className="bg-primary/5 flex flex-col items-center justify-between gap-3 rounded-xl p-3">
-              <div className="min-w-0">
-                <p className="text-foreground text-sm font-medium">
-                  J’ai un code de partage
-                </p>
-                <p className="text-muted-foreground mt-0.5 text-xs">
-                  Récupérez le voyage préparé sur un autre appareil.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setError(null)
-                  setShareImportOpen(true)
-                }}
-                className="shrink-0"
-              >
-                <KeyRound className="mr-2 h-4 w-4" />
-                Saisir un code
-              </Button>
-            </div>
+            <ActionRow
+              icon={KeyRound}
+              tone="secondary"
+              label="J’ai un code de partage"
+              description="Récupérez le voyage préparé sur un autre appareil"
+              onClick={() => {
+                setError(null)
+                setShareImportOpen(true)
+              }}
+            />
 
             {/* Demo data */}
-            <div className="bg-secondary/10 flex flex-col items-center justify-between gap-3 rounded-xl p-3">
-              <div className="min-w-0">
-                <p className="text-foreground text-sm font-medium">
-                  Essayer avec les données de démo
-                </p>
-                <p className="text-muted-foreground mt-0.5 text-xs">
-                  Parfait pour découvrir l&apos;app en 30 secondes.
-                </p>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleMockData}
-                disabled={loadingMock}
-                className="shrink-0"
-              >
-                <PlayCircle className="mr-2 h-4 w-4" />
-                {loadingMock ? 'Chargement…' : 'Lancer la démo'}
-              </Button>
-            </div>
+            <ActionRow
+              icon={PlayCircle}
+              tone="neutral"
+              label={loadingMock ? 'Chargement…' : 'Essayer avec la démo'}
+              description="Pour découvrir l’app en 30 secondes"
+              disabled={loadingMock}
+              onClick={handleMockData}
+            />
           </CardContent>
         </Card>
-
         {/* Installation sur l'écran d'accueil, discrète tant qu'aucun voyage n'est chargé */}
         <div className="flex justify-center">
           <PwaInstallEntry />
