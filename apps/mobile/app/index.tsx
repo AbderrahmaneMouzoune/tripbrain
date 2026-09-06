@@ -27,13 +27,21 @@ import {
   type ShareOutcome,
 } from '@/lib/bridge-protocol'
 import { shareFile, shareLink } from '@/lib/share-file'
+import { devWebappUrl } from '@/lib/webapp-url'
 import {
   DEFAULT_WEBAPP_URL,
   isWebappRequest,
   resolveWebappUrl,
 } from '@/lib/webapp-links'
 
-const WEBAPP_URL = process.env.EXPO_PUBLIC_WEBAPP_URL ?? DEFAULT_WEBAPP_URL
+const CONFIGURED_WEBAPP_URL =
+  process.env.EXPO_PUBLIC_WEBAPP_URL ?? DEFAULT_WEBAPP_URL
+
+// En développement, `localhost` devient l'adresse de la machine qui sert le
+// bundle : c'est elle qui fait tourner la webapp (`bun run dev` dans apps/web).
+const WEBAPP_URL = __DEV__
+  ? devWebappUrl(CONFIGURED_WEBAPP_URL, Constants.expoConfig?.hostUri)
+  : CONFIGURED_WEBAPP_URL
 
 const APP_VERSION = Constants.expoConfig?.version ?? '0.0.0'
 
@@ -59,6 +67,8 @@ export default function Index() {
 
   const [isOffline, setIsOffline] = useState(false)
   const [hasLoadError, setHasLoadError] = useState(false)
+  // Ce que le moteur a dit de l'échec, pour l'écran d'erreur et la console
+  const [loadErrorDetail, setLoadErrorDetail] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   // URL de démarrage quand l'app est ouverte par un lien (cold start)
   const [initialUrl, setInitialUrl] = useState<string | null>(null)
@@ -165,8 +175,10 @@ export default function Index() {
     [],
   )
 
-  const handleLoadError = useCallback(() => {
+  const handleLoadError = useCallback((url: string, description: string) => {
+    console.warn(`[WebView] Chargement impossible : ${url} — ${description}`)
     hasLoadErrorRef.current = true
+    setLoadErrorDetail(`${url}\n${description}`)
     setHasLoadError(true)
   }, [])
 
@@ -193,6 +205,16 @@ export default function Index() {
           <Text style={[styles.errorHint, { color: colors.muted }]}>
             Vos voyages et documents restent enregistrés sur cet appareil.
           </Text>
+          {__DEV__ && loadErrorDetail ? (
+            <Text
+              style={[styles.errorDetail, { color: colors.muted }]}
+              selectable
+            >
+              {loadErrorDetail}
+              {'\n'}La webapp tourne-t-elle ? `bun run dev` dans apps/web, sur
+              le même réseau Wi-Fi que ce téléphone.
+            </Text>
+          ) : null}
         </View>
       ) : (
         <WebView
@@ -223,11 +245,15 @@ export default function Index() {
           onLoadEnd={() => {
             isWebViewLoadedRef.current = true
           }}
-          onError={handleLoadError}
+          onError={({ nativeEvent }) =>
+            handleLoadError(nativeEvent.url, nativeEvent.description)
+          }
           // Une 404 est une page de la webapp (code de partage expiré, par
           // exemple) : seule une panne serveur justifie l'écran natif.
-          onHttpError={(event) => {
-            if (event.nativeEvent.statusCode >= 500) handleLoadError()
+          onHttpError={({ nativeEvent }) => {
+            if (nativeEvent.statusCode >= 500) {
+              handleLoadError(nativeEvent.url, `HTTP ${nativeEvent.statusCode}`)
+            }
           }}
           // iOS : le téléchargement direct d'une réponse non affichable
           // (sans passer par le bridge) est confié au système.
@@ -292,5 +318,11 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 13,
     textAlign: 'center',
+  },
+  errorDetail: {
+    marginTop: 8,
+    fontSize: 12,
+    textAlign: 'center',
+    fontFamily: Platform.select({ ios: 'Menlo', default: 'monospace' }),
   },
 })

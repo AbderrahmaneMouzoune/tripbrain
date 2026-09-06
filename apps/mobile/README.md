@@ -15,7 +15,7 @@ Le projet suit le **SDK Expo 57**, celui de l'Expo Go publié sur les stores : E
 
 Toutes les dépendances natives sont incluses dans [Expo Go](https://expo.dev/go) : scanner le QR code suffit pour développer. Un [build de développement](https://docs.expo.dev/develop/development-builds/introduction/) n'est nécessaire que pour tester le schéma `tripbrain://` et les liens universels.
 
-Par défaut, la WebView charge `http://localhost:3000` (voir `.env`). Sur un appareil physique, remplacer par l'adresse de la machine sur le réseau local, celle qu'affiche `bun run dev` dans `apps/web`.
+Par défaut, la WebView charge `http://localhost:3000` (voir `.env`). Sur un téléphone, `localhost` est remplacé automatiquement par l'adresse de la machine qui sert le bundle Expo (`lib/webapp-url.ts`) : il suffit que `bun run dev` tourne dans `apps/web` sur cette machine, et que le téléphone soit sur le même Wi-Fi. Si le chargement échoue, l'écran d'erreur affiche l'URL tentée et la raison, aussi visibles dans la console Expo (`[WebView] Chargement impossible`).
 
 ## URL de la webapp / environnements
 
