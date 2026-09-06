@@ -1,8 +1,12 @@
 // Création d'un partage : le client envoie l'itinéraire compressé, le serveur
 // le range dans le bucket sous un code que la personne pourra recopier ailleurs.
+//
+// Le générateur du site vitrine emprunte la même route depuis son origine :
+// toutes les réponses portent donc les en-têtes CORS de `share-cors.ts`.
 
 import { isBucketCodeError, type Bucket } from 'bucketcode'
 import { createRateLimiter, getClientKey } from '@/lib/rate-limit'
+import { corsHeaders, preflightResponse } from '@/lib/share-cors'
 import {
   SHARE_APP,
   SHARE_EXPIRES_IN,
@@ -21,10 +25,27 @@ const checkRateLimit = createRateLimiter({ limit: 20, windowMs: 60_000 })
 /** Codes tirés avant d'abandonner, si le tirage tombe sur un code déjà pris. */
 const CODE_ATTEMPTS = 5
 
+/** Préflight du navigateur avant un dépôt venu d'une autre origine. */
+export async function OPTIONS(request: Request) {
+  return preflightResponse(request)
+}
+
 export async function POST(request: Request) {
+  // Toutes les réponses qui suivent passent par là : une erreur illisible par
+  // le site appelant ne vaut pas mieux qu'une absence de réponse.
+  const cors = corsHeaders(request.headers.get('origin'))
+  const reply = (
+    body: Record<string, unknown>,
+    init: ResponseInit = {},
+  ): Response =>
+    Response.json(body, {
+      ...init,
+      headers: { ...cors, ...(init.headers as Record<string, string>) },
+    })
+
   const verdict = checkRateLimit(getClientKey(request))
   if (!verdict.allowed) {
-    return Response.json(
+    return reply(
       { error: 'Trop de partages en peu de temps. Réessayez dans un instant.' },
       { status: 429, headers: { 'Retry-After': String(verdict.retryAfter) } },
     )
@@ -34,18 +55,15 @@ export async function POST(request: Request) {
   try {
     body = await request.json()
   } catch {
-    return Response.json({ error: 'Requête illisible.' }, { status: 400 })
+    return reply({ error: 'Requête illisible.' }, { status: 400 })
   }
 
   const payload = (body as { data?: unknown } | null)?.data
   if (typeof payload !== 'string' || payload.length === 0) {
-    return Response.json(
-      { error: 'Aucune donnée à partager.' },
-      { status: 400 },
-    )
+    return reply({ error: 'Aucune donnée à partager.' }, { status: 400 })
   }
   if (payload.length > SHARE_MAX_PAYLOAD_CHARS) {
-    return Response.json(
+    return reply(
       { error: 'Itinéraire trop volumineux pour être partagé.' },
       { status: 413 },
     )
@@ -56,7 +74,7 @@ export async function POST(request: Request) {
     store = getShareStore()
   } catch (error) {
     console.error('Configuration du partage incomplète', error)
-    return Response.json(
+    return reply(
       { error: 'Le partage n’est pas configuré sur ce serveur.' },
       { status: 503 },
     )
@@ -77,7 +95,7 @@ export async function POST(request: Request) {
           ifAbsent: true,
         })
 
-        return Response.json({
+        return reply({
           code,
           expiresAt: snapshot.expiresAt?.toISOString() ?? null,
         })
@@ -93,13 +111,13 @@ export async function POST(request: Request) {
       }
     }
 
-    return Response.json(
+    return reply(
       { error: 'Impossible de générer un code libre. Réessayez.' },
       { status: 503 },
     )
   } catch (error) {
     console.error('Création du partage impossible', error)
-    return Response.json(
+    return reply(
       { error: 'Le partage a échoué. Réessayez dans quelques instants.' },
       { status: 500 },
     )

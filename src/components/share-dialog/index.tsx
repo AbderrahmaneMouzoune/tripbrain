@@ -17,16 +17,19 @@ import { ShareExportDialog } from '@/components/share-dialog/share-export-dialog
 import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog'
 import { ResetConfirmDialog } from '@/components/share-dialog/reset-confirm-dialog'
 import { usePwaInstall } from '@/components/pwa-install-provider'
+import { getGeneratorUrl } from '@/lib/site-links'
 import {
   IconCalendarPlus,
   IconCalendarWeek,
   IconDeviceMobile,
   IconDeviceMobilePlus,
   IconDownload,
+  IconExternalLink,
   IconKey,
   IconQrcode,
   IconShare2,
   IconShieldLock,
+  IconSparkles,
 } from '@tabler/icons-react'
 import { useState } from 'react'
 import { trackEvent } from '@/lib/analytics/client'
@@ -96,8 +99,8 @@ export function ShareDialog({
           <DialogHeader className="px-4 pt-5 pb-3 text-left sm:px-6 sm:pt-6">
             <DialogTitle className="pr-8">Partager &amp; données</DialogTitle>
             <DialogDescription>
-              Envoyez votre voyage sur un autre appareil, ajoutez-le à votre
-              agenda ou effacez-le.
+              Créez un autre itinéraire, envoyez votre voyage sur un autre
+              appareil, ajoutez-le à votre agenda ou effacez-le.
             </DialogDescription>
           </DialogHeader>
 
@@ -109,6 +112,31 @@ export function ShareDialog({
                 de le retrouver ailleurs.
               </span>
             </p>
+
+            {/* ── Itinéraire ── */}
+            <section className="flex flex-col gap-2">
+              <SectionTitle>Itinéraire</SectionTitle>
+
+              {/*
+                Le générateur vit sur le site vitrine : sans cette ligne, rien
+                dans l'app ne dit où se prépare un nouveau voyage, et on la
+                cherche ici — c'est le panneau des données.
+              */}
+              <ActionRow
+                icon={IconSparkles}
+                tone="primary"
+                label="Créer un autre itinéraire"
+                description="Le générateur de tripbrain.fr le construit avec l’IA, puis le renvoie ici"
+                href={getGeneratorUrl('share_dialog')}
+                trailing={
+                  <IconExternalLink className="text-muted-foreground/60 mt-1 h-4 w-4 shrink-0" />
+                }
+                onClick={() => {
+                  trackEvent('generator_opened', { surface: 'share_dialog' })
+                  setOpen(false)
+                }}
+              />
+            </section>
 
             {/* ── Partage ── */}
             <section className="flex flex-col gap-2">

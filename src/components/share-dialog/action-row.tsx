@@ -21,13 +21,18 @@ const toneClasses: Record<ActionRowTone, string> = {
   destructive: 'bg-destructive/10 text-destructive',
 }
 
-interface ActionRowProps
-  extends Omit<ComponentProps<'button'>, 'children' | 'onClick'> {
+interface ActionRowProps extends Omit<
+  ComponentProps<'button'>,
+  'children' | 'onClick'
+> {
   icon: ComponentType<{ className?: string }>
   label: string
   description?: string
   tone?: ActionRowTone
-  /** Rendue en lien quand une destination est fournie. */
+  /**
+   * Rendue en lien quand une destination est fournie. Une adresse absolue
+   * (le site vitrine) s'ouvre dans un nouvel onglet : on quitte l'app.
+   */
   href?: string
   /** Pictogramme de droite : un chevron par défaut, pour dire « ça continue ». */
   trailing?: ReactNode
@@ -86,9 +91,15 @@ export function ActionRow({
   if (href) {
     return (
       <Button asChild variant="outline" className={classes}>
-        <Link href={href} onClick={onClick}>
-          {content}
-        </Link>
+        {/^https?:/.test(href) ? (
+          <a href={href} target="_blank" rel="noreferrer" onClick={onClick}>
+            {content}
+          </a>
+        ) : (
+          <Link href={href} onClick={onClick}>
+            {content}
+          </Link>
+        )}
       </Button>
     )
   }

@@ -5,6 +5,10 @@
 //     (<origin>/?import=<données>) — rien ne quitte l'appareil.
 //   • sinon, ou dès qu'un code à recopier est demandé : le payload part vers
 //     /api/share, qui le range dans le bucket sous un code de partage.
+//
+// Le générateur du site vitrine parle le même dialecte : il produit le même
+// payload compressé et l'amène ici par `<origin>/#import=<données>`. Voir
+// `readIncomingShare`, en bas de ce fichier.
 
 import { encode, decode } from '@msgpack/msgpack'
 import { deflateSync, inflateSync } from 'fflate'
@@ -296,4 +300,61 @@ export function formatExpiresIn(
 
   const hours = Math.round(minutes / 60)
   return `${hours} heure${hours > 1 ? 's' : ''}`
+}
+
+// ── Arrivée par une URL ───────────────────────────────────────────────────────
+
+/**
+ * D'où vient un itinéraire déposé dans l'URL, quand elle le précise.
+ *
+ * `generator` désigne le générateur du site vitrine : c'est le seul cas où
+ * l'itinéraire n'a pas été préparé dans TripBrain, et l'import le dit.
+ */
+export type ShareOrigin = 'generator'
+
+/** Ce qu'une URL d'arrivée transporte, une fois démêlée. */
+export interface IncomingShare {
+  /** Itinéraire complet embarqué dans l'URL (QR code autonome, ou site). */
+  payload?: string
+  /** Code d'un partage déposé sur le serveur. */
+  code?: string
+  origin?: ShareOrigin
+}
+
+/** Valeur du paramètre `from` reconnue comme une provenance. */
+function toOrigin(value: string | null): ShareOrigin | undefined {
+  return value === 'generator' ? 'generator' : undefined
+}
+
+/**
+ * Lit l'itinéraire qu'une URL d'arrivée transporte, où qu'il se trouve.
+ *
+ * Trois chemins y mènent :
+ *   • `?import=` — QR code autonome produit par un autre appareil ;
+ *   • `?code=` — partage déposé sur le serveur, à résoudre ;
+ *   • `#import=` — passage depuis le générateur du site.
+ *
+ * Le fragment existe pour ce dernier cas : un itinéraire généré pèse bien plus
+ * qu'un QR code, et le fragment n'est jamais transmis au serveur — ni dans nos
+ * journaux, ni dans ceux d'un intermédiaire. Il l'emporte donc sur la query
+ * quand les deux sont présents : c'est le plus récent des deux chemins.
+ */
+export function readIncomingShare(
+  search: string,
+  hash: string,
+): IncomingShare | null {
+  const query = new URLSearchParams(search)
+  const fragment = new URLSearchParams(hash.replace(/^#/, ''))
+
+  const payload = fragment.get('import') ?? query.get('import')
+  const code = query.get('code')
+  if (!payload && !code) return null
+
+  return {
+    ...(payload ? { payload } : {}),
+    ...(code && !payload ? { code } : {}),
+    ...(toOrigin(fragment.get('from') ?? query.get('from')) === 'generator'
+      ? { origin: 'generator' as const }
+      : {}),
+  }
 }

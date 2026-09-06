@@ -24,6 +24,7 @@ import {
   IconKey,
   IconMapPin,
   IconRoute,
+  IconSparkles,
 } from '@tabler/icons-react'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import {
@@ -31,6 +32,7 @@ import {
   decompressItinerary,
   fetchSharedItinerary,
   summarizeSharedItinerary,
+  type ShareOrigin,
 } from '@/lib/share'
 import { trackEvent } from '@/lib/analytics/client'
 import { shareImportFailureReason } from '@/lib/analytics/metrics'
@@ -41,8 +43,11 @@ export type ImportShareSource =
   | { kind: 'prompt' }
   /** Code déjà connu — arrivée par `?code=` ou par un QR code scanné. */
   | { kind: 'code'; code: string }
-  /** Itinéraire embarqué dans l'URL — arrivée par `?import=`. */
-  | { kind: 'payload'; payload: string }
+  /**
+   * Itinéraire embarqué dans l'URL — arrivée par `?import=` (QR code) ou par
+   * `#import=` (retour du générateur, que `origin` distingue).
+   */
+  | { kind: 'payload'; payload: string; origin?: ShareOrigin }
 
 interface ImportShareDialogProps {
   open: boolean
@@ -106,8 +111,14 @@ export function ImportShareDialog({
   const [code, setCode] = useState('')
   const codeInputRef = useRef<HTMLInputElement>(null)
 
-  // Le code lui-même n'est jamais mesuré : seule sa provenance l'est.
-  const analyticsSource = source.kind
+  /**
+   * Un itinéraire qui revient du générateur emprunte le chemin `payload`, mais
+   * ne raconte pas la même histoire qu'un QR code scanné : la mesure les
+   * sépare. Le contenu, lui, n'est jamais mesuré.
+   */
+  const fromGenerator =
+    source.kind === 'payload' && source.origin === 'generator'
+  const analyticsSource = fromGenerator ? 'generator' : source.kind
 
   const resolveCode = useCallback(
     async (value: string) => {
@@ -137,7 +148,7 @@ export function ImportShareDialog({
     setCode('')
 
     if (source.kind === 'payload') {
-      trackEvent('share_import_started', { source: 'payload' })
+      trackEvent('share_import_started', { source: analyticsSource })
       try {
         setState({
           status: 'preview',
@@ -146,7 +157,7 @@ export function ImportShareDialog({
       } catch (err) {
         setState({ status: 'error', message: toFrenchError(err) })
         trackEvent('share_import_failed', {
-          source: 'payload',
+          source: analyticsSource,
           reason: shareImportFailureReason(err),
         })
       }
@@ -160,7 +171,7 @@ export function ImportShareDialog({
     }
 
     setState({ status: 'prompt' })
-  }, [open, source, resolveCode])
+  }, [open, source, resolveCode, analyticsSource])
 
   const handleImport = useCallback(async () => {
     if (state.status !== 'preview') return
@@ -207,12 +218,20 @@ export function ImportShareDialog({
       ? summarizeSharedItinerary(state.itinerary)
       : null
 
+  const title = fromGenerator
+    ? 'Récupérer votre itinéraire'
+    : 'Importer un partage'
+
   const description =
     state.status === 'preview' || state.status === 'importing'
-      ? 'Vérifiez le voyage reçu avant de l’enregistrer.'
+      ? fromGenerator
+        ? 'Votre itinéraire généré sur tripbrain.fr, prêt à être enregistré ici.'
+        : 'Vérifiez le voyage reçu avant de l’enregistrer.'
       : source.kind === 'prompt'
         ? `Saisissez les ${SHARE_CODE_LENGTH} chiffres affichés sur l’autre appareil.`
-        : 'Récupération du voyage partagé.'
+        : fromGenerator
+          ? 'Récupération de l’itinéraire généré sur le site.'
+          : 'Récupération du voyage partagé.'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -243,8 +262,12 @@ export function ImportShareDialog({
               </Button>
             )}
             <DialogTitle className="flex min-w-0 items-center gap-2">
-              <IconKey className="h-5 w-5 shrink-0" />
-              Importer un partage
+              {fromGenerator ? (
+                <IconSparkles className="h-5 w-5 shrink-0" />
+              ) : (
+                <IconKey className="h-5 w-5 shrink-0" />
+              )}
+              {title}
             </DialogTitle>
           </div>
           <DialogDescription className="text-pretty">

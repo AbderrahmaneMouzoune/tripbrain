@@ -56,6 +56,8 @@ Tout ce qui pourrait les capter est désactivé à l'initialisation :
   utilisé, donc pas de requête pour les récupérer.
 - `property_denylist: ['$ip']`, `mask_personal_data_properties: true` avec
   `import`, `code`, `payload`, `q` en propriétés personnalisées.
+- Aucun fragment d'URL n'est conservé : un itinéraire arrivé du générateur
+  voyage dans `#import=…`, et `before_send` le retire comme le reste.
 
 ## Ajouter un événement
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTripData } from '@/hooks/use-trip-data'
+import { readIncomingShare } from '@/lib/share'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { useSwipe } from '@/hooks/use-swipe'
 import { Timeline } from '@/components/timeline'
@@ -216,21 +217,32 @@ function HomePageContent() {
   }, [armAutoPrompt, hasData, isLoading, consentSettled])
 
   // Arrivée par un partage : `?import=` embarque l'itinéraire complet, `?code=`
-  // pointe vers un partage déposé sur le serveur. L'URL est nettoyée aussitôt
-  // pour qu'un rechargement ne repropose pas le même import, et le drapeau
-  // garantit qu'on ne le traite qu'une fois par visite.
+  // pointe vers un partage déposé sur le serveur, et `#import=` ramène celui
+  // qu'on vient de générer sur le site. L'URL est nettoyée aussitôt pour qu'un
+  // rechargement ne repropose pas le même import, et le drapeau garantit qu'on
+  // ne le traite qu'une fois par visite.
+  //
+  // La lecture se fait sur `window.location` : `useSearchParams` ne voit pas le
+  // fragment. Il reste dans les dépendances pour que l'effet suive un
+  // changement de query, comme avant.
   useEffect(() => {
     if (isLoading || sharedHandledRef.current) return
 
-    const payload = searchParams.get('import')
-    const code = searchParams.get('code')
-    if (!payload && !code) return
+    const incoming = readIncomingShare(
+      window.location.search,
+      window.location.hash,
+    )
+    if (!incoming) return
 
     sharedHandledRef.current = true
     setSharedSource(
-      payload
-        ? { kind: 'payload', payload }
-        : { kind: 'code', code: code as string },
+      incoming.payload
+        ? {
+            kind: 'payload',
+            payload: incoming.payload,
+            origin: incoming.origin,
+          }
+        : { kind: 'code', code: incoming.code as string },
     )
     window.history.replaceState(null, '', window.location.pathname)
   }, [isLoading, searchParams])

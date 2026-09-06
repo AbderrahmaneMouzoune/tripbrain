@@ -7,9 +7,11 @@
  * choix fermé est écartée, et toute URL est réduite à son chemin.
  *
  * Ce filtre existe parce que les URL de TripBrain transportent parfois le
- * voyage entier (`/?import=…`) ou un code de partage (`/?code=…`) : ces
- * valeurs ne doivent jamais quitter l'appareil autrement que par le partage
- * demandé par l'utilisateur.
+ * voyage entier (`/?import=…`, `/#import=…` en venant du générateur) ou un
+ * code de partage (`/?code=…`) : ces valeurs ne doivent jamais quitter
+ * l'appareil autrement que par le partage demandé par l'utilisateur. Aucun
+ * fragment n'étant autorisé par défaut, celui du générateur tombe avec le
+ * reste.
  */
 
 import {

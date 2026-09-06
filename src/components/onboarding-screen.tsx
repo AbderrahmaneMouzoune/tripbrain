@@ -3,14 +3,23 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { AppIcon } from '@/components/app-icon'
-import { AlertCircle, KeyRound, PlayCircle, Upload } from 'lucide-react'
+import {
+  AlertCircle,
+  ArrowUpRight,
+  KeyRound,
+  PlayCircle,
+  Sparkles,
+  Upload,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { ImportFormatGuide } from '@/components/import-format-guide'
+import { ActionRow } from '@/components/share-dialog/action-row'
 import { ImportShareDialog } from '@/components/share-dialog/import-share-dialog'
 import { PwaInstallEntry } from '@/components/pwa-install-prompt'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { trackEvent } from '@/lib/analytics/client'
+import { getGeneratorUrl } from '@/lib/site-links'
 
 const PROMPT_SOURCE = { kind: 'prompt' } as const
 
@@ -165,94 +174,119 @@ export function OnboardingScreen({
           </div>
         )}
 
-        {/* Main card */}
+        {/*
+          ── Les quatre façons de commencer ──
+          Elles occupaient quatre pavés centrés, soit un écran et demi à faire
+          défiler pour découvrir la dernière. Elles tiennent maintenant en un
+          écran.
+
+          L'ordre suit qui arrive ici : quelqu'un qui ouvre l'app sans voyage a
+          le plus souvent déjà préparé son itinéraire sur le site, et vient le
+          récupérer — par le fichier qu'il a téléchargé, ou par le code envoyé
+          depuis l'ordinateur. Le générateur ferme la marche : il ne sert
+          qu'à ceux qui arrivent les mains vides.
+        */}
         <Card className="overflow-hidden">
-          <CardContent className="space-y-4 p-4 sm:p-5">
-            {/* Drop zone */}
-            <div
-              className={`rounded-xl border border-dashed p-4 text-center transition-all sm:p-5 ${
-                isDragging
-                  ? 'border-primary bg-primary/5 ring-primary/30 ring-2'
-                  : 'hover:border-primary/50'
-              }`}
+          <CardContent className="space-y-3 p-4 sm:p-5">
+            {/*
+              Zone de dépôt — cliquable de bout en bout : viser le bouton sur
+              un écran tactile est le geste le plus étroit de cet écran, alors
+              que le bloc entier dit déjà ce qu'il fait. Le contour en
+              pointillés reste la seule chose qui annonce qu'on peut y lâcher
+              un fichier.
+            */}
+            <button
+              type="button"
+              onClick={() => {
+                setError(null)
+                fileInputRef.current?.click()
+              }}
+              disabled={loading}
               onDrop={handleDrop}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
+              className={`focus-visible:ring-ring/50 block w-full cursor-pointer rounded-xl border border-dashed p-4 text-left transition-all outline-none focus-visible:ring-[3px] disabled:cursor-default ${
+                isDragging
+                  ? 'border-primary bg-primary/5 ring-primary/30 ring-2'
+                  : 'hover:border-primary/50 hover:bg-muted/40'
+              }`}
             >
-              <div className="bg-primary/10 mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl">
-                <Upload className="text-primary h-5 w-5" />
+              <div className="flex items-start gap-3">
+                <span className="bg-primary/10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl">
+                  <Upload className="text-primary h-4.5 w-4.5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-foreground text-sm font-semibold">
+                    J’ai déjà un itinéraire
+                  </p>
+                  <p className="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+                    <strong>.json</strong> (export TripBrain),{' '}
+                    <strong>.xlsx</strong> (3 onglets) ou{' '}
+                    <strong>3 .csv</strong> à la fois.
+                  </p>
+                </div>
               </div>
-              <p className="text-foreground text-sm font-semibold">
-                Importer mes données
-              </p>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Formats acceptés : <strong>.json</strong> (export TripBrain),{' '}
-                <strong>.xlsx</strong> (Excel avec 3 onglets), ou{' '}
-                <strong>3 fichiers .csv</strong> simultanément.
-              </p>
+              {/*
+                Rendu en <span> : le clic appartient au bloc, et un bouton
+                dans un bouton n'existe pas en HTML.
+              */}
               <Button
-                variant="outline"
+                asChild
                 size="sm"
-                className="mt-4"
-                onClick={() => {
-                  setError(null)
-                  fileInputRef.current?.click()
-                }}
-                disabled={loading}
+                className="pointer-events-none mt-3 w-full"
               >
-                {loading ? 'Chargement…' : 'Choisir un fichier'}
+                <span>{loading ? 'Chargement…' : 'Choisir un fichier'}</span>
               </Button>
-            </div>
+            </button>
 
-            {/* Format guide — right after the upload zone */}
+            {/* Le guide se range sous la zone qu'il explique, hors du clic. */}
             <div className="flex justify-center">
               <ImportFormatGuide />
             </div>
 
             {/* Partage reçu depuis un autre appareil */}
-            <div className="bg-primary/5 flex flex-col items-center justify-between gap-3 rounded-xl p-3">
-              <div className="min-w-0">
-                <p className="text-foreground text-sm font-medium">
-                  J’ai un code de partage
-                </p>
-                <p className="text-muted-foreground mt-0.5 text-xs">
-                  Récupérez le voyage préparé sur un autre appareil.
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setError(null)
-                  setShareImportOpen(true)
-                }}
-                className="shrink-0"
-              >
-                <KeyRound className="mr-2 h-4 w-4" />
-                Saisir un code
-              </Button>
-            </div>
+            <ActionRow
+              icon={KeyRound}
+              tone="primary"
+              label="J’ai un code de partage"
+              description="Récupérez le voyage préparé sur un autre appareil"
+              className="bg-primary/5 hover:bg-primary/10"
+              onClick={() => {
+                setError(null)
+                setShareImportOpen(true)
+              }}
+            />
 
             {/* Demo data */}
-            <div className="bg-secondary/10 flex flex-col items-center justify-between gap-3 rounded-xl p-3">
-              <div className="min-w-0">
-                <p className="text-foreground text-sm font-medium">
-                  Essayer avec les données de démo
-                </p>
-                <p className="text-muted-foreground mt-0.5 text-xs">
-                  Parfait pour découvrir l&apos;app en 30 secondes.
-                </p>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleMockData}
-                disabled={loadingMock}
-                className="shrink-0"
+            <ActionRow
+              icon={PlayCircle}
+              tone="secondary"
+              label={loadingMock ? 'Chargement…' : 'Essayer avec la démo'}
+              description="Pour découvrir l’app en 30 secondes"
+              className="bg-secondary/10 hover:bg-secondary/15"
+              disabled={loadingMock}
+              onClick={handleMockData}
+            />
+
+            {/*
+              Le générateur reste signalé — sans lui, personne ne devine où se
+              fabrique un itinéraire — mais en pied de carte : c'est le cas
+              minoritaire, et il emmène hors de l'app.
+            */}
+            <div className="border-border/60 border-t pt-3 text-center">
+              <a
+                href={getGeneratorUrl('onboarding')}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() =>
+                  trackEvent('generator_opened', { surface: 'onboarding' })
+                }
+                className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs underline-offset-4 transition-colors hover:underline"
               >
-                <PlayCircle className="mr-2 h-4 w-4" />
-                {loadingMock ? 'Chargement…' : 'Lancer la démo'}
-              </Button>
+                <Sparkles className="text-primary h-3.5 w-3.5" />
+                Pas encore d’itinéraire ? Créez-le sur tripbrain.fr
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </a>
             </div>
           </CardContent>
         </Card>
