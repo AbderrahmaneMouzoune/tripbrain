@@ -1,5 +1,8 @@
 {
-  "cli": { "version": ">= 20.2.0", "appVersionSource": "remote" },
+  "cli": {
+    "version": ">= 20.2.0",
+    "appVersionSource": "remote"
+  },
   "build": {
     "development": {
       "developmentClient": true,
@@ -21,10 +24,6 @@
         "EXPO_PUBLIC_WEBAPP_URL": "https://app.tripbrain.fr"
       }
     }
-  },
-  "update": {
-    "preview": { "channel": "preview" },
-    "production": { "channel": "production" }
   },
   "submit": {
     "production": {}
