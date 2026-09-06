@@ -11,7 +11,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "fr.tripbrain.app",
-      "associatedDomains": ["applinks:app.tripbrain.fr"],
+      "associatedDomains": [
+        "applinks:app.tripbrain.fr"
+      ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "CFBundleDevelopmentRegion": "fr"
@@ -35,7 +37,10 @@
               "pathPrefix": "/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -61,7 +66,11 @@
       "reactCompiler": true
     },
     "extra": {
-      "router": {}
-    }
+      "router": {},
+      "eas": {
+        "projectId": "fcc51450-ae3f-40c8-92d4-b8202a0d2a7b"
+      }
+    },
+    "owner": "abderrahmanemouzounes-team"
   }
 }
