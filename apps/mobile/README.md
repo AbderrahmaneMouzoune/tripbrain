@@ -30,15 +30,23 @@ Pour développer contre la production sans rebuild : `cp .env.production .env.lo
 
 ## Ce que fait la partie native
 
-Tout vit dans `app/index.tsx` et `lib/` :
+Tout vit dans `app/` et `lib/` :
 
 - **WebView plein écran**, thème clair/sombre suivi, indicateur de chargement aux couleurs de la webapp.
 - **Liens externes** (réservations, Google Maps, `mailto:`) : tout ce qui sort de l'origine de la webapp part vers le système, qui ouvre le navigateur ou l'application dédiée (`lib/webapp-links.ts`).
 - **Bouton retour Android** : remonte l'historique de la WebView avant de quitter l'app.
 - **Réseau** : hors ligne, la WebView tente quand même le chargement (sur Android, le service worker de la webapp sert le roadbook déjà visité). L'écran d'erreur natif n'apparaît que si le chargement échoue, et le rechargement repart seul au retour du réseau.
 - **Liens entrants** : `https://app.tripbrain.fr/s/<code>` et `tripbrain://s/<code>` ouvrent la WebView directement sur le partage, à froid comme à chaud.
-- **Bridge** : la webapp délègue partages et exports au natif (ci-dessous).
-- **Détection côté webapp** : global `window.TripBrainNative` injecté avant chargement + suffixe user-agent `TripBrainApp/<version>`.
+- **Splash jusqu'à la première peinture** : le logo reste affiché tant que la webapp n'a pas rendu, pas de page blanche.
+- **Cartes** : les liens Google Maps de la webapp ouvrent l'app de navigation installée (Google Maps si présent, sinon Plans sur iOS ; l'app par défaut sur Android) — `lib/maps-links.ts`.
+- **« Ouvrir avec TripBrain »** : un fichier `.json` ou `.xlsx` reçu par mail, AirDrop ou depuis Fichiers s'importe d'un tap — `lib/incoming-files.ts`, types déclarés dans `app.json`.
+- **Scan de QR code** dans l'app (`app/scan.tsx`, expo-camera) : deux voyageurs se passent un itinéraire face à face.
+- **Rappels locaux** (`lib/reminders.ts`, expo-notifications) : départs de transports et check-out, calculés par la webapp, planifiés par le téléphone, sans serveur. Un tap ouvre le roadbook.
+- **Calendrier** (`lib/calendar.ts`, expo-calendar) : « Ajouter au calendrier » écrit directement les journées dans le calendrier du téléphone au lieu de produire un `.ics`.
+- **Retour haptique** (`lib/haptics.ts`) sur l'appui long, le changement de journée et le passage d'une activité à « fait ».
+- **Bridge** : la webapp délègue tout cela au natif (ci-dessous).
+- **Détection côté webapp** : global `window.TripBrainNative` injecté avant chargement + suffixe user-agent `TripBrainApp/<version>`. Dans l'app, la webapp n'enregistre pas de service worker et ne suit pas l'installation PWA : la page est déjà « installée ».
+- **Mises à jour sans les stores** (expo-updates) : le JavaScript de l'app part par `eas update --channel production --environment production` ; seuls les changements de modules natifs demandent un build.
 
 ### Bridge WebView ↔ webapp
 
@@ -55,8 +63,9 @@ et envoie la requête via postMessage ───▶ lib/share-file.ts écrit le f
                                            "tripbrain:native-response"
 ```
 
-- Protocole : `lib/bridge-protocol.ts` (côté app) et `apps/web/src/lib/native-app.ts` (côté webapp). **Garder les deux synchronisés.**
+- Protocole : `lib/bridge-protocol.ts` (côté app) et `apps/web/src/lib/native-app.ts` (côté webapp). **Garder les deux synchronisés.** Requêtes : `share/link`, `file/share`, `haptic/trigger`, `qr/scan`, `notifications/sync`, `calendar/add`, `app/openSettings` ; événement spontané `file/import`.
 - Côté webapp, tous les téléchargements passent par `saveFile()` (`apps/web/src/lib/save-file.ts`) : téléchargement dans un navigateur, feuille de partage dans l'app.
+- Quand un nouveau type de requête arrive, monter `MIN_NATIVE_APP_VERSION` dans `native-app.ts` : les apps trop anciennes affichent une invitation à mettre à jour au lieu d'échouer en silence.
 
 ### Liens universels (App Links / Universal Links)
 
@@ -101,14 +110,25 @@ TripBrain est pensé pour être consulté sans réseau. Dans l'app :
 - **Android** : le System WebView supporte les service workers, la webapp se comporte comme la PWA installée (roadbook, images et documents disponibles hors ligne).
 - **iOS** : WKWebView n'expose pas les service workers aux applications tierces. Les données restent sur l'appareil (IndexedDB), mais le chargement de la page elle-même demande le réseau. L'écran d'erreur le dit et réessaie seul au retour de la connexion. Piste pour lever cette limite : embarquer un export statique de la webapp dans l'app.
 
-## Première mise en place EAS
+## Builds
+
+Trois profils dans `eas.json` :
+
+| Profil        | Usage                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------ |
+| `development` | Build de développement (expo-dev-client) : nécessaire pour tester le schéma `tripbrain://`, les liens universels, « Ouvrir avec », le scan et les rappels. Le JavaScript vient de `bunx expo start`. |
+| `preview`     | Distribution interne (TestFlight, piste interne Play), pointe sur la production.                       |
+| `production`  | Stores.                                                                                                |
 
 ```bash
 bun install -g eas-cli
 eas login
-eas init            # rattache le projet à un compte Expo (ajoute owner + projectId dans app.json)
+eas build --profile development --platform ios   # une fois, puis bunx expo start
 eas build --profile preview --platform all
+eas update --channel preview --environment preview   # livre le JS sans rebuild
 ```
+
+Permissions demandées au moment utile, jamais au lancement : appareil photo (scan), notifications (premier voyage daté), calendrier (premier ajout). Les textes sont dans `app.json`.
 
 Le guide complet de publication (TestFlight, Play Console, review) est dans [README-stores-deployment.md](./README-stores-deployment.md).
 

@@ -24,6 +24,33 @@ export function safeFileName(name: string): string {
   return cleaned || 'fichier'
 }
 
+function shareDirectory(): Directory {
+  return new Directory(Paths.cache, SHARE_DIRECTORY)
+}
+
+/**
+ * Vide le dossier des partages précédents.
+ *
+ * Pas tout de suite après l'envoi : sur Android, la feuille de partage rend
+ * la main avant que l'application choisie ait lu le fichier. On nettoie donc
+ * au lancement de l'app et avant chaque nouveau partage.
+ */
+export function purgeSharedFiles(): void {
+  try {
+    const directory = shareDirectory()
+    if (!directory.exists) return
+    for (const entry of directory.list()) {
+      try {
+        entry.delete()
+      } catch {
+        // Fichier encore ouvert par une autre app : il partira la prochaine fois.
+      }
+    }
+  } catch (error) {
+    console.warn('[Partage] nettoyage impossible', error)
+  }
+}
+
 /**
  * Écrit le fichier envoyé par la webapp dans le cache, puis ouvre la feuille
  * de partage du système (« Enregistrer dans Fichiers », Drive, mail…).
@@ -39,7 +66,8 @@ export async function shareFile({
   if (!(await Sharing.isAvailableAsync())) return 'unavailable'
 
   try {
-    const directory = new Directory(Paths.cache, SHARE_DIRECTORY)
+    purgeSharedFiles()
+    const directory = shareDirectory()
     if (!directory.exists) directory.create({ intermediates: true })
 
     const file = new File(directory, safeFileName(name))

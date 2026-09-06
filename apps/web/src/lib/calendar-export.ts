@@ -123,6 +123,34 @@ function buildCalendarMetadata(days: DayItinerary[]): {
   }
 }
 
+/** Une journée telle que l'app native l'écrit dans le calendrier du téléphone. */
+export interface CalendarEvent {
+  title: string
+  /** `AAAA-MM-JJ` */
+  date: string
+  /** Lendemain, exclu : l'événement couvre la journée entière. */
+  endDate: string
+  location: string
+  notes: string
+}
+
+function nextIsoDay(dateString: string): string {
+  const date = new Date(dateString)
+  date.setDate(date.getDate() + 1)
+  return date.toISOString().split('T')[0]
+}
+
+/** Les mêmes événements que le fichier .ics, sous forme structurée. */
+export function buildCalendarEvents(days: DayItinerary[]): CalendarEvent[] {
+  return days.map((day) => ({
+    title: `Jour ${day.dayNumber} – ${day.title}`,
+    date: day.date,
+    endDate: nextIsoDay(day.date),
+    location: day.city,
+    notes: buildEventDescription(day),
+  }))
+}
+
 export function generateICSContent(days: DayItinerary[]): string {
   const events = days.map(generateVEvent).join('\r\n')
   const { calName, calDescription } = buildCalendarMetadata(days)

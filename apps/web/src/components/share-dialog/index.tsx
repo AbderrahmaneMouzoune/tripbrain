@@ -9,7 +9,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { downloadICS } from '@/lib/calendar-export'
+import { buildCalendarEvents, downloadICS } from '@/lib/calendar-export'
+import { addToNativeCalendar, openNativeSettings } from '@/lib/native-app'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 import { SHARE_CODE_LENGTH } from '@/lib/share'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { ActionRow } from '@/components/share-dialog/action-row'
@@ -58,6 +60,46 @@ export function ShareDialog({
 }: ShareDialogProps) {
   const [open, setOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const isNative = useIsNativeApp()
+  // Résultat du dernier ajout au calendrier du téléphone
+  const [calendarNote, setCalendarNote] = useState<{
+    text: string
+    denied?: boolean
+  } | null>(null)
+
+  /**
+   * Sur le web, un fichier .ics ; dans l'app, les journées vont directement
+   * dans le calendrier du téléphone.
+   */
+  const addToCalendar = async (days: DayItinerary[], scope: 'trip' | 'day') => {
+    trackEvent('calendar_exported', { scope })
+    if (!isNative) {
+      downloadICS(
+        days,
+        scope === 'trip'
+          ? 'tripbrain-voyage.ics'
+          : `tripbrain-jour-${days[0]?.dayNumber ?? 1}.ics`,
+      )
+      return
+    }
+    setCalendarNote({ text: 'Ajout au calendrier…' })
+    const result = await addToNativeCalendar(buildCalendarEvents(days))
+    if (!result || result.outcome === 'unavailable') {
+      setCalendarNote({
+        text: 'Le calendrier du téléphone n’a pas répondu. Réessayez plus tard.',
+      })
+    } else if (result.outcome === 'denied') {
+      setCalendarNote({
+        text: 'Accès au calendrier refusé.',
+        denied: true,
+      })
+    } else {
+      const plural = result.count > 1 ? 's' : ''
+      setCalendarNote({
+        text: `${result.count} journée${plural} ajoutée${plural} au calendrier du téléphone.`,
+      })
+    }
+  }
   const [importOpen, setImportOpen] = useState(false)
 
   const handleClear = async () => {
@@ -141,14 +183,17 @@ export function ShareDialog({
                 icon={IconCalendarWeek}
                 tone="primary"
                 label="Ajouter tout le voyage"
-                description={`Fichier .ics — ${dayCount} jour${dayCount > 1 ? 's' : ''} vers Apple Calendar, Google Agenda ou Outlook`}
-                trailing={
-                  <IconDownload className="text-muted-foreground/60 mt-1 h-4 w-4 shrink-0" />
+                description={
+                  isNative
+                    ? `${dayCount} jour${dayCount > 1 ? 's' : ''} dans le calendrier du téléphone`
+                    : `Fichier .ics — ${dayCount} jour${dayCount > 1 ? 's' : ''} vers Apple Calendar, Google Agenda ou Outlook`
                 }
-                onClick={() => {
-                  trackEvent('calendar_exported', { scope: 'trip' })
-                  downloadICS(itinerary, 'tripbrain-voyage.ics')
-                }}
+                trailing={
+                  isNative ? undefined : (
+                    <IconDownload className="text-muted-foreground/60 mt-1 h-4 w-4 shrink-0" />
+                  )
+                }
+                onClick={() => void addToCalendar(itinerary, 'trip')}
               />
 
               {currentDay && (
@@ -156,18 +201,36 @@ export function ShareDialog({
                   icon={IconCalendarPlus}
                   tone="neutral"
                   label={`Ajouter le jour ${currentDay.dayNumber}`}
-                  description={`Fichier .ics — ${currentDay.city} uniquement`}
-                  trailing={
-                    <IconDownload className="text-muted-foreground/60 mt-1 h-4 w-4 shrink-0" />
+                  description={
+                    isNative
+                      ? `${currentDay.city} uniquement, dans le calendrier du téléphone`
+                      : `Fichier .ics — ${currentDay.city} uniquement`
                   }
-                  onClick={() => {
-                    trackEvent('calendar_exported', { scope: 'day' })
-                    downloadICS(
-                      [currentDay],
-                      `tripbrain-jour-${currentDay.dayNumber}.ics`,
+                  trailing={
+                    isNative ? undefined : (
+                      <IconDownload className="text-muted-foreground/60 mt-1 h-4 w-4 shrink-0" />
                     )
-                  }}
+                  }
+                  onClick={() => void addToCalendar([currentDay], 'day')}
                 />
+              )}
+
+              {calendarNote && (
+                <p
+                  role="status"
+                  className="text-muted-foreground flex flex-wrap items-center gap-x-2 px-1 text-xs"
+                >
+                  {calendarNote.text}
+                  {calendarNote.denied && (
+                    <button
+                      type="button"
+                      className="text-primary underline underline-offset-2"
+                      onClick={openNativeSettings}
+                    >
+                      Ouvrir les réglages
+                    </button>
+                  )}
+                </p>
               )}
             </section>
 

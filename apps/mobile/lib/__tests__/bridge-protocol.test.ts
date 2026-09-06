@@ -91,3 +91,111 @@ describe('scripts injectés', () => {
     )
   })
 })
+
+describe('parseBridgeRequest — fonctions natives', () => {
+  it('lit un retour haptique et rejette une sorte inconnue', () => {
+    expect(
+      parseBridgeRequest(
+        JSON.stringify({ type: 'haptic/trigger', payload: { kind: 'impact' } }),
+      ),
+    ).toEqual({
+      id: undefined,
+      type: 'haptic/trigger',
+      payload: { kind: 'impact' },
+    })
+    expect(
+      parseBridgeRequest(
+        JSON.stringify({ type: 'haptic/trigger', payload: { kind: 'boom' } }),
+      ),
+    ).toBeNull()
+  })
+
+  it('accepte les requêtes sans payload', () => {
+    expect(
+      parseBridgeRequest(JSON.stringify({ id: '7', type: 'qr/scan' })),
+    ).toEqual({
+      id: '7',
+      type: 'qr/scan',
+      payload: {},
+    })
+    expect(
+      parseBridgeRequest(JSON.stringify({ type: 'app/openSettings' })),
+    ).toEqual({
+      id: undefined,
+      type: 'app/openSettings',
+      payload: {},
+    })
+  })
+
+  it('garde les rappels bien formés et écarte les autres', () => {
+    const request = parseBridgeRequest(
+      JSON.stringify({
+        id: '1',
+        type: 'notifications/sync',
+        payload: {
+          reminders: [
+            { id: 'transport-1', title: 'Train', at: '2026-05-12T06:53:00' },
+            { id: 'x', title: 'Sans date' },
+            'bruit',
+          ],
+        },
+      }),
+    )
+    expect(request).toEqual({
+      id: '1',
+      type: 'notifications/sync',
+      payload: {
+        reminders: [
+          {
+            id: 'transport-1',
+            title: 'Train',
+            body: undefined,
+            at: '2026-05-12T06:53:00',
+            path: undefined,
+          },
+        ],
+      },
+    })
+    expect(
+      parseBridgeRequest(
+        JSON.stringify({
+          type: 'notifications/sync',
+          payload: { reminders: 'x' },
+        }),
+      ),
+    ).toBeNull()
+  })
+
+  it('lit les événements de calendrier', () => {
+    expect(
+      parseBridgeRequest(
+        JSON.stringify({
+          type: 'calendar/add',
+          payload: {
+            events: [
+              {
+                title: 'Jour 1 – Tachkent',
+                date: '2026-05-10',
+                location: 'Tachkent',
+              },
+            ],
+          },
+        }),
+      ),
+    ).toEqual({
+      id: undefined,
+      type: 'calendar/add',
+      payload: {
+        events: [
+          {
+            title: 'Jour 1 – Tachkent',
+            date: '2026-05-10',
+            endDate: undefined,
+            location: 'Tachkent',
+            notes: undefined,
+          },
+        ],
+      },
+    })
+  })
+})

@@ -23,6 +23,7 @@ import {
   IconDownload,
   IconKey,
   IconMapPin,
+  IconQrcode,
   IconRoute,
 } from '@tabler/icons-react'
 import type { DayItinerary } from '@/lib/itinerary-data'
@@ -34,6 +35,8 @@ import {
 } from '@/lib/share'
 import { trackEvent } from '@/lib/analytics/client'
 import { shareImportFailureReason } from '@/lib/analytics/metrics'
+import { scanQrNatively } from '@/lib/native-app'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 
 /** D'où vient le partage à importer. */
 export type ImportShareSource =
@@ -84,6 +87,19 @@ function hasFinePointer(): boolean {
   return window.matchMedia('(pointer: fine)').matches
 }
 
+/** Un lien vers cette webapp, que l'app native sait ouvrir toute seule. */
+function isTripBrainLink(value: string): boolean {
+  if (value.startsWith('tripbrain://')) return true
+  try {
+    const url = new URL(value)
+    return (
+      url.origin === window.location.origin || url.host === 'app.tripbrain.fr'
+    )
+  } catch {
+    return false
+  }
+}
+
 function formatDate(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return iso
@@ -105,6 +121,7 @@ export function ImportShareDialog({
   const [state, setState] = useState<ImportState>({ status: 'prompt' })
   const [code, setCode] = useState('')
   const codeInputRef = useRef<HTMLInputElement>(null)
+  const isNative = useIsNativeApp()
 
   // Le code lui-même n'est jamais mesuré : seule sa provenance l'est.
   const analyticsSource = source.kind
@@ -182,6 +199,29 @@ export function ImportShareDialog({
       })
     }
   }, [state, onImport, onOpenChange, analyticsSource])
+
+  /**
+   * Scan par l'appareil photo de l'app native. Un lien TripBrain est ouvert
+   * par l'app elle-même ; un code nu se résout ici ; le reste n'est pas un
+   * partage.
+   */
+  const handleScan = useCallback(async () => {
+    const value = await scanQrNatively()
+    if (value === null) return
+
+    if (value.length === SHARE_CODE_LENGTH && /^\d+$/.test(value)) {
+      setCode(value)
+      void resolveCode(value)
+      return
+    }
+
+    if (isTripBrainLink(value)) return
+
+    setState({
+      status: 'error',
+      message: 'Ce QR code n’est pas un partage TripBrain.',
+    })
+  }, [resolveCode])
 
   const handleRetry = useCallback(() => {
     // Une saisie manuelle repart du champ ; un lien n'a rien à ressaisir.
@@ -296,6 +336,17 @@ export function ImportShareDialog({
                 qui possède le voyage.
               </p>
             </div>
+          )}
+
+          {state.status === 'prompt' && isNative && (
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={() => void handleScan()}
+            >
+              <IconQrcode className="h-4 w-4" />
+              Scanner le QR code de l’autre appareil
+            </Button>
           )}
 
           {(state.status === 'resolving' || state.status === 'importing') && (

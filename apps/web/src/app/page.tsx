@@ -38,7 +38,14 @@ import { cn } from '@/lib/utils'
 import { AppIcon } from '@/components/app-icon'
 import { DemoBanner } from '@/components/demo-banner'
 import { trackEvent } from '@/lib/analytics/client'
-import { isNativeApp } from '@/lib/native-app'
+import {
+  isNativeApp,
+  onNativeFileImport,
+  syncNativeReminders,
+  triggerHaptic,
+} from '@/lib/native-app'
+import { buildReminders } from '@/lib/reminders'
+import { NativeUpdateBanner } from '@/components/native-update-banner'
 
 /** Gestes possibles pour changer de journée : sert la mesure d'usage. */
 type DayChangeMethod = 'swipe' | 'arrow' | 'timeline' | 'bottom_nav' | 'map'
@@ -223,6 +230,35 @@ function HomePageContent() {
     window.history.replaceState(null, '', window.location.pathname)
   }, [isLoading, searchParams])
 
+  // Fichier ouvert « avec TripBrain » depuis l'app native (Mail, Fichiers,
+  // AirDrop) : importé comme un fichier choisi à la main, selon son extension.
+  useEffect(() => {
+    if (!isNativeApp()) return
+    return onNativeFileImport((file) => {
+      const extension = file.name.split('.').pop()?.toLowerCase()
+      const run =
+        extension === 'json'
+          ? importData(file)
+          : extension === 'xlsx'
+            ? importXlsxData(file)
+            : null
+      if (!run) {
+        console.warn('Format de fichier non pris en charge', file.name)
+        return
+      }
+      run.catch((error) => {
+        console.error('Import du fichier impossible', error)
+      })
+    })
+  }, [importData, importXlsxData])
+
+  // Les rappels du téléphone suivent le voyage : recalculés à chaque
+  // modification, effacés quand il n'y a plus de voyage.
+  useEffect(() => {
+    if (isLoading || !isNativeApp()) return
+    void syncNativeReminders(buildReminders(hasData ? itinerary : []))
+  }, [isLoading, hasData, itinerary])
+
   // Placement automatique sur la journée du jour : à l'ouverture et à chaque
   // voyage chargé, jamais après une modification. Sans ce garde-fou, cocher une
   // activité renvoyait à la journée en cours, loin de ce qu'on était en train
@@ -269,11 +305,13 @@ function HomePageContent() {
   const swipeHandlers = useSwipe({
     onSwipeLeft: () => {
       if (activeTab === 'roadbook' && selectedDay < itinerary.length - 1) {
+        triggerHaptic('selection')
         handleNextDay('swipe')
       }
     },
     onSwipeRight: () => {
       if (activeTab === 'roadbook' && selectedDay > 0) {
+        triggerHaptic('selection')
         handlePrevDay('swipe')
       }
     },
@@ -341,6 +379,7 @@ function HomePageContent() {
         </div>
 
         <div className="relative z-10">
+          <NativeUpdateBanner />
           {/* Demo banner */}
           {isDemo && (
             <DemoBanner

@@ -1,5 +1,6 @@
 'use client'
 
+import { triggerHaptic } from '@/lib/native-app'
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
@@ -507,10 +508,14 @@ export function DayDetail({
                   canMoveDown={index < day.activities.length - 1}
                   onStatusChange={
                     !isEditing && onDayChange
-                      ? (status) =>
+                      ? (status) => {
+                          triggerHaptic(
+                            status === 'done' ? 'success' : 'selection',
+                          )
                           onDayChange(
                             setActivityStatus(day, activity.id, status),
                           )
+                        }
                       : undefined
                   }
                   actions={

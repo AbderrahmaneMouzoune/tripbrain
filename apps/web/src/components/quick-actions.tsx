@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Slot } from '@radix-ui/react-slot'
 import { cn } from '@/lib/utils'
 import { useLongPress } from '@/hooks/use-long-press'
+import { triggerHaptic } from '@/lib/native-app'
 import { trackEvent } from '@/lib/analytics/client'
 import type {
   QuickAction,
@@ -153,6 +154,7 @@ export function QuickActionsTarget({
   const { pressed, handlers } = useLongPress({
     disabled: actions.length === 0,
     onLongPress: () => {
+      triggerHaptic('impact')
       setConfirming(null)
       setOpen(true)
       markHintSeen()

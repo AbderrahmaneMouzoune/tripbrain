@@ -1,6 +1,9 @@
 import NetInfo from '@react-native-community/netinfo'
 import Constants from 'expo-constants'
 import * as Linking from 'expo-linking'
+import * as Notifications from 'expo-notifications'
+import { useRouter } from 'expo-router'
+import * as SplashScreen from 'expo-splash-screen'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
@@ -24,15 +27,21 @@ import {
   buildBridgeResponseScript,
   buildInjectedGlobalsScript,
   parseBridgeRequest,
-  type ShareOutcome,
+  type BridgeResponse,
 } from '@/lib/bridge-protocol'
+import { addCalendarEvents } from '@/lib/calendar'
+import { triggerHaptic } from '@/lib/haptics'
+import { isIncomingFileUrl, readIncomingFile } from '@/lib/incoming-files'
+import { nativeMapsUrls, parseMapsUrl } from '@/lib/maps-links'
+import { syncReminders } from '@/lib/reminders'
+import { waitForScanResult } from '@/lib/scan-result'
 import { shareFile, shareLink } from '@/lib/share-file'
-import { devWebappUrl } from '@/lib/webapp-url'
 import {
   DEFAULT_WEBAPP_URL,
   isWebappRequest,
   resolveWebappUrl,
 } from '@/lib/webapp-links'
+import { devWebappUrl } from '@/lib/webapp-url'
 
 const CONFIGURED_WEBAPP_URL =
   process.env.EXPO_PUBLIC_WEBAPP_URL ?? DEFAULT_WEBAPP_URL
@@ -53,6 +62,9 @@ const INJECTED_GLOBALS_SCRIPT = buildInjectedGlobalsScript({
   appVersion: APP_VERSION,
 })
 
+// Si la webapp ne répond jamais, le splash ne doit pas rester à l'écran.
+const SPLASH_TIMEOUT_MS = 8000
+
 // Couleurs de fond de la webapp (globals.css), pour que l'écran de
 // chargement et les erreurs ne tranchent pas avec la page.
 const THEME = {
@@ -61,9 +73,35 @@ const THEME = {
 } as const
 const PRIMARY = '#2268c7'
 
+/**
+ * Ouvre une intention cartographique dans l'app de navigation installée :
+ * Google Maps si présent, sinon Plans (iOS) ou l'app par défaut (Android).
+ */
+async function openInMapsApp(url: string): Promise<void> {
+  const intent = parseMapsUrl(url)
+  if (intent) {
+    for (const candidate of nativeMapsUrls(intent, Platform.OS)) {
+      try {
+        // Sur iOS, sonder un schéma tiers demande sa déclaration dans
+        // LSApplicationQueriesSchemes (voir app.json) ; sur Android, tenter
+        // l'ouverture est plus fiable que `canOpenURL`.
+        if (Platform.OS === 'ios' && candidate.startsWith('comgooglemaps:')) {
+          if (!(await Linking.canOpenURL(candidate))) continue
+        }
+        await Linking.openURL(candidate)
+        return
+      } catch {
+        // Pas d'app pour ce schéma : on essaie le suivant.
+      }
+    }
+  }
+  await Linking.openURL(url).catch(() => {})
+}
+
 export default function Index() {
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light'
   const colors = THEME[scheme]
+  const router = useRouter()
 
   const [isOffline, setIsOffline] = useState(false)
   const [hasLoadError, setHasLoadError] = useState(false)
@@ -77,12 +115,55 @@ export default function Index() {
   const isWebViewLoadedRef = useRef(false)
   const canGoBackRef = useRef(false)
   const hasLoadErrorRef = useRef(false)
+  const splashHiddenRef = useRef(false)
+  // Messages pour la webapp arrivés avant qu'elle soit prête (fichier ouvert
+  // avec TripBrain pendant le démarrage, par exemple).
+  const pendingScriptsRef = useRef<string[]>([])
+  // Dernière URL entrante traitée : le hook la renvoie à chaque rendu.
+  const handledIncomingUrlRef = useRef<string | null>(null)
+
+  const hideSplash = useCallback(() => {
+    if (splashHiddenRef.current) return
+    splashHiddenRef.current = true
+    void SplashScreen.hideAsync().catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(hideSplash, SPLASH_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [hideSplash])
 
   const reload = useCallback(() => {
     hasLoadErrorRef.current = false
     setHasLoadError(false)
     isWebViewLoadedRef.current = false
     setReloadKey((key) => key + 1)
+  }, [])
+
+  /** Injecte un script dans la page, ou le garde pour son prochain chargement. */
+  const sendToWebapp = useCallback((script: string) => {
+    if (isWebViewLoadedRef.current && webViewRef.current) {
+      webViewRef.current.injectJavaScript(script)
+    } else {
+      pendingScriptsRef.current.push(script)
+    }
+  }, [])
+
+  const respond = useCallback(
+    (response: BridgeResponse) => {
+      sendToWebapp(buildBridgeResponseScript(response))
+    },
+    [sendToWebapp],
+  )
+
+  const navigateTo = useCallback((targetUrl: string) => {
+    if (isWebViewLoadedRef.current) {
+      webViewRef.current?.injectJavaScript(
+        `window.location.href = ${JSON.stringify(targetUrl)}; true;`,
+      )
+    } else {
+      setInitialUrl(targetUrl)
+    }
   }, [])
 
   // ─── Réseau : l'écran d'erreur ne s'affiche que si le chargement échoue ────
@@ -100,22 +181,39 @@ export default function Index() {
     })
   }, [reload])
 
-  // ─── Liens entrants : partage universel ou schéma tripbrain:// ─────────────
+  // ─── Liens et fichiers entrants ────────────────────────────────────────────
+  //
+  // Un lien de partage (universel ou `tripbrain://`) ouvre la WebView dessus.
+  // Un fichier ouvert « avec TripBrain » est lu puis remis à la webapp, qui
+  // l'importe comme un fichier choisi à la main.
 
-  const incomingUrl = Linking.useURL()
+  const incomingUrl = Linking.useLinkingURL()
 
   useEffect(() => {
-    const targetUrl = resolveWebappUrl(incomingUrl, WEBAPP_URL)
-    if (!targetUrl) return
+    if (!incomingUrl || handledIncomingUrlRef.current === incomingUrl) return
+    handledIncomingUrlRef.current = incomingUrl
 
-    if (isWebViewLoadedRef.current) {
-      webViewRef.current?.injectJavaScript(
-        `window.location.href = ${JSON.stringify(targetUrl)}; true;`,
-      )
-    } else {
-      setInitialUrl(targetUrl)
+    if (isIncomingFileUrl(incomingUrl)) {
+      void readIncomingFile(incomingUrl).then((file) => {
+        if (file) respond({ type: 'file/import', payload: file })
+      })
+      return
     }
-  }, [incomingUrl])
+
+    const targetUrl = resolveWebappUrl(incomingUrl, WEBAPP_URL)
+    if (targetUrl) navigateTo(targetUrl)
+  }, [incomingUrl, navigateTo, respond])
+
+  // ─── Tap sur un rappel → la webapp s'ouvre sur le roadbook ─────────────────
+
+  const lastNotificationResponse = Notifications.useLastNotificationResponse()
+
+  useEffect(() => {
+    const data = lastNotificationResponse?.notification.request.content.data
+    const path = typeof data?.path === 'string' ? data.path : null
+    if (!path || !path.startsWith('/')) return
+    navigateTo(new URL(path, WEBAPP_URL).toString())
+  }, [lastNotificationResponse, navigateTo])
 
   // ─── Bouton retour Android : remonte l'historique de la WebView ────────────
 
@@ -136,37 +234,62 @@ export default function Index() {
   const handleShouldStartLoad = useCallback(
     (request: ShouldStartLoadRequest) => {
       if (isWebappRequest(request.url, WEBAPP_URL)) return true
-      void Linking.openURL(request.url).catch(() => {})
+      // Rien à exécuter hors de la page.
+      if (request.url.startsWith('javascript:')) return false
+      void openInMapsApp(request.url)
       return false
     },
     [],
   )
 
-  // ─── Bridge : la webapp délègue partages et exports au natif ───────────────
+  // ─── Bridge : la webapp délègue au natif ce que le web ne sait pas faire ───
 
-  const handleWebViewMessage = useCallback((event: WebViewMessageEvent) => {
-    const request = parseBridgeRequest(event.nativeEvent.data)
-    if (!request) return
+  const handleWebViewMessage = useCallback(
+    (event: WebViewMessageEvent) => {
+      const request = parseBridgeRequest(event.nativeEvent.data)
+      if (!request) return
+      const { id } = request
 
-    const respond = (outcome: ShareOutcome) => {
-      webViewRef.current?.injectJavaScript(
-        buildBridgeResponseScript({
-          id: request.id,
-          type: 'share/result',
-          payload: { outcome },
-        }),
-      )
-    }
-
-    switch (request.type) {
-      case 'share/link':
-        void shareLink(request.payload).then(respond)
-        break
-      case 'file/share':
-        void shareFile(request.payload).then(respond)
-        break
-    }
-  }, [])
+      switch (request.type) {
+        case 'share/link':
+          void shareLink(request.payload).then((outcome) =>
+            respond({ id, type: 'share/result', payload: { outcome } }),
+          )
+          break
+        case 'file/share':
+          void shareFile(request.payload).then((outcome) =>
+            respond({ id, type: 'share/result', payload: { outcome } }),
+          )
+          break
+        case 'haptic/trigger':
+          void triggerHaptic(request.payload.kind)
+          break
+        case 'qr/scan':
+          waitForScanResult((value) => {
+            // Un QR code TripBrain est un lien : la WebView s'ouvre dessus.
+            const targetUrl = value && resolveWebappUrl(value, WEBAPP_URL)
+            if (targetUrl) navigateTo(targetUrl)
+            respond({ id, type: 'qr/result', payload: { value } })
+          })
+          router.push('/scan')
+          break
+        case 'notifications/sync':
+          void syncReminders(request.payload.reminders).then((state) =>
+            respond({ id, type: 'notifications/state', payload: state }),
+          )
+          break
+        case 'calendar/add':
+          void addCalendarEvents(request.payload.events).then((result) =>
+            respond({ id, type: 'calendar/result', payload: result }),
+          )
+          break
+        case 'app/openSettings':
+          void Linking.openSettings().catch(() => {})
+          break
+      }
+    },
+    [navigateTo, respond, router],
+  )
 
   const handleNavigationStateChange = useCallback(
     (state: WebViewNavigation) => {
@@ -175,12 +298,24 @@ export default function Index() {
     [],
   )
 
-  const handleLoadError = useCallback((url: string, description: string) => {
-    console.warn(`[WebView] Chargement impossible : ${url} — ${description}`)
-    hasLoadErrorRef.current = true
-    setLoadErrorDetail(`${url}\n${description}`)
-    setHasLoadError(true)
-  }, [])
+  const handleLoadEnd = useCallback(() => {
+    isWebViewLoadedRef.current = true
+    hideSplash()
+    const pending = pendingScriptsRef.current
+    pendingScriptsRef.current = []
+    for (const script of pending) webViewRef.current?.injectJavaScript(script)
+  }, [hideSplash])
+
+  const handleLoadError = useCallback(
+    (url: string, description: string) => {
+      console.warn(`[WebView] Chargement impossible : ${url} — ${description}`)
+      hasLoadErrorRef.current = true
+      setLoadErrorDetail(`${url}\n${description}`)
+      setHasLoadError(true)
+      hideSplash()
+    },
+    [hideSplash],
+  )
 
   return (
     <SafeAreaView
@@ -188,8 +323,11 @@ export default function Index() {
       edges={[]}
     >
       {hasLoadError ? (
-        <View style={styles.errorContainer}>
-          <Text style={[styles.errorTitle, { color: colors.text }]}>
+        <View style={styles.errorContainer} accessibilityRole="alert">
+          <Text
+            style={[styles.errorTitle, { color: colors.text }]}
+            accessibilityRole="header"
+          >
             {isOffline
               ? 'Pas de connexion Internet'
               : 'Impossible de charger TripBrain'}
@@ -199,7 +337,11 @@ export default function Index() {
               ? 'Vérifiez votre connexion Wi-Fi ou mobile. L’application reprendra toute seule dès que le réseau reviendra.'
               : 'Une erreur est survenue pendant le chargement. Vérifiez votre connexion, puis réessayez.'}
           </Text>
-          <Pressable style={styles.retryButton} onPress={reload}>
+          <Pressable
+            style={styles.retryButton}
+            onPress={reload}
+            accessibilityRole="button"
+          >
             <Text style={styles.retryButtonText}>Réessayer</Text>
           </Pressable>
           <Text style={[styles.errorHint, { color: colors.muted }]}>
@@ -242,9 +384,7 @@ export default function Index() {
               <ActivityIndicator size="large" color={PRIMARY} />
             </View>
           )}
-          onLoadEnd={() => {
-            isWebViewLoadedRef.current = true
-          }}
+          onLoadEnd={handleLoadEnd}
           onError={({ nativeEvent }) =>
             handleLoadError(nativeEvent.url, nativeEvent.description)
           }
