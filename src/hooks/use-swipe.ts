@@ -3,7 +3,7 @@ import { useCallback, useRef } from 'react'
 interface UseSwipeOptions {
   onSwipeLeft?: () => void
   onSwipeRight?: () => void
-  /** Minimum horizontal distance in px to trigger a swipe (default: 60) */
+  /** Distance horizontale minimale, en pixels (60 par défaut). */
   threshold?: number
 }
 
@@ -13,9 +13,14 @@ interface SwipeHandlers {
 }
 
 /**
- * Returns touch event handlers to detect horizontal swipe gestures.
- * Swipes that are more vertical than horizontal are ignored to avoid
- * conflicting with normal scrolling.
+ * Zones qui défilent elles-mêmes à l'horizontale (bande des jours, carrousel
+ * de photos) : un geste qui y commence leur appartient.
+ */
+const SWIPE_IGNORE_SELECTOR = '[data-swipe-ignore]'
+
+/**
+ * Détecte un balayage horizontal. Un geste plus vertical qu'horizontal est un
+ * défilement de la page : il est ignoré.
  */
 export function useSwipe({
   onSwipeLeft,
@@ -26,6 +31,15 @@ export function useSwipe({
   const touchStartY = useRef<number | null>(null)
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
+    const target = e.target
+    if (
+      target instanceof Element &&
+      target.closest(SWIPE_IGNORE_SELECTOR) !== null
+    ) {
+      touchStartX.current = null
+      touchStartY.current = null
+      return
+    }
     touchStartX.current = e.touches[0].clientX
     touchStartY.current = e.touches[0].clientY
   }, [])
@@ -40,7 +54,6 @@ export function useSwipe({
       touchStartX.current = null
       touchStartY.current = null
 
-      // Ignore swipes that are predominantly vertical (scrolling)
       if (Math.abs(deltaY) > Math.abs(deltaX)) return
 
       if (deltaX < -threshold) {
