@@ -48,6 +48,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { DayItinerary } from '@/lib/itinerary-data'
+import { usePreferences } from '@/hooks/use-preferences'
 
 const IMAGE_DB_NAME = 'tripbrain-images'
 const IMAGE_DB_VERSION = 1
@@ -75,6 +76,69 @@ export interface ImageCacheValue {
   retryErrors: () => void
   /** Re-attempt downloading a single URL that is in error state */
   retrySingle: (url: string) => void
+  /**
+   * Téléchargements suspendus : réglage « seulement en Wi-Fi » sur une
+   * connexion mobile, ou cache vidé à la main.
+   */
+  paused: PauseReason | null
+  /** Le navigateur dit-il quel réseau est utilisé ? Sans cela, le réglage Wi-Fi est sans effet. */
+  connectionTypeKnown: boolean
+  /** Lance les images en attente malgré la pause (geste explicite). */
+  downloadNow: () => void
+  /** Efface les images enregistrées ; elles ne reviennent qu'à la demande. */
+  clearCache: () => Promise<void>
+}
+
+export type PauseReason = 'waiting-for-wifi' | 'cleared'
+
+/** Sous-ensemble de l'API Network Information, absente de Safari et Firefox. */
+interface NetworkInformationLike extends EventTarget {
+  type?: string
+}
+
+function getConnection(): NetworkInformationLike | null {
+  if (typeof navigator === 'undefined') return null
+  const connection = (
+    navigator as Navigator & {
+      connection?: NetworkInformationLike
+    }
+  ).connection
+  return connection ?? null
+}
+
+/**
+ * Faut-il attendre le Wi-Fi ? Seulement si le réglage est actif et que le
+ * navigateur affirme être sur le réseau mobile. Un type inconnu (ou une API
+ * absente) laisse télécharger : mieux vaut des photos qu'un blocage sans
+ * raison visible — l'écran hors ligne signale que le réglage est sans effet.
+ */
+export function shouldWaitForWifi(
+  wifiOnly: boolean,
+  connectionType: string | undefined,
+): boolean {
+  if (!wifiOnly || !connectionType) return false
+  return connectionType === 'cellular'
+}
+
+export type CacheState = 'empty' | 'complete' | 'downloading' | 'partial'
+
+/** État d'ensemble du cache, pour une pastille ou un titre. */
+export function cacheState(stats: ImageCacheStats): CacheState {
+  if (stats.total === 0) return 'empty'
+  if (stats.cached === stats.total) return 'complete'
+  if (stats.downloading > 0) return 'downloading'
+  return 'partial'
+}
+
+async function clearImageDB(): Promise<void> {
+  const db = await openImageDB()
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(IMAGE_STORE_NAME, 'readwrite')
+    tx.objectStore(IMAGE_STORE_NAME).clear()
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+  db.close()
 }
 
 // ─── IndexedDB helpers ────────────────────────────────────────────────────────
@@ -171,6 +235,35 @@ export function useImageCache(
   const [cachedSrcs, setCachedSrcs] = useState<Record<string, string>>({})
   const [retryKey, setRetryKey] = useState(0)
 
+  // ── Réglage « seulement en Wi-Fi » ───────────────────────────────────────────
+  const { preferences } = usePreferences()
+  const [connectionType, setConnectionType] = useState<string | undefined>()
+  const [connectionTypeKnown, setConnectionTypeKnown] = useState(false)
+  useEffect(() => {
+    const connection = getConnection()
+    if (!connection) return
+    const read = () => {
+      setConnectionType(connection.type)
+      setConnectionTypeKnown(typeof connection.type === 'string')
+    }
+    read()
+    connection.addEventListener('change', read)
+    return () => connection.removeEventListener('change', read)
+  }, [])
+  /** Cache vidé à la main : on ne retélécharge pas aussitôt ce qu'on vient d'effacer. */
+  const [cleared, setCleared] = useState(false)
+  /** Geste explicite (« Télécharger maintenant ») : passe outre la pause. */
+  const [forced, setForced] = useState(false)
+  const waitingForWifi = shouldWaitForWifi(preferences.wifiOnly, connectionType)
+  const paused: PauseReason | null = forced
+    ? null
+    : cleared
+      ? 'cleared'
+      : waitingForWifi
+        ? 'waiting-for-wifi'
+        : null
+  const downloadsAllowed = paused === null
+
   // Keep a ref to currentDayIndex so the effect closure captures the latest
   // value when the itinerary changes, without re-running on every navigation.
   const currentDayRef = useRef(currentDayIndex)
@@ -248,6 +341,9 @@ export function useImageCache(
       setCachedSrcs(initSrcs)
 
       // ── Phase 2: progressively download pending images ─────────────────────
+      // En pause (Wi-Fi attendu, cache vidé), les images restent « pending » :
+      // l'effet repart dès que la pause se lève.
+      if (!downloadsAllowed) return
       const pending = urls.filter((url) => initStatuses[url] === 'pending')
 
       async function downloadOne(url: string): Promise<void> {
@@ -293,7 +389,7 @@ export function useImageCache(
     // priority order. Including it would cancel all in-flight downloads and restart
     // from scratch on every day navigation — wasteful overhead. Priority is captured
     // via `currentDayRef.current` at the moment the itinerary first loads.
-  }, [itinerary])
+  }, [itinerary, downloadsAllowed])
 
   // ── Retry effect ─────────────────────────────────────────────────────────────
   // Triggered by incrementing `retryKey`. Re-downloads all URLs in error state.
@@ -354,8 +450,32 @@ export function useImageCache(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryKey])
 
+  // « Réessayer » est un geste explicite : il passe outre la pause, comme
+  // « Télécharger maintenant ».
   const retryErrors = useCallback(() => {
     setRetryKey((k) => k + 1)
+  }, [])
+
+  const downloadNow = useCallback(() => {
+    setCleared(false)
+    setForced(true)
+  }, [])
+
+  const clearCache = useCallback(async () => {
+    setForced(false)
+    setCleared(true)
+    await clearImageDB()
+    setCachedSrcs((prev) => {
+      for (const objectUrl of Object.values(prev)) {
+        URL.revokeObjectURL(objectUrl)
+      }
+      return {}
+    })
+    setStatuses((prev) => {
+      const next: Record<string, ImageStatus> = {}
+      for (const url of Object.keys(prev)) next[url] = 'pending'
+      return next
+    })
   }, [])
 
   // ── Single-URL retry ─────────────────────────────────────────────────────────
@@ -418,5 +538,15 @@ export function useImageCache(
     error: Object.values(statuses).filter((s) => s === 'error').length,
   }
 
-  return { statuses, cachedSrcs, stats, retryErrors, retrySingle }
+  return {
+    statuses,
+    cachedSrcs,
+    stats,
+    retryErrors,
+    retrySingle,
+    paused,
+    connectionTypeKnown,
+    downloadNow,
+    clearCache,
+  }
 }

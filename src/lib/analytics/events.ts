@@ -275,7 +275,7 @@ export const analyticsEvents = {
   },
   generator_refined: {
     description:
-      "Décision sur un affinage proposé par le générateur : appliqué ou annulé, et combien de changements il comptait.",
+      'Décision sur un affinage proposé par le générateur : appliqué ou annulé, et combien de changements il comptait.',
     properties: { applied: flag(), changes_count: count() },
   },
   calendar_exported: {

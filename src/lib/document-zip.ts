@@ -5,11 +5,47 @@ export interface ZipManifest {
   exportedAt: string
   documentCount: number
   totalSize: number
-  documents: Array<{
-    name: string
-    type: string
-    size: number
-  }>
+  documents: Array<
+    {
+      name: string
+      type: string
+      size: number
+    } & ZipDocumentLink
+  >
+}
+
+/**
+ * Rattachement d'un document à une journée du voyage. Champs facultatifs
+ * ajoutés au manifeste sans changer sa version : une archive plus ancienne se
+ * lit toujours (documents rattachés à tout le voyage), et une version plus
+ * ancienne de l'app ignore simplement ces champs. L'identifiant du voyage
+ * n'est pas exporté : il ne vaut que sur l'appareil qui l'a créé, et
+ * l'archive est restaurée dans le voyage consulté.
+ */
+export interface ZipDocumentLink {
+  dayId?: string
+  linkedTo?: 'transport' | 'accommodation' | 'activity'
+  activityId?: string
+}
+
+const LINK_TARGETS = ['transport', 'accommodation', 'activity'] as const
+
+/** Ne garde du manifeste que des rattachements bien formés. */
+function readLink(raw: Partial<Record<keyof ZipDocumentLink, unknown>>) {
+  const link: ZipDocumentLink = {}
+  if (typeof raw.dayId === 'string' && raw.dayId) {
+    link.dayId = raw.dayId
+    if (
+      typeof raw.linkedTo === 'string' &&
+      (LINK_TARGETS as readonly string[]).includes(raw.linkedTo)
+    ) {
+      link.linkedTo = raw.linkedTo as ZipDocumentLink['linkedTo']
+    }
+    if (typeof raw.activityId === 'string' && raw.activityId) {
+      link.activityId = raw.activityId
+    }
+  }
+  return link
 }
 
 export interface ExportProgress {
@@ -35,7 +71,9 @@ async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
  * Calls `onProgress` at key steps so the UI can show feedback.
  */
 export async function exportDocumentsAsZip(
-  documents: Array<{ name: string; type: string; size: number; blob: Blob }>,
+  documents: Array<
+    { name: string; type: string; size: number; blob: Blob } & ZipDocumentLink
+  >,
   onProgress?: (p: ExportProgress) => void,
 ): Promise<void> {
   onProgress?.({ status: 'preparing', message: 'Préparation des documents…' })
@@ -49,6 +87,7 @@ export async function exportDocumentsAsZip(
       name: d.name,
       type: d.type,
       size: d.size,
+      ...readLink(d),
     })),
   }
 
@@ -86,7 +125,7 @@ export async function exportDocumentsAsZip(
   onProgress?.({ status: 'done', message: 'Export terminé' })
 }
 
-export interface ParsedZipDocument {
+export interface ParsedZipDocument extends ZipDocumentLink {
   name: string
   type: string
   blob: Blob
@@ -135,7 +174,12 @@ export async function parseDocumentsZip(file: File): Promise<ParsedZip> {
     const blob = new Blob([entry], {
       type: docMeta.type || 'application/octet-stream',
     })
-    documents.push({ name: docMeta.name, type: docMeta.type, blob })
+    documents.push({
+      name: docMeta.name,
+      type: docMeta.type,
+      blob,
+      ...readLink(docMeta),
+    })
   }
 
   return { documents, manifest }

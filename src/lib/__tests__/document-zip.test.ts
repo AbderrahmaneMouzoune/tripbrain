@@ -308,3 +308,114 @@ describe('parseDocumentsZip', () => {
     expect(documents[0].blob.type).toBe('application/octet-stream')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Rattachements aux journées : champs facultatifs du manifeste
+// ---------------------------------------------------------------------------
+
+describe('document links in the manifest', () => {
+  const unzipMock = unzip as unknown as ReturnType<typeof vi.fn>
+  const zipMock = zip as unknown as ReturnType<typeof vi.fn>
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function zipWith(documents: unknown[]) {
+    const encoder = new TextEncoder()
+    const entries: Record<string, Uint8Array> = {
+      'manifest.json': encoder.encode(
+        JSON.stringify({
+          version: '1.0',
+          exportedAt: '2026-01-01T00:00:00Z',
+          documentCount: documents.length,
+          totalSize: 0,
+          documents,
+        }),
+      ),
+    }
+    for (const doc of documents as { name: string }[]) {
+      entries[`documents/${doc.name}`] = encoder.encode('x')
+    }
+    unzipMock.mockImplementation((_data, cb) => void cb(null, entries))
+    return new File([new Uint8Array([80, 75])], 'docs.zip', {
+      type: 'application/zip',
+    })
+  }
+
+  it('reads the day and target of each document', async () => {
+    const file = zipWith([
+      {
+        name: 'billet.pdf',
+        type: 'application/pdf',
+        size: 1,
+        dayId: 'day-2',
+        linkedTo: 'transport',
+      },
+      { name: 'visa.pdf', type: 'application/pdf', size: 1 },
+    ])
+    const { documents } = await parseDocumentsZip(file)
+    expect(documents[0]).toMatchObject({
+      dayId: 'day-2',
+      linkedTo: 'transport',
+    })
+    expect(documents[1].dayId).toBeUndefined()
+  })
+
+  it('ignores malformed links instead of failing', async () => {
+    const file = zipWith([
+      {
+        name: 'a.pdf',
+        type: 'application/pdf',
+        size: 1,
+        dayId: 42,
+        linkedTo: 'hotel',
+      },
+      {
+        name: 'b.pdf',
+        type: 'application/pdf',
+        size: 1,
+        dayId: 'day-1',
+        linkedTo: 'spaceship',
+      },
+    ])
+    const { documents } = await parseDocumentsZip(file)
+    expect(documents[0].dayId).toBeUndefined()
+    expect(documents[0].linkedTo).toBeUndefined()
+    expect(documents[1]).toMatchObject({ dayId: 'day-1' })
+    expect(documents[1].linkedTo).toBeUndefined()
+  })
+
+  it('writes links into the manifest on export', async () => {
+    Object.defineProperty(globalThis, 'URL', {
+      configurable: true,
+      writable: true,
+      value: { createObjectURL: () => 'blob:x', revokeObjectURL: () => {} },
+    })
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      writable: true,
+      value: { createElement: () => ({ click: () => {} }) },
+    })
+    let manifest: { documents: Record<string, unknown>[] } | null = null
+    zipMock.mockImplementation((files, _opts, cb) => {
+      manifest = JSON.parse(new TextDecoder().decode(files['manifest.json']))
+      cb(null, new Uint8Array([80, 75]))
+    })
+    await exportDocumentsAsZip([
+      {
+        name: 'hotel.pdf',
+        type: 'application/pdf',
+        size: 1,
+        blob: new Blob(['x']),
+        dayId: 'day-1',
+        linkedTo: 'accommodation',
+      },
+    ])
+    expect(manifest!.documents[0]).toMatchObject({
+      name: 'hotel.pdf',
+      dayId: 'day-1',
+      linkedTo: 'accommodation',
+    })
+  })
+})
