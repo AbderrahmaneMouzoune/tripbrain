@@ -93,12 +93,23 @@ export async function POST(request: Request) {
   const input = parsed.data
   const prompt =
     input.mode === 'express'
-      ? buildExpressPrompt(input.description, input.startDate, input.durationDays)
+      ? buildExpressPrompt(
+          input.description,
+          input.startDate,
+          input.durationDays,
+        )
       : buildBriefPrompt(input.brief, input.startDate)
+
+  // Coupe l'appel au modèle dès que le client s'en va (« Arrêter », page
+  // fermée) : une génération que personne ne lira ne doit pas être payée.
+  const upstream = new AbortController()
+  request.signal.addEventListener('abort', () => upstream.abort(), {
+    once: true,
+  })
 
   let chunks: Awaited<ReturnType<typeof openCompletion>>
   try {
-    chunks = await openCompletion(prompt, request.signal)
+    chunks = await openCompletion(prompt, upstream.signal)
   } catch (error) {
     const { reason } = toGeneratorError(error)
     console.error('Génération impossible', { reason, model: generatorModel() })
@@ -118,15 +129,15 @@ export async function POST(request: Request) {
       } catch (error) {
         const { reason } = toGeneratorError(error)
         // Le voyageur a fermé la connexion ou arrêté : rien à signaler.
-        if (!request.signal.aborted) {
+        if (!upstream.signal.aborted) {
           console.error('Génération interrompue', { reason })
           controller.enqueue(encoder.encode(`${STREAM_ERROR_MARKER}${reason}`))
         }
         controller.close()
       }
     },
-    async cancel() {
-      await chunks.return({ truncated: true })
+    cancel() {
+      upstream.abort()
     },
   })
 

@@ -45,7 +45,9 @@ describe('magasin de génération', () => {
     const half = BODY.indexOf('"title":"Belém"')
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => streamedResponse([BODY.slice(0, half), BODY.slice(half)])),
+      vi.fn(async () =>
+        streamedResponse([BODY.slice(0, half), BODY.slice(half)]),
+      ),
     )
     const seen: number[] = []
     const unsubscribe = subscribeGeneration(() =>
@@ -96,7 +98,10 @@ describe('magasin de génération', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
-        streamedResponse(['{"tripTitle":"x","summary":"y","days":[', `${STREAM_ERROR_MARKER}overloaded`]),
+        streamedResponse([
+          '{"tripTitle":"x","summary":"y","days":[',
+          `${STREAM_ERROR_MARKER}overloaded`,
+        ]),
       ),
     )
     await startGeneration({

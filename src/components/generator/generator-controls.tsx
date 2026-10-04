@@ -7,10 +7,7 @@ import { Chip } from '@/components/mobile/chip'
 import { OptionCard } from '@/components/mobile/option-card'
 import type { BriefOption } from '@/lib/generator/trip-brief'
 import { todayIso } from '@/lib/generator/itinerary-quality'
-import {
-  MAX_DURATION_DAYS,
-  MIN_DURATION_DAYS,
-} from '@/lib/generator/requests'
+import { MAX_DURATION_DAYS, MIN_DURATION_DAYS } from '@/lib/generator/requests'
 import { cn } from '@/lib/utils'
 
 /**
@@ -148,7 +145,11 @@ export function CountStepper({
       <span id={labelId} className="text-[15px] font-extrabold">
         {label}
       </span>
-      <div role="group" aria-labelledby={labelId} className="flex items-center gap-2">
+      <div
+        role="group"
+        aria-labelledby={labelId}
+        className="flex items-center gap-2"
+      >
         <StepperButton
           label={`${label} : un de moins`}
           disabled={value <= min}
@@ -156,7 +157,10 @@ export function CountStepper({
         >
           <IconMinus />
         </StepperButton>
-        <span aria-live="polite" className="w-6 text-center text-base font-black tabular-nums">
+        <span
+          aria-live="polite"
+          className="w-6 text-center text-base font-black tabular-nums"
+        >
           {value}
         </span>
         <StepperButton
@@ -286,7 +290,11 @@ export function ChipGroup({
         {GroupIcon && <GroupIcon className="size-4" aria-hidden />}
         {label}
       </span>
-      <div role="group" aria-labelledby={labelId} className="flex flex-wrap gap-2">
+      <div
+        role="group"
+        aria-labelledby={labelId}
+        className="flex flex-wrap gap-2"
+      >
         {options.map((option) => {
           const pressed = values.includes(option.id)
           return (

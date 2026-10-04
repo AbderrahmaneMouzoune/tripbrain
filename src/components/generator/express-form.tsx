@@ -13,10 +13,7 @@ import {
 } from '@/components/generator/generator-controls'
 import { useGeneratorDraft } from '@/components/generator/use-generator-store'
 import { updateGeneratorDraft } from '@/lib/generator/generation-store'
-import {
-  isPastDate,
-  isValidIsoDate,
-} from '@/lib/generator/itinerary-quality'
+import { isPastDate, isValidIsoDate } from '@/lib/generator/itinerary-quality'
 import {
   MAX_DESCRIPTION_LENGTH,
   MIN_DESCRIPTION_LENGTH,

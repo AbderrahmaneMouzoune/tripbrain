@@ -89,7 +89,11 @@ function suggestionsFor(itinerary: GeneratedItinerary): string[] {
     longest && longest.dayIndexes.length >= 2
       ? [`Une journée libre à ${longest.city}`]
       : []
-  return [...GENERIC_SUGGESTIONS.slice(0, 1), ...own, ...GENERIC_SUGGESTIONS.slice(1)]
+  return [
+    ...GENERIC_SUGGESTIONS.slice(0, 1),
+    ...own,
+    ...GENERIC_SUGGESTIONS.slice(1),
+  ]
 }
 
 type Proposal = {
@@ -157,7 +161,11 @@ export function RefineSheet({
         toDayItineraries(itinerary),
         toDayItineraries(next),
       )
-      setProposal({ itinerary: next, summaries, count: countChanges(summaries) })
+      setProposal({
+        itinerary: next,
+        summaries,
+        count: countChanges(summaries),
+      })
     } catch (caught) {
       if (controller.current !== own || isAbortError(caught)) return
       const failure =
@@ -254,7 +262,9 @@ export function RefineSheet({
               <IconSparkles className="size-[18px] animate-pulse" aria-hidden />
             </span>
             <div className="flex flex-1 flex-col gap-2">
-              <p className="text-sm font-extrabold">On prépare les changements…</p>
+              <p className="text-sm font-extrabold">
+                On prépare les changements…
+              </p>
               <span className="animate-shimmer-soft bg-muted h-3 w-3/4 rounded-md" />
             </div>
           </div>
@@ -390,7 +400,9 @@ export function RefineSheet({
           id="generator-refine-input"
           value={input}
           maxLength={MAX_INSTRUCTION_LENGTH}
-          placeholder={sent ? 'Autre chose à changer ?' : 'Ex. ajoute une nuit à la mer'}
+          placeholder={
+            sent ? 'Autre chose à changer ?' : 'Ex. ajoute une nuit à la mer'
+          }
           onChange={(event) => setInput(event.target.value)}
           className="text-foreground placeholder:text-muted-foreground/70 h-11 min-w-0 flex-1 bg-transparent text-[15px] font-bold outline-none"
         />
@@ -401,7 +413,11 @@ export function RefineSheet({
           disabled={pending || input.trim().length < 3}
           className="rounded-[14px]"
         >
-          {pending ? <IconArrowRight className="animate-pulse" /> : <IconSend />}
+          {pending ? (
+            <IconArrowRight className="animate-pulse" />
+          ) : (
+            <IconSend />
+          )}
         </Button>
       </form>
     </BottomSheet>

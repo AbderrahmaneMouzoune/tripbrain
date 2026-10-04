@@ -81,8 +81,7 @@ interface Step {
 /** Symboles du budget, du plus serré au plus large ; le libellé reste lu. */
 const BUDGET_SYMBOLS = ['€', '€€', '€€€', '€€€€']
 
-const euros = (amount: number) =>
-  `${amount.toLocaleString('fr-FR')} €`
+const euros = (amount: number) => `${amount.toLocaleString('fr-FR')} €`
 
 const STEPS: Step[] = [
   {
@@ -238,7 +237,8 @@ const STEPS: Step[] = [
   {
     eyebrow: 'Envies',
     title: 'Qu’est-ce qui vous fait voyager ?',
-    description: 'Dans l’ordre où vous les touchez : la première compte le plus.',
+    description:
+      'Dans l’ordre où vous les touchez : la première compte le plus.',
     render: ({ brief, setBrief }) => (
       <ChipGroup
         label="Centres d’intérêt"
@@ -381,7 +381,10 @@ function PaceAndBudget({ brief, setBrief, titleId }: StepContext) {
           })}
         </div>
         <div className="bg-card border-border flex items-center gap-2.5 rounded-[14px] border px-3.5 py-3">
-          <IconInfoCircle className="text-primary size-5 shrink-0" aria-hidden />
+          <IconInfoCircle
+            className="text-primary size-5 shrink-0"
+            aria-hidden
+          />
           <p className="text-muted-foreground flex-1 text-[13px] leading-[1.45]">
             {budget && estimate !== null ? (
               <>
@@ -427,14 +430,18 @@ function SegmentedField({
         onChange={onChange}
       />
       {selected?.hint && (
-        <p className="text-muted-foreground px-1 text-[13px]">{selected.hint}</p>
+        <p className="text-muted-foreground px-1 text-[13px]">
+          {selected.hint}
+        </p>
       )}
     </div>
   )
 }
 
 /** Une ligne du récapitulatif, quand la question a une réponse. */
-function summarize(brief: TripBrief): { label: string; value: string; step: number }[] {
+function summarize(
+  brief: TripBrief,
+): { label: string; value: string; step: number }[] {
   const rows: { label: string; value: string; step: number }[] = []
   const push = (label: string, value: string, step: number) => {
     if (value.trim()) rows.push({ label, value, step })
@@ -443,7 +450,9 @@ function summarize(brief: TripBrief): { label: string; value: string; step: numb
   push('Départ de', brief.origin, 0)
   push('Découpage', labelOf(TRIP_SHAPES, brief.shape), 2)
   const party = [
-    brief.adults > 0 ? `${brief.adults} adulte${brief.adults > 1 ? 's' : ''}` : '',
+    brief.adults > 0
+      ? `${brief.adults} adulte${brief.adults > 1 ? 's' : ''}`
+      : '',
     brief.children > 0
       ? `${brief.children} enfant${brief.children > 1 ? 's' : ''}`
       : '',
@@ -465,7 +474,10 @@ function summarize(brief: TripBrief): { label: string; value: string; step: numb
   )
   push(
     'Journées',
-    [labelOf(DAY_STARTS, brief.dayStart), labelOf(TRAVEL_TIMES, brief.maxTravelTime)]
+    [
+      labelOf(DAY_STARTS, brief.dayStart),
+      labelOf(TRAVEL_TIMES, brief.maxTravelTime),
+    ]
       .filter(Boolean)
       .join(' · '),
     6,
@@ -516,8 +528,9 @@ export function BriefQuestionnaire({
   const step = STEPS[index]
   const complete = step?.isComplete ? step.isComplete(context) : true
   const required = Boolean(step?.isComplete)
-  const canGenerate =
-    STEPS.every((item) => !item.isComplete || item.isComplete(context))
+  const canGenerate = STEPS.every(
+    (item) => !item.isComplete || item.isComplete(context),
+  )
 
   const goBack = () => (index === 0 ? onBack() : setIndex(index - 1))
   const goNext = () => setIndex(Math.min(STEPS.length, index + 1))
@@ -532,14 +545,18 @@ export function BriefQuestionnaire({
             variant="outline"
             size="icon-round"
             onClick={goBack}
-            aria-label={index === 0 ? 'Retour à la description' : 'Question précédente'}
+            aria-label={
+              index === 0 ? 'Retour à la description' : 'Question précédente'
+            }
             className="border-border bg-card shrink-0 shadow-none"
           >
             <IconArrowLeft />
           </Button>
           <div className="flex flex-1 flex-col gap-[7px]">
             <span className="text-muted-foreground text-[13px] font-extrabold">
-              {isRecap ? 'Récapitulatif' : `Question ${shown} sur ${STEPS.length}`}
+              {isRecap
+                ? 'Récapitulatif'
+                : `Question ${shown} sur ${STEPS.length}`}
             </span>
             <span
               role="progressbar"
@@ -568,7 +585,10 @@ export function BriefQuestionnaire({
           )}
         </div>
 
-        <div key={index} className="animate-screen flex flex-1 flex-col px-5 pt-6 pb-6">
+        <div
+          key={index}
+          className="animate-screen flex flex-1 flex-col px-5 pt-6 pb-6"
+        >
           {isRecap ? (
             <Recap
               brief={brief}
@@ -587,7 +607,10 @@ export function BriefQuestionnaire({
                 <p className="text-secondary-strong text-xs font-black tracking-[0.08em] uppercase">
                   {step.eyebrow}
                 </p>
-                <h1 id={titleId} className="font-display text-[28px] leading-[1.15]">
+                <h1
+                  id={titleId}
+                  className="font-display text-[28px] leading-[1.15]"
+                >
                   {step.title}
                 </h1>
                 {step.description && (
@@ -596,7 +619,9 @@ export function BriefQuestionnaire({
                   </p>
                 )}
               </header>
-              <div className="stagger flex flex-col">{step.render(context)}</div>
+              <div className="stagger flex flex-col">
+                {step.render(context)}
+              </div>
             </>
           )}
         </div>
@@ -693,7 +718,10 @@ function Recap({
       )}
       <dl className="bg-card border-border divide-border/70 flex flex-col divide-y rounded-[20px] border px-4">
         {rows.map((row) => (
-          <div key={`${row.label}-${row.step}`} className="flex items-start gap-3 py-2.5">
+          <div
+            key={`${row.label}-${row.step}`}
+            className="flex items-start gap-3 py-2.5"
+          >
             <div className="flex min-w-0 flex-1 flex-col">
               <dt className="text-muted-foreground text-xs font-extrabold">
                 {row.label}

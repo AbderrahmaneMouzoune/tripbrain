@@ -33,7 +33,12 @@ const GENERATED: GeneratedItinerary = {
       date: '2027-04-13',
       city: 'Kyoto',
       title: 'Vers Kyoto',
-      transport: { type: 'train', from: 'Tokyo', to: 'Kyoto', duration: '2h15' },
+      transport: {
+        type: 'train',
+        from: 'Tokyo',
+        to: 'Kyoto',
+        duration: '2h15',
+      },
       activities: [{ name: 'Fushimi Inari', type: 'visit' }],
     },
   ],
@@ -127,11 +132,14 @@ describe('readGeneratedItinerary', () => {
   })
 
   it('rend null quand la réponse n’est pas un itinéraire', () => {
-    expect(readGeneratedItinerary('Désolé, je ne peux pas.', '2027-04-12'))
-      .toMatchObject({ itinerary: null })
     expect(
-      readGeneratedItinerary('{"tripTitle":"x","summary":"y","days":[]}', '2027-04-12')
-        .itinerary,
+      readGeneratedItinerary('Désolé, je ne peux pas.', '2027-04-12'),
+    ).toMatchObject({ itinerary: null })
+    expect(
+      readGeneratedItinerary(
+        '{"tripTitle":"x","summary":"y","days":[]}',
+        '2027-04-12',
+      ).itinerary,
     ).toBeNull()
   })
 })

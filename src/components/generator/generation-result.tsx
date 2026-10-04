@@ -114,7 +114,10 @@ export function GenerationResult({
       footer={
         <>
           {saveError && (
-            <p role="alert" className="text-destructive text-center text-sm font-bold">
+            <p
+              role="alert"
+              className="text-destructive text-center text-sm font-bold"
+            >
               {saveError}
             </p>
           )}
@@ -208,8 +211,7 @@ export function GenerationResult({
               />
               <span className="flex-1 text-base font-black">{stop.city}</span>
               <span className="text-muted-foreground text-xs font-extrabold">
-                {dayRangeLabel(stop.dayIndexes)} ·{' '}
-                {stop.dayIndexes.length} jour
+                {dayRangeLabel(stop.dayIndexes)} · {stop.dayIndexes.length} jour
                 {stop.dayIndexes.length > 1 ? 's' : ''}
               </span>
             </div>
@@ -333,7 +335,10 @@ function QualityCard({
         const expanded = open === point.id
         const detailId = `generator-point-${point.id}`
         return (
-          <div key={point.id} className="bg-card overflow-hidden rounded-[14px]">
+          <div
+            key={point.id}
+            className="bg-card overflow-hidden rounded-[14px]"
+          >
             <button
               type="button"
               aria-expanded={expanded}

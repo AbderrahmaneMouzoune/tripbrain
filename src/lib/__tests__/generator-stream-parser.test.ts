@@ -39,7 +39,8 @@ const FULL = JSON.stringify({
 /** Découpe un texte en morceaux de taille fixe, comme un flux réseau. */
 function chunks(text: string, size: number): string[] {
   const parts: string[] = []
-  for (let i = 0; i < text.length; i += size) parts.push(text.slice(i, i + size))
+  for (let i = 0; i < text.length; i += size)
+    parts.push(text.slice(i, i + size))
   return parts
 }
 

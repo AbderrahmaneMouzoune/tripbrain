@@ -127,7 +127,9 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
           state={state}
           itinerary={state.itinerary}
           onBack={
-            state.status === 'stopped' ? () => setShowPartial(false) : editRequest
+            state.status === 'stopped'
+              ? () => setShowPartial(false)
+              : editRequest
           }
           onRegenerate={regenerate}
           onSave={save}
@@ -174,4 +176,3 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
     />
   )
 }
-

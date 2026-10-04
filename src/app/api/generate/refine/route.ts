@@ -23,7 +23,10 @@ import {
 import { buildRefinePrompt } from '@/lib/generator/itinerary-prompt'
 import { checkGeneratorOrigin } from '@/lib/generator/origin'
 import { readGeneratedItinerary } from '@/lib/generator/read-result'
-import { firstIssueMessage, refineRequestSchema } from '@/lib/generator/requests'
+import {
+  firstIssueMessage,
+  refineRequestSchema,
+} from '@/lib/generator/requests'
 import { createRateLimiter, getClientKey } from '@/lib/rate-limit'
 import { preflightResponse } from '@/lib/share-cors'
 
