@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import dynamic from 'next/dynamic'
 import { ChevronLeft, ChevronRight, LocateFixed, Navigation } from 'lucide-react'
 import { trackEvent } from '@/lib/analytics/client'
 import { useTrip } from '@/components/app/trip-provider'
@@ -22,13 +21,14 @@ import {
   trackDirections,
   useApplePlatform,
 } from '@/components/day/day-ui'
-import { placedActivities, type MapScope } from '@/components/map/trip-leaflet'
+// Leaflet lui-même n'est chargé que dans le navigateur, par `TripLeaflet`,
+// à l'ouverture de la carte (import dynamique dans un effet).
+import {
+  TripLeaflet,
+  placedActivities,
+  type MapScope,
+} from '@/components/map/trip-leaflet'
 
-// Leaflet touche à `window` dès son chargement : la carte n'existe que côté client.
-const TripLeaflet = dynamic(
-  () => import('@/components/map/trip-leaflet').then((mod) => mod.TripLeaflet),
-  { ssr: false },
-)
 
 /**
  * Activité à montrer à l'ouverture de l'onglet Carte (« Voir sur la carte »
