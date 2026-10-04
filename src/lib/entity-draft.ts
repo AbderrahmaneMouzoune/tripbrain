@@ -180,6 +180,15 @@ export function validateDraft(
 
     if (field.required && !isFilled(value)) {
       errors[field.key] = 'Ce champ est obligatoire'
+      continue
+    }
+
+    // Un séjour qui se termine avant d'avoir commencé est une faute de frappe.
+    if (field.type === 'date' && field.pairWith) {
+      const nights = countNights(value, draft[field.pairWith])
+      if (nights !== null && nights < 0) {
+        errors[field.pairWith] = `La date doit suivre « ${field.label} »`
+      }
     }
   }
 
@@ -227,4 +236,199 @@ function parseCoordinates(
   }
 
   return [latitude, longitude]
+}
+
+/** Nombre maximal d'éléments dans le résumé d'une section repliée. */
+const SUMMARY_LIMIT = 4
+/** Au-delà, un texte libre est tronqué dans le résumé. */
+const SUMMARY_TEXT_LENGTH = 32
+
+/**
+ * Résumé d'une section repliée, élément par élément (« 60 CNY », « 4.9 ★ »,
+ * « réservation requise »). Il dit ce que la section contient sans l'ouvrir ;
+ * un tableau vide laisse place au texte d'appel de la section.
+ */
+export function summarizeSection(
+  fields: readonly EditField[],
+  draft: EntityDraft,
+): string[] {
+  const parts: string[] = []
+  const pairedEnds = new Set(
+    fields.flatMap((field) => (field.pairWith ? [field.pairWith] : [])),
+  )
+
+  for (const field of fields) {
+    if (pairedEnds.has(field.key)) continue
+
+    const part = summarizeField(field, draft)
+    if (part) parts.push(part)
+    if (parts.length === SUMMARY_LIMIT) break
+  }
+
+  return parts
+}
+
+function summarizeField(field: EditField, draft: EntityDraft): string | null {
+  const value = draft[field.key]
+
+  if (field.pairWith) {
+    const start = readText(value)
+    const end = readText(draft[field.pairWith])
+    const format =
+      field.type === 'date' ? formatShortDate : (text: string) => text
+    if (start && end) return `${format(start)} → ${format(end)}`
+    if (start || end) return format(start || end)
+    return null
+  }
+
+  switch (field.type) {
+    case 'switch':
+      return value === true ? lowerFirst(field.label) : null
+
+    case 'lines':
+    case 'chips': {
+      const count = Array.isArray(value)
+        ? value.filter((item) => item.trim()).length
+        : 0
+      return count > 0 ? `${count} ${lowerFirst(field.label)}` : null
+    }
+
+    case 'coordinates':
+      return Array.isArray(value) && value.every((part) => part.trim())
+        ? value.map((part) => part.trim()).join(', ')
+        : null
+
+    case 'price': {
+      const amount = readText(value)
+      if (!amount) return null
+      const currency = field.currencyKey
+        ? readText(draft[field.currencyKey]).toUpperCase()
+        : ''
+      return [amount, currency].filter(Boolean).join(' ')
+    }
+
+    case 'rating': {
+      const rating = readText(value)
+      return rating ? `${rating} ★` : null
+    }
+
+    case 'date': {
+      const text = readText(value)
+      return text ? formatShortDate(text) : null
+    }
+
+    case 'url': {
+      const text = readText(value)
+      return text ? truncate(hostnameOf(text) ?? text) : null
+    }
+
+    default: {
+      const text = readText(value)
+      if (!text) return null
+      const option = field.options?.find((item) => item.value === text)
+      return truncate(option?.label ?? text)
+    }
+  }
+}
+
+/**
+ * Nuits entre deux dates ISO (`YYYY-MM-DD`). `null` tant que l'une des deux
+ * manque ou ne se lit pas ; négatif si le départ précède l'arrivée.
+ */
+export function countNights(
+  checkIn: DraftValue | undefined,
+  checkOut: DraftValue | undefined,
+): number | null {
+  const start = parseIsoDate(readText(checkIn))
+  const end = parseIsoDate(readText(checkOut))
+  if (start === null || end === null) return null
+
+  return Math.round((end - start) / 86_400_000)
+}
+
+/**
+ * Minutes entre deux heures `HH:MM`. Une arrivée « avant » le départ est
+ * comprise comme le lendemain (train de nuit, vol tardif).
+ */
+export function minutesBetween(
+  departure: DraftValue | undefined,
+  arrival: DraftValue | undefined,
+): number | null {
+  const start = parseClock(readText(departure))
+  const end = parseClock(readText(arrival))
+  if (start === null || end === null) return null
+
+  return end >= start ? end - start : end + 24 * 60 - start
+}
+
+/** Durée au format court du roadbook : « 45m », « 3h », « 2h10 ». */
+export function formatMinutes(total: number): string {
+  const hours = Math.floor(total / 60)
+  const minutes = total % 60
+  if (hours === 0) return `${minutes}m`
+  if (minutes === 0) return `${hours}h`
+  return `${hours}h${String(minutes).padStart(2, '0')}`
+}
+
+/**
+ * Prix d'une nuit, arrondi à l'unité, pour situer le coût d'un séjour.
+ * `null` sans montant lisible ou sans nuit.
+ */
+export function pricePerNight(
+  amount: DraftValue | undefined,
+  nights: number | null,
+): number | null {
+  const total = parseNumber(amount)
+  if (total === null || nights === null || nights <= 0) return null
+  return Math.round(total / nights)
+}
+
+/** Date ISO en clair et courte, ex. « 13 mai ». */
+export function formatShortDate(iso: string): string {
+  const time = parseIsoDate(iso)
+  if (time === null) return iso
+  return new Date(time).toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  })
+}
+
+/** Domaine d'un lien, sans « www. », pour dire où il mène. */
+export function hostnameOf(url: string): string | null {
+  try {
+    return new URL(url.trim()).hostname.replace(/^www\./, '') || null
+  } catch {
+    return null
+  }
+}
+
+function parseIsoDate(text: string): number | null {
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) return null
+  const time = Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+  )
+  return Number.isFinite(time) ? time : null
+}
+
+function parseClock(text: string): number | null {
+  const match = text.match(/^(\d{1,2}):(\d{2})$/)
+  if (!match) return null
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  if (hours > 23 || minutes > 59) return null
+  return hours * 60 + minutes
+}
+
+function lowerFirst(text: string): string {
+  return text.charAt(0).toLocaleLowerCase('fr-FR') + text.slice(1)
+}
+
+function truncate(text: string): string {
+  return text.length > SUMMARY_TEXT_LENGTH
+    ? `${text.slice(0, SUMMARY_TEXT_LENGTH - 1).trimEnd()}…`
+    : text
 }
