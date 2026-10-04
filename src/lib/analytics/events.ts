@@ -356,7 +356,7 @@ export const analyticsEvents = {
   },
   data_cleared: {
     description: "Effacement des données du voyage depuis l'application.",
-    properties: { surface: choice('share_dialog', 'demo_banner') },
+    properties: { surface: choice('share_dialog', 'demo_banner', 'trip_menu') },
   },
   pwa_installed: {
     description: "Installation de l'application sur l'appareil.",

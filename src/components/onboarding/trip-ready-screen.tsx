@@ -233,7 +233,11 @@ function ReminderRow({
   return (
     <div className="flex min-h-11 items-center gap-3">
       <span className="flex-1 text-sm font-bold">{label}</span>
-      <ToggleSwitch label={label} checked={checked} onCheckedChange={onChange} />
+      <ToggleSwitch
+        label={label}
+        checked={checked}
+        onCheckedChange={onChange}
+      />
     </div>
   )
 }

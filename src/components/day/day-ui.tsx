@@ -176,7 +176,8 @@ export function Pill({
         tone === 'accent' && 'bg-accent-soft text-accent',
         tone === 'success' && 'bg-success-soft text-success',
         tone === 'muted' && 'bg-muted text-muted-foreground',
-        tone === 'outline' && 'border-border-strong text-muted-foreground border',
+        tone === 'outline' &&
+          'border-border-strong text-muted-foreground border',
         className,
       )}
     >

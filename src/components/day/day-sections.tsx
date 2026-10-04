@@ -126,7 +126,8 @@ export function ActivityCard({
     activity.openAt,
     formatPrice(activity.price, activity.currency),
   ].filter(Boolean)
-  if (meta.length <= 2 && activity.address) meta.push(shortAddress(activity.address))
+  if (meta.length <= 2 && activity.address)
+    meta.push(shortAddress(activity.address))
 
   const firstTag = activity.tags?.[0]
 
@@ -156,7 +157,7 @@ export function ActivityCard({
               className={cn(
                 'flex-1 text-left text-base leading-[22px] font-black outline-none',
                 // Toute la carte ouvre la fiche ; le statut reste un bouton à part.
-                'after:absolute after:inset-0 after:rounded-[20px] focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50',
+                'focus-visible:after:ring-ring/50 after:absolute after:inset-0 after:rounded-[20px] focus-visible:after:ring-[3px]',
                 status === 'skipped' && 'text-muted-foreground line-through',
               )}
             >
@@ -296,7 +297,11 @@ export function StayCard({
   const { accommodation } = stay
   const status = accommodation.status
   const url = directionsUrl(
-    { address: [accommodation.name, accommodation.address].filter(Boolean).join(' ') },
+    {
+      address: [accommodation.name, accommodation.address]
+        .filter(Boolean)
+        .join(' '),
+    },
     apple,
   )
 
@@ -394,7 +399,7 @@ export function FoodList({
       </h2>
       <ul
         data-swipe-ignore
-        className="flex snap-x gap-2.5 overflow-x-auto scroll-px-5 px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x scroll-px-5 gap-2.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item, index) => {
           const food = parseFood(item)
@@ -405,7 +410,11 @@ export function FoodList({
               entity="day"
               title={food.name}
               description="À goûter dans la journée"
-              actions={editor.listItemActions('foodRecommendations', item, index)}
+              actions={editor.listItemActions(
+                'foodRecommendations',
+                item,
+                index,
+              )}
             >
               <li className="bg-card border-border flex w-[150px] shrink-0 snap-start flex-col gap-0.5 rounded-[18px] border p-3">
                 {food.native && (

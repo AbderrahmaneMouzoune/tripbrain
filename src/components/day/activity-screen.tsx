@@ -58,7 +58,8 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
   const apple = useApplePlatform()
   const editor = useDayEditor(screen.dayIndex)
   const day = editor.day
-  const index = day?.activities.findIndex((a) => a.id === screen.activityId) ?? -1
+  const index =
+    day?.activities.findIndex((a) => a.id === screen.activityId) ?? -1
   const activity = index >= 0 ? day?.activities[index] : undefined
 
   if (!day || !activity) {
@@ -157,7 +158,9 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
             <ul aria-label="Étiquettes" className="mt-2 flex flex-wrap gap-1.5">
               {activity.tags.map((tag, position) => (
                 <li key={tag}>
-                  <Pill tone={position === 0 ? 'accent' : 'primary'}>{tag}</Pill>
+                  <Pill tone={position === 0 ? 'accent' : 'primary'}>
+                    {tag}
+                  </Pill>
                 </li>
               ))}
             </ul>

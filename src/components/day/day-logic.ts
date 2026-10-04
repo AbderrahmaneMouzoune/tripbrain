@@ -102,7 +102,9 @@ export function dayTypeLabel(dayType: string | undefined): string | undefined {
 export function formatDuration(raw: string | undefined): string | undefined {
   const value = raw?.trim()
   if (!value) return undefined
-  const hours = value.match(/^(\d+)\s*h(?:\s*(\d{1,2}))?(?:\s*(?:min|m)\b)?(.*)$/i)
+  const hours = value.match(
+    /^(\d+)\s*h(?:\s*(\d{1,2}))?(?:\s*(?:min|m)\b)?(.*)$/i,
+  )
   if (hours) {
     const [, h, minutes, rest] = hours
     return `${h} h${minutes ? ` ${minutes.padStart(2, '0')}` : ''}${rest}`.trim()
@@ -487,8 +489,7 @@ function dayListLabel(days: DayItinerary[]): string {
   const consecutive = numbers.every(
     (n, i) => i === 0 || n === numbers[i - 1] + 1,
   )
-  if (consecutive)
-    return `Jours ${numbers[0]} à ${numbers.at(-1)}${city}`
+  if (consecutive) return `Jours ${numbers[0]} à ${numbers.at(-1)}${city}`
   return `Jours ${joinFrench(numbers.map(String))}${city}`
 }
 

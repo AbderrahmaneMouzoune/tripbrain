@@ -183,7 +183,7 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
 
     return (
       <div className="bg-background text-foreground min-h-dvh">
-        <div className="mx-auto w-full max-w-xl pb-[calc(env(safe-area-inset-bottom)+140px)]">
+        <div className="mx-auto w-full max-w-xl pb-6">
           {header}
 
           <div
@@ -192,8 +192,8 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
           >
             <SquarePen className="size-5 shrink-0" aria-hidden />
             <p className="text-[13px] leading-snug font-bold">
-              <strong className="font-black">Mode édition</strong> · touchez
-              un élément pour le modifier
+              <strong className="font-black">Mode édition</strong> · touchez un
+              élément pour le modifier
             </p>
           </div>
 

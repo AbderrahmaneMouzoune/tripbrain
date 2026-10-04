@@ -49,6 +49,8 @@ function TripShell() {
         <BottomTabBar />
         <ReminderScheduler />
       </main>
+      {/* Dans le fournisseur : les photos des écrans empilés profitent du cache hors ligne. */}
+      <ScreenHost />
     </ImageCacheProvider>
   )
 }
@@ -121,8 +123,14 @@ function HomePageContent() {
 
   return (
     <>
-      {hasData ? <TripShell /> : <OnboardingFlow />}
-      <ScreenHost />
+      {hasData ? (
+        <TripShell />
+      ) : (
+        <>
+          <OnboardingFlow />
+          <ScreenHost />
+        </>
+      )}
       {/* Partage reçu par l'URL : rendu des deux côtés de l'onboarding. */}
       <IncomingShareGate />
     </>

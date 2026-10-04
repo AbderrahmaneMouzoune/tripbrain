@@ -56,7 +56,10 @@ export function Lightbox({ images, isOpen, onClose }: LightboxProps) {
       >
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
           {images.map((image, index) => (
-            <figure key={`${image.url}-${index}`} className="flex flex-col gap-1.5">
+            <figure
+              key={`${image.url}-${index}`}
+              className="flex flex-col gap-1.5"
+            >
               <CachedImage
                 src={image.url}
                 alt={image.alt}

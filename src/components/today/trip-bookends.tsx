@@ -124,7 +124,10 @@ export function BeforeTrip({ now }: { now: Date }) {
 
   const packing = collectPackingTips(itinerary)
   const route = first.transport
-    ? [splitPlace(first.transport.from).name, splitPlace(first.transport.to).name]
+    ? [
+        splitPlace(first.transport.from).name,
+        splitPlace(first.transport.to).name,
+      ]
         .filter(Boolean)
         .join(' → ')
     : `Arrivée à ${first.city}`
@@ -250,7 +253,7 @@ export function BeforeTrip({ now }: { now: Date }) {
                   <button
                     type="button"
                     onClick={() => runChecklistAction(item.id)}
-                    className="pressable flex min-h-11 w-full items-center gap-3 rounded-[14px] p-2.5 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                    className="pressable focus-visible:ring-ring/50 flex min-h-11 w-full items-center gap-3 rounded-[14px] p-2.5 text-left outline-none focus-visible:ring-[3px]"
                   >
                     <span
                       aria-hidden

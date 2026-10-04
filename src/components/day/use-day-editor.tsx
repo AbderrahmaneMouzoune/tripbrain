@@ -221,7 +221,9 @@ export function useDayEditor(dayIndex: number) {
   }
 
   const activityExists = Boolean(
-    day && activityDraft && day.activities.some((a) => a.id === activityDraft.id),
+    day &&
+    activityDraft &&
+    day.activities.some((a) => a.id === activityDraft.id),
   )
 
   const sheets: ReactNode = day ? (
@@ -255,9 +257,7 @@ export function useDayEditor(dayIndex: number) {
             save(upsertActivity(day, next))
           }}
           onDelete={
-            activityExists
-              ? () => deleteActivity(activityDraft.id)
-              : undefined
+            activityExists ? () => deleteActivity(activityDraft.id) : undefined
           }
         />
       )}

@@ -144,9 +144,7 @@ function NextStepCard({
           {activity.address && (
             <button
               type="button"
-              onClick={() =>
-                onCopy(activity.address ?? '', 'Adresse copiée')
-              }
+              onClick={() => onCopy(activity.address ?? '', 'Adresse copiée')}
               className="border-primary-foreground/50 pressable h-11 flex-1 rounded-xl border-[1.5px] text-[15px] font-extrabold"
             >
               Copier l’adresse
@@ -160,7 +158,7 @@ function NextStepCard({
 
 function TodayDay({ now }: { now: Date }) {
   const { itinerary } = useTrip()
-  const { selectedDay, selectDay, dayDirection, push } = useAppNav()
+  const { selectedDay, selectDay, dayDirection, push, stack } = useAppNav()
   const { markTipSeen, update } = usePreferences()
   const index = Math.min(Math.max(selectedDay, 0), itinerary.length - 1)
   const editor = useDayEditor(index)
@@ -199,7 +197,8 @@ function TodayDay({ now }: { now: Date }) {
   // Astuce 3 : les documents, sur une journée de trajet, une fois la première
   // apprise. Jamais deux astuces spontanées dans la même visite.
   useEffect(() => {
-    if (tip || !canShowSpontaneousTip()) return
+    // Pas d'astuce sous un écran ouvert par-dessus l'onglet.
+    if (tip || stack.length > 0 || !canShowSpontaneousTip()) return
     const timer = setTimeout(() => {
       if (!canShowSpontaneousTip()) return
       if (day.activities.length > 0 && tipAvailable('long-press')) {
@@ -215,7 +214,7 @@ function TodayDay({ now }: { now: Date }) {
       }
     }, 900)
     return () => clearTimeout(timer)
-  }, [day.activities.length, day.transport, tip])
+  }, [day.activities.length, day.transport, tip, stack.length])
 
   const selectFromStrip = (target: number) => {
     goTo(target, 'timeline')
@@ -314,12 +313,13 @@ function TodayDay({ now }: { now: Date }) {
             <span className="min-w-0 flex-1">
               <span className="text-muted-foreground block text-xs font-extrabold">
                 TRAJET DU JOUR
-                {transport.departureTime
-                  ? ` · ${transport.departureTime}`
-                  : ''}
+                {transport.departureTime ? ` · ${transport.departureTime}` : ''}
               </span>
               <span className="block truncate text-[15px] font-extrabold">
-                {[splitPlace(transport.from).name, splitPlace(transport.to).name]
+                {[
+                  splitPlace(transport.from).name,
+                  splitPlace(transport.to).name,
+                ]
                   .filter(Boolean)
                   .join(' → ') ||
                   transport.details ||
@@ -342,9 +342,7 @@ function TodayDay({ now }: { now: Date }) {
             <h2 className="text-[17px] font-black">Au programme</h2>
             <ChevronRight className="size-5" aria-hidden />
           </button>
-          {day.walkingDistance && (
-            <Pill>{day.walkingDistance} à pied</Pill>
-          )}
+          {day.walkingDistance && <Pill>{day.walkingDistance} à pied</Pill>}
         </div>
 
         {day.activities.length > 0 ? (
@@ -389,7 +387,7 @@ function TodayDay({ now }: { now: Date }) {
                           activityId: activity.id,
                         })
                       }
-                      className="pressable flex min-h-14 w-full items-center gap-3 rounded-[14px] p-2.5 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                      className="pressable focus-visible:ring-ring/50 flex min-h-14 w-full items-center gap-3 rounded-[14px] p-2.5 text-left outline-none focus-visible:ring-[3px]"
                     >
                       <ActivityNumber
                         index={activityIndex}
@@ -466,7 +464,6 @@ function TodayDay({ now }: { now: Date }) {
             />
           </button>
         )}
-
       </div>
 
       {editor.sheets}

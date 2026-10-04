@@ -16,10 +16,7 @@ import {
   formatDuration,
   reorderTarget,
 } from '@/components/day/day-logic'
-import {
-  ACTIVITY_STATUS_LABELS,
-  ActivityNumber,
-} from '@/components/day/day-ui'
+import { ACTIVITY_STATUS_LABELS, ActivityNumber } from '@/components/day/day-ui'
 
 /** Écart entre deux lignes (gap de la liste), compté dans le décalage. */
 const ROW_GAP = 2
@@ -131,7 +128,11 @@ export function ReorderableActivities({
     if (!state.active && Math.abs(dy) < DRAG_THRESHOLD) return
     state.active = true
     event.preventDefault()
-    const target = reorderTarget(state.mids, state.from, state.mids[state.from] + dy)
+    const target = reorderTarget(
+      state.mids,
+      state.from,
+      state.mids[state.from] + dy,
+    )
     state.target = target
     setDrag({ id: state.id, from: state.from, target, dy, shift: state.shift })
   }
@@ -164,9 +165,17 @@ export function ReorderableActivities({
           const isMoving = movingId === activity.id
           let offset = 0
           if (drag && !isDragged) {
-            if (drag.from < drag.target && index > drag.from && index <= drag.target)
+            if (
+              drag.from < drag.target &&
+              index > drag.from &&
+              index <= drag.target
+            )
               offset = -drag.shift
-            if (drag.from > drag.target && index >= drag.target && index < drag.from)
+            if (
+              drag.from > drag.target &&
+              index >= drag.target &&
+              index < drag.from
+            )
               offset = drag.shift
           }
           const status = activity.status ?? 'planned'

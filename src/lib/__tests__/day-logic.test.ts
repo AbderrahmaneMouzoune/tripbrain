@@ -65,9 +65,7 @@ describe('dates', () => {
     expect(formatDateRange('2026-04-30', '2026-05-02')).toMatch(
       /^30 avr\. – 2 mai$/,
     )
-    expect(formatDateRange('2026-05-10', '2026-05-29', '→')).toBe(
-      '10 → 29 mai',
-    )
+    expect(formatDateRange('2026-05-10', '2026-05-29', '→')).toBe('10 → 29 mai')
   })
 })
 
@@ -171,7 +169,9 @@ describe('préparation du départ', () => {
       ['calendar', false],
     ])
     const tickets = items.find((i) => i.id === 'tickets')
-    expect(tickets?.detail).toBe('3 trajets en train et en avion · 1 déjà rangé')
+    expect(tickets?.detail).toBe(
+      '3 trajets en train et en avion · 1 déjà rangé',
+    )
     expect(items.find((i) => i.id === 'calendar')?.detail).toBe(
       'Les 20 jours et les horaires des trajets',
     )

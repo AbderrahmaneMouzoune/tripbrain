@@ -77,7 +77,7 @@ export function ListRow({
       disabled={disabled}
       className={cn(
         classes,
-        'pressable focus-visible:ring-ring/50 rounded-xl outline-none focus-visible:ring-[3px] disabled:opacity-50',
+        'pressable focus-visible:ring-ring/50 outline-none focus-visible:ring-[3px] focus-visible:ring-inset disabled:opacity-50',
       )}
     >
       {content}

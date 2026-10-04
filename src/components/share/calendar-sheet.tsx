@@ -145,7 +145,7 @@ export function CalendarSheet({ screen, onClose }: ScreenProps<'calendar'>) {
           options={[
             {
               value: 'trip',
-              label: `Tout le voyage (${plural(itinerary.length, 'jour')})`,
+              label: `Tout (${plural(itinerary.length, 'jour')})`,
             },
             { value: 'day', label: `Jour ${day.dayNumber} seulement` },
           ]}

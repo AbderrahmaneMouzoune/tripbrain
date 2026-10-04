@@ -117,48 +117,93 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const stackRef = useRef<AppScreen[]>([])
   stackRef.current = stack
 
+  // Un retour d'historique est asynchrone : tant que son `popstate` n'est pas
+  // arrivé, une deuxième fermeture (feuille qui se referme ET bouton Annuler,
+  // par exemple) reculerait d'un cran de trop, jusqu'à sortir de l'application.
+  // On ignore donc les fermetures en double, et on diffère les ouvertures
+  // demandées pendant ce temps.
+  const backPendingRef = useRef(false)
+  const queuedPushesRef = useRef<AppScreen[]>([])
+
+  const pushNow = useCallback((screen: AppScreen) => {
+    const depth = stackRef.current.length + 1
+    window.history.pushState({ tripbrainDepth: depth }, '')
+    stackRef.current = [...stackRef.current, screen]
+    setStack((current) => [...current, screen])
+  }, [])
+
   useEffect(() => {
     const onPopState = (event: PopStateEvent) => {
+      backPendingRef.current = false
       const depth =
         typeof event.state?.tripbrainDepth === 'number'
           ? event.state.tripbrainDepth
           : 0
+      if (stackRef.current.length > depth) {
+        stackRef.current = stackRef.current.slice(0, depth)
+      }
       setStack((current) =>
         current.length > depth ? current.slice(0, depth) : current,
       )
+      const queued = queuedPushesRef.current
+      queuedPushesRef.current = []
+      for (const screen of queued) pushNow(screen)
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
-  }, [])
+  }, [pushNow])
+
+  /** Filet de sécurité : si le `popstate` n'arrive jamais, on débloque. */
+  const armBackTimeout = () => {
+    window.setTimeout(() => {
+      if (!backPendingRef.current) return
+      backPendingRef.current = false
+      const queued = queuedPushesRef.current
+      queuedPushesRef.current = []
+      for (const screen of queued) pushNow(screen)
+    }, 1500)
+  }
 
   /** L'entrée d'historique du dessus correspond-elle à la pile affichée ? */
   const historyMatches = () =>
     window.history.state?.tripbrainDepth === stackRef.current.length
 
-  const push = useCallback((screen: AppScreen) => {
-    const depth = stackRef.current.length + 1
-    window.history.pushState({ tripbrainDepth: depth }, '')
-    setStack((current) => [...current, screen])
-  }, [])
+  const push = useCallback(
+    (screen: AppScreen) => {
+      if (backPendingRef.current) {
+        queuedPushesRef.current.push(screen)
+        return
+      }
+      pushNow(screen)
+    },
+    [pushNow],
+  )
   const pop = useCallback(() => {
-    if (stackRef.current.length === 0) return
+    if (backPendingRef.current || stackRef.current.length === 0) return
     if (historyMatches()) {
       // Le retour d'historique déclenche `popstate`, qui retire l'écran.
+      backPendingRef.current = true
+      armBackTimeout()
       window.history.back()
       return
     }
+    stackRef.current = stackRef.current.slice(0, -1)
     setStack((current) => current.slice(0, -1))
   }, [])
   const replace = useCallback((screen: AppScreen) => {
+    stackRef.current = [...stackRef.current.slice(0, -1), screen]
     setStack((current) => [...current.slice(0, -1), screen])
   }, [])
   const closeAll = useCallback(() => {
     const depth = stackRef.current.length
-    if (depth === 0) return
+    if (backPendingRef.current || depth === 0) return
     if (historyMatches()) {
+      backPendingRef.current = true
+      armBackTimeout()
       window.history.go(-depth)
       return
     }
+    stackRef.current = []
     setStack([])
   }, [])
 

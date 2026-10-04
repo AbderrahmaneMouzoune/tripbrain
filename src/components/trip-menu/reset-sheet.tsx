@@ -65,7 +65,7 @@ export function ResetSheet({ onClose }: ScreenProps<'reset'>) {
   const deleteActiveTrip = () =>
     run(async () => {
       if (!activeTripId) return
-      trackEvent('data_cleared', { surface: 'share_dialog' })
+      trackEvent('data_cleared', { surface: 'trip_menu' })
       try {
         await deleteTripDocuments(activeTripId)
       } catch {
@@ -76,7 +76,7 @@ export function ResetSheet({ onClose }: ScreenProps<'reset'>) {
 
   const deleteEverything = () =>
     run(async () => {
-      trackEvent('data_cleared', { surface: 'share_dialog' })
+      trackEvent('data_cleared', { surface: 'trip_menu' })
       // `clearAllData` ne touche qu'aux voyages : leurs documents partent d'abord.
       for (const trip of trips) {
         try {

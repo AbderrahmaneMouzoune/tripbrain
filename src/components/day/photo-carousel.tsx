@@ -54,7 +54,7 @@ export function PhotoCarousel({
       <div
         ref={scroller}
         onScroll={onScroll}
-        className="flex snap-x snap-mandatory gap-2.5 overflow-x-auto scroll-px-5 px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x snap-mandatory scroll-px-5 gap-2.5 overflow-x-auto px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {photos.map((photo, index) => (
           <button
@@ -100,7 +100,9 @@ export function PhotoCarousel({
                 key={`${photo.url}-dot-${index}`}
                 className={cn(
                   'h-1.5 rounded-full transition-all duration-200',
-                  index === current ? 'bg-primary w-[18px]' : 'bg-border-strong w-1.5',
+                  index === current
+                    ? 'bg-primary w-[18px]'
+                    : 'bg-border-strong w-1.5',
                 )}
               />
             ))}

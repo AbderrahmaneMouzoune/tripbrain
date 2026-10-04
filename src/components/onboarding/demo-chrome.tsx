@@ -60,7 +60,7 @@ export function DemoChrome(_props: {}) {
       </div>
 
       {/* La carte flotte au-dessus de la barre d'onglets ; la carte (onglet) a ses propres commandes en bas. */}
-      {!inviteDismissed && tab !== 'map' && (
+      {!inviteDismissed && (tab === 'today' || tab === 'program') && (
         <div className="pointer-events-none fixed inset-x-0 bottom-[calc(84px+env(safe-area-inset-bottom)+12px)] z-30 px-3">
           <div className="bg-ink text-ink-foreground animate-rise pointer-events-auto mx-auto flex max-w-xl items-center gap-3 rounded-[20px] py-3.5 pr-2 pl-4 shadow-[0_12px_30px_rgba(6,20,60,0.3)] [animation-delay:0.6s]">
             <span className="min-w-0 flex-1">

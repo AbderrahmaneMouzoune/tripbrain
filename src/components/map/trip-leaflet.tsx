@@ -191,7 +191,9 @@ export function TripLeaflet({
         const label = String(stopIndex + 1)
         addMarker(
           stop.coordinates,
-          selected ? selectedPinHtml(label, stop.city) : pinHtml(label, 'primary'),
+          selected
+            ? selectedPinHtml(label, stop.city)
+            : pinHtml(label, 'primary'),
           selected ? 52 : 44,
           `Étape ${label} : ${stop.city}${selected ? ', sélectionnée' : ''}`,
           selected,

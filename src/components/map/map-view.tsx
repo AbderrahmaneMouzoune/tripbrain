@@ -1,7 +1,12 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronLeft, ChevronRight, LocateFixed, Navigation } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  LocateFixed,
+  Navigation,
+} from 'lucide-react'
 import { trackEvent } from '@/lib/analytics/client'
 import { useTrip } from '@/components/app/trip-provider'
 import { useAppNav } from '@/components/app/navigation'
@@ -28,7 +33,6 @@ import {
   placedActivities,
   type MapScope,
 } from '@/components/map/trip-leaflet'
-
 
 /**
  * Activité à montrer à l'ouverture de l'onglet Carte (« Voir sur la carte »
@@ -76,9 +80,7 @@ export function MapView(_props: {}) {
     if (!day) return
     const dayChanged = lastDay.current !== null && lastDay.current !== day.id
     lastDay.current = day.id
-    const stillPlaced = placed.some(
-      (p) => p.activity.id === selectedActivityId,
-    )
+    const stillPlaced = placed.some((p) => p.activity.id === selectedActivityId)
     if (stillPlaced && !dayChanged) return
     const next = findNextActivity(day)
     const preferred =
@@ -177,7 +179,9 @@ export function MapView(_props: {}) {
             onClick={() => goToDay(index - 1)}
             disabled={!previous}
             aria-label={
-              previous ? `Jour précédent : ${longDate(previous.date)}` : 'Premier jour'
+              previous
+                ? `Jour précédent : ${longDate(previous.date)}`
+                : 'Premier jour'
             }
             className="bg-background pressable flex size-11 shrink-0 items-center justify-center rounded-2xl disabled:opacity-40"
           >
@@ -197,7 +201,9 @@ export function MapView(_props: {}) {
             onClick={() => goToDay(index + 1)}
             disabled={!following}
             aria-label={
-              following ? `Jour suivant : ${longDate(following.date)}` : 'Dernier jour'
+              following
+                ? `Jour suivant : ${longDate(following.date)}`
+                : 'Dernier jour'
             }
             className="bg-background pressable flex size-11 shrink-0 items-center justify-center rounded-2xl disabled:opacity-40"
           >
@@ -359,9 +365,7 @@ export function MapView(_props: {}) {
                 variant="outline"
                 size="lg2"
                 className="flex-1 px-2"
-                onClick={() =>
-                  push({ kind: 'day', dayIndex: stop.startIndex })
-                }
+                onClick={() => push({ kind: 'day', dayIndex: stop.startIndex })}
               >
                 Voir plus d’infos
               </Button>

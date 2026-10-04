@@ -157,7 +157,10 @@ export function ContextualTip({
   const below =
     rect.top + rect.height + BUBBLE_GAP + BUBBLE_ESTIMATED_HEIGHT <
     viewportHeight
-  const arrowLeft = Math.max(28, Math.min(rect.left + 28, window.innerWidth - 48))
+  const arrowLeft = Math.max(
+    28,
+    Math.min(rect.left + 28, window.innerWidth - 48),
+  )
 
   return createPortal(
     <div
