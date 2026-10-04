@@ -91,6 +91,11 @@ export const analyticsEvents = {
     description: 'Sortie du voyage de démonstration.',
     properties: {},
   },
+  trip_switched: {
+    description:
+      'Passage à un autre voyage enregistré sur l’appareil, depuis « Mes voyages ».',
+    properties: {},
+  },
   day_changed: {
     description:
       'Passage à une autre journée, et par quel geste : utile pour savoir si la navigation est trouvée.',
@@ -100,9 +105,10 @@ export const analyticsEvents = {
     },
   },
   view_changed: {
-    description: 'Bascule entre le roadbook et les documents.',
+    description:
+      'Passage d’un onglet à l’autre : aujourd’hui, programme, carte ou documents.',
     properties: {
-      view: choice('roadbook', 'documents'),
+      view: choice('today', 'program', 'map', 'documents'),
       surface: choice('tabs', 'bottom_nav', 'timeline'),
     },
   },
