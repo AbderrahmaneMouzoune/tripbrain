@@ -9,6 +9,7 @@ import {
 import type { ScreenProps } from '@/components/app/screen-props'
 import { ImportFileScreen } from '@/components/onboarding/import-file-screen'
 import { ReceiveScreen } from '@/components/receive/receive-screen'
+import { TripReadyScreen } from '@/components/onboarding/trip-ready-screen'
 import { GeneratorScreen } from '@/components/generator/generator-flow'
 import { DayScreen } from '@/components/day/day-screen'
 import { ActivityScreen } from '@/components/day/activity-screen'
@@ -49,6 +50,7 @@ const REGISTRY: { [K in AppScreenKind]: Entry<K> } = {
   settings: { component: SettingsScreen, presentation: 'screen' },
   offline: { component: OfflineScreen, presentation: 'screen' },
   generator: { component: GeneratorScreen, presentation: 'screen' },
+  'trip-ready': { component: TripReadyScreen, presentation: 'screen' },
   'import-file': { component: ImportFileScreen, presentation: 'screen' },
   document: { component: DocumentScreen, presentation: 'screen' },
   'add-document': { component: AddDocumentSheet, presentation: 'sheet' },

@@ -15,6 +15,7 @@ import { ProgramView } from '@/components/program/program-view'
 import { MapView } from '@/components/map/map-view'
 import { DocumentsTab } from '@/components/documents/documents-tab'
 import { ImageCacheProvider } from '@/components/image-cache-provider'
+import { ReminderScheduler } from '@/components/settings/reminder-scheduler'
 import { AppIcon } from '@/components/app-icon'
 import { usePwaInstall } from '@/components/pwa-install-provider'
 import { useAnalytics } from '@/hooks/use-analytics'
@@ -46,6 +47,7 @@ function TripShell() {
         <TabContent />
         <div aria-hidden className={TAB_BAR_SPACER} />
         <BottomTabBar />
+        <ReminderScheduler />
       </main>
     </ImageCacheProvider>
   )

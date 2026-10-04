@@ -47,6 +47,8 @@ export type AppScreen =
   | { kind: 'settings' }
   | { kind: 'offline' }
   | { kind: 'generator' }
+  /** Fin d'arrivée d'un voyage : hors ligne et rappels (après import ou génération). */
+  | { kind: 'trip-ready' }
   | { kind: 'import-file' }
   | { kind: 'document'; documentId: string }
   | { kind: 'add-document'; dayIndex?: number }

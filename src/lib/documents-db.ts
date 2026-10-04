@@ -18,6 +18,17 @@ export interface StoredFile {
   lastModified: number
   addedAt: number
   blob: Blob
+  /**
+   * Voyage auquel le document appartient. Absent sur les documents enregistrés
+   * avant les voyages multiples : ils restent visibles dans tous les voyages.
+   */
+  tripId?: string
+  /** Journée concernée (identifiant de `DayItinerary`), quand on l'a précisée. */
+  dayId?: string
+  /** Ce que le document justifie dans la journée : un trajet, un hébergement… */
+  linkedTo?: 'transport' | 'accommodation' | 'activity'
+  /** Identifiant de l'activité liée, quand `linkedTo` vaut `activity`. */
+  activityId?: string
 }
 
 export function openDocumentsDB(): Promise<IDBDatabase> {
@@ -36,4 +47,42 @@ export function openDocumentsDB(): Promise<IDBDatabase> {
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
   })
+}
+
+function allDocuments(db: IDBDatabase): Promise<StoredFile[]> {
+  return new Promise((resolve, reject) => {
+    const request = db
+      .transaction(DOCUMENTS_STORE, 'readonly')
+      .objectStore(DOCUMENTS_STORE)
+      .getAll()
+    request.onsuccess = () => resolve(request.result as StoredFile[])
+    request.onerror = () => reject(request.error)
+  })
+}
+
+/** Nombre de documents rattachés à un voyage précis. */
+export async function countTripDocuments(tripId: string): Promise<number> {
+  const db = await openDocumentsDB()
+  const files = await allDocuments(db)
+  return files.filter((file) => file.tripId === tripId).length
+}
+
+/**
+ * Supprime les documents rattachés à un voyage (ceux d'avant les voyages
+ * multiples, sans voyage, sont épargnés). Renvoie le nombre supprimé.
+ */
+export async function deleteTripDocuments(tripId: string): Promise<number> {
+  const db = await openDocumentsDB()
+  const ids = (await allDocuments(db))
+    .filter((file) => file.tripId === tripId)
+    .map((file) => file.id)
+  if (ids.length === 0) return 0
+  const tx = db.transaction(DOCUMENTS_STORE, 'readwrite')
+  const store = tx.objectStore(DOCUMENTS_STORE)
+  for (const id of ids) store.delete(id)
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+  return ids.length
 }
