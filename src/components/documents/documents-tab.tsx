@@ -722,7 +722,7 @@ function DocumentMenu({ file, onOpen, onLink, onDelete }: DocumentItemProps) {
         </DropdownMenuItem>
         <DropdownMenuItem className="min-h-11" onSelect={onLink}>
           <Link2 aria-hidden />
-          Associer à…
+          Type et association…
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

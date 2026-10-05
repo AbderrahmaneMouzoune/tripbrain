@@ -26,7 +26,11 @@ export interface ZipDocumentLink {
   dayId?: string
   linkedTo?: 'transport' | 'accommodation' | 'activity'
   activityId?: string
+  /** Type choisi par l'utilisateur, conservé d'un appareil à l'autre. */
+  category?: 'ticket' | 'hotel' | 'identity' | 'other'
 }
+
+const CATEGORIES = ['ticket', 'hotel', 'identity', 'other'] as const
 
 const LINK_TARGETS = ['transport', 'accommodation', 'activity'] as const
 
@@ -44,6 +48,12 @@ function readLink(raw: Partial<Record<keyof ZipDocumentLink, unknown>>) {
     if (typeof raw.activityId === 'string' && raw.activityId) {
       link.activityId = raw.activityId
     }
+  }
+  if (
+    typeof raw.category === 'string' &&
+    (CATEGORIES as readonly string[]).includes(raw.category)
+  ) {
+    link.category = raw.category as ZipDocumentLink['category']
   }
   return link
 }

@@ -40,7 +40,7 @@ function escapeHtml(value: string): string {
 }
 
 // Les repères sont du HTML injecté par Leaflet : on les habille des mêmes
-// classes que le reste de l'interface, pour qu'ils suivent le thème sombre.
+// classes que le reste de l'interface, pour garder les mêmes couleurs.
 
 function pinHtml(label: string, tone: 'primary' | 'done' | 'skipped') {
   const toneClass =
@@ -93,6 +93,7 @@ export function TripLeaflet({
   const mapRef = useRef<LeafletMap | null>(null)
   const markersRef = useRef<LeafletMarker[]>([])
   const routeRef = useRef<LeafletPolyline | null>(null)
+  const routeHaloRef = useRef<LeafletPolyline | null>(null)
   const userMarkerRef = useRef<LeafletMarker | null>(null)
   const fittedKeyRef = useRef<string | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
@@ -129,6 +130,7 @@ export function TripLeaflet({
       mapRef.current = null
       markersRef.current = []
       routeRef.current = null
+      routeHaloRef.current = null
       userMarkerRef.current = null
       fittedKeyRef.current = null
     }
@@ -145,6 +147,31 @@ export function TripLeaflet({
     markersRef.current = []
     routeRef.current?.remove()
     routeRef.current = null
+    routeHaloRef.current?.remove()
+    routeHaloRef.current = null
+
+    // Tracé façon maquette : un liseré blanc qui détache le pointillé du fond,
+    // puis des points qui avancent dans le sens du parcours.
+    const drawRoute = (
+      line: [number, number][],
+      tone: 'primary' | 'secondary',
+    ) => {
+      routeHaloRef.current = L.polyline(line, {
+        className: 'tb-route-halo',
+        weight: 8,
+        lineCap: 'round',
+        lineJoin: 'round',
+        interactive: false,
+      }).addTo(map)
+      routeRef.current = L.polyline(line, {
+        className:
+          tone === 'primary' ? 'tb-route tb-route-primary' : 'tb-route',
+        weight: 4,
+        lineCap: 'round',
+        lineJoin: 'round',
+        interactive: false,
+      }).addTo(map)
+    }
 
     const addMarker = (
       coordinates: [number, number],
@@ -202,14 +229,7 @@ export function TripLeaflet({
         points.push(stop.coordinates)
         if (selected) selectedPoint = stop.coordinates
       })
-      if (points.length > 1) {
-        routeRef.current = L.polyline(points, {
-          className: 'stroke-primary',
-          weight: 2.5,
-          opacity: 0.85,
-          dashArray: '8 8',
-        }).addTo(map)
-      }
+      if (points.length > 1) drawRoute(points, 'primary')
     } else {
       const day = itinerary[dayIndex]
       const placed = placedActivities(day)
@@ -237,14 +257,7 @@ export function TripLeaflet({
         points.push(activity.coordinates)
         if (selected) selectedPoint = activity.coordinates
       })
-      if (placed.length > 1) {
-        routeRef.current = L.polyline(points, {
-          className: 'stroke-secondary',
-          weight: 2.5,
-          opacity: 0.8,
-          dashArray: '6 6',
-        }).addTo(map)
-      }
+      if (placed.length > 1) drawRoute(points, 'secondary')
       // Aucune activité localisée : le centre de la journée situe au moins la ville.
       if (placed.length === 0 && day) {
         addMarker(
@@ -304,12 +317,7 @@ export function TripLeaflet({
   }, [isLoaded, recenterToken, userPosition])
 
   return (
-    <div
-      className={cn(
-        'bg-muted dark:[&_.leaflet-tile-pane]:brightness-[0.8]',
-        className,
-      )}
-    >
+    <div className={cn('tb-map bg-muted', className)}>
       <div
         ref={containerRef}
         className="bg-muted h-full w-full"

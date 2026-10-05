@@ -133,7 +133,7 @@ export function DriverScreen({ screen, onClose }: ScreenProps<'driver'>) {
           <Button
             variant="outline"
             size="xl"
-            className="border-ink-foreground/40 text-ink-foreground hover:bg-ink-foreground/10 w-full border-[1.5px] bg-transparent dark:bg-transparent"
+            className="border-ink-foreground/40 text-ink-foreground hover:bg-ink-foreground/10 w-full border-[1.5px] bg-transparent"
             onClick={() =>
               void copyText(accommodation.address, 'Adresse copiée')
             }

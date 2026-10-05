@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import {
   ArrowLeft,
   Backpack,
@@ -8,6 +9,7 @@ import {
   ChevronRight,
   Hand,
   MapPin,
+  MoreHorizontal,
   Pencil,
   Plus,
   Share,
@@ -46,6 +48,7 @@ import {
   transportLabel,
 } from '@/components/day/day-logic'
 import { Pill, TRANSPORT_ICONS } from '@/components/day/day-ui'
+import { DayOverviewStrip, SwapDaySheet } from '@/components/day/day-overview'
 
 const headerButton = 'border-border bg-card shrink-0 shadow-none'
 
@@ -58,6 +61,7 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
   const index = Math.min(Math.max(screen.dayIndex, 0), itinerary.length - 1)
   const editor = useDayEditor(index)
   const day = editor.day
+  const [swapOpen, setSwapOpen] = useState(false)
 
   if (!day) {
     return (
@@ -141,6 +145,15 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
               className={headerButton}
             >
               <Pencil />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-round"
+              aria-label="Voyage et réglages"
+              onClick={() => push({ kind: 'menu' })}
+              className={headerButton}
+            >
+              <MoreHorizontal />
             </Button>
           </>
         )}
@@ -338,6 +351,20 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
     <div className="bg-background text-foreground flex min-h-dvh flex-col">
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(env(safe-area-inset-bottom)+24px)]">
         {header}
+
+        <DayOverviewStrip
+          itinerary={itinerary}
+          current={index}
+          onSelect={(target) => {
+            if (target !== index) goToDay(target)
+          }}
+          onSwap={() => setSwapOpen(true)}
+        />
+        <SwapDaySheet
+          open={swapOpen}
+          onOpenChange={setSwapOpen}
+          dayIndex={index}
+        />
 
         {photos.length > 0 && (
           <PhotoCarousel

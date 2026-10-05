@@ -9,6 +9,7 @@ import {
   longDate,
   weekdayShort,
 } from '@/components/day/day-logic'
+import { ActivityDots } from '@/components/day/day-overview'
 
 /**
  * Bande des jours : cinq visibles autour de la journée choisie, les autres à
@@ -54,9 +55,9 @@ export const DayStrip = forwardRef<
               onClick={() => onSelect(index)}
               aria-pressed={isSelected}
               aria-current={isToday ? 'date' : undefined}
-              aria-label={`${longDate(day.date)}, jour ${index + 1}${isToday ? ", aujourd'hui" : ''}`}
+              aria-label={`${longDate(day.date)}, jour ${index + 1}, ${day.city}, ${day.activities.length} activité${day.activities.length > 1 ? 's' : ''}${isToday ? ", aujourd'hui" : ''}`}
               className={cn(
-                'pressable flex h-[58px] shrink-0 basis-[calc((100%-2rem)/5)] snap-center flex-col items-center justify-center rounded-[14px] outline-none',
+                'pressable flex h-[66px] shrink-0 basis-[calc((100%-2rem)/5)] snap-center flex-col items-center justify-center rounded-[14px] outline-none',
                 'focus-visible:ring-ring/50 focus-visible:ring-[3px]',
                 isSelected
                   ? 'bg-ink text-ink-foreground'
@@ -80,6 +81,11 @@ export const DayStrip = forwardRef<
               >
                 {dayOfMonth(day.date)}
               </span>
+              <ActivityDots
+                count={day.activities.length}
+                inverted={isSelected}
+                className="mt-1 h-[10px]"
+              />
             </button>
           )
         })}

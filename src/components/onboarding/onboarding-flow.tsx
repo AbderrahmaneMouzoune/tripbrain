@@ -32,7 +32,7 @@ import { groupCodeDigits } from '@/components/receive/share-input'
 import { ImportFilePanel } from '@/components/onboarding/import-file-screen'
 import { IntentionOptions } from '@/components/onboarding/intention-options'
 import { useClipboardShare } from '@/components/onboarding/use-clipboard-share'
-import { buildShowcase, transportLabel } from '@/components/onboarding/showcase'
+import { buildShowcase } from '@/components/onboarding/showcase'
 
 type Step =
   | { kind: 'welcome' }
@@ -141,7 +141,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
 
   return (
     <div className="bg-primary relative flex min-h-dvh flex-col overflow-hidden">
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
+      <div className="mx-auto flex w-full max-w-xl flex-col">
         <div className="animate-rise flex items-center gap-2.5 px-6 pt-[calc(env(safe-area-inset-top)+16px)]">
           <span className="bg-card text-primary flex size-10 items-center justify-center rounded-xl">
             <Route className="size-[22px]" aria-hidden />
@@ -151,63 +151,40 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
           </span>
         </div>
 
-        {/* Vitrine : décorative, le texte de la feuille dit déjà tout. */}
-        <div aria-hidden className="relative min-h-[300px] flex-1">
+        {/*
+          Vitrine : une seule carte, compacte. Trois cartes prenaient la moitié
+          de l'écran et repoussaient « Commencer » sous le pouce ; celle-ci dit
+          l'essentiel (la journée, le billet, l'adresse) sans voler la vedette.
+        */}
+        <div
+          aria-hidden
+          className="relative flex h-[188px] items-center justify-center px-6"
+        >
           {showcase.day && (
-            <div className="animate-rise absolute top-7 left-[26px] [animation-delay:0.08s]">
-              <div className="animate-float bg-card text-foreground flex w-[272px] -rotate-3 flex-col gap-2 rounded-[20px] p-4 shadow-[0_14px_32px_rgba(6,20,60,0.28)]">
+            <div className="animate-rise [animation-delay:0.08s]">
+              <div className="animate-float bg-card text-foreground flex w-[290px] -rotate-2 flex-col gap-2.5 rounded-[20px] p-4 shadow-[0_14px_32px_rgba(6,20,60,0.28)]">
                 <span className="text-secondary-strong text-[11px] font-black tracking-[0.1em] uppercase">
                   Aujourd’hui · Jour {showcase.day.dayNumber}
                 </span>
-                <span className="text-[19px] leading-tight font-extrabold">
+                <span className="truncate text-lg leading-tight font-extrabold">
                   {showcase.day.title}
                 </span>
-                <span className="flex gap-1.5">
+                <span className="flex flex-wrap gap-1.5">
                   <span className="bg-primary-soft text-primary-strong rounded-full px-2.5 py-1 text-xs font-extrabold">
                     {showcase.day.stepCount} étapes
                   </span>
-                  {showcase.day.walkingDistance && (
-                    <span className="bg-primary-soft text-primary-strong rounded-full px-2.5 py-1 text-xs font-extrabold">
-                      {showcase.day.walkingDistance} à pied
+                  {showcase.transport && (
+                    <span className="bg-ink text-ink-foreground flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold">
+                      <TransportIcon className="size-3.5" />
+                      Billet hors ligne
                     </span>
                   )}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {showcase.transport && (
-            <div className="animate-rise absolute top-[144px] right-5 [animation-delay:0.16s]">
-              <div className="animate-float bg-ink text-ink-foreground flex w-[232px] rotate-[4deg] items-center gap-3 rounded-[20px] px-4 py-3.5 shadow-[0_14px_32px_rgba(6,20,60,0.35)] [animation-delay:-1.6s]">
-                <span className="bg-secondary text-secondary-foreground flex size-10 shrink-0 items-center justify-center rounded-xl">
-                  <TransportIcon className="size-5" />
-                </span>
-                <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="truncate text-[15px] font-extrabold">
-                    {transportLabel(showcase.transport.type)} ·{' '}
-                    {showcase.transport.from} → {showcase.transport.to}
-                  </span>
-                  <span className="text-ink-foreground/70 text-xs font-bold">
-                    Billets · hors ligne
-                  </span>
-                </span>
-              </div>
-            </div>
-          )}
-
-          {showcase.stay && (
-            <div className="animate-rise absolute top-[236px] left-[38px] [animation-delay:0.24s]">
-              <div className="animate-float bg-secondary-soft text-foreground flex w-[252px] -rotate-[1.5deg] items-center gap-3 rounded-[20px] px-4 py-3.5 shadow-[0_14px_32px_rgba(6,20,60,0.25)] [animation-delay:-3.2s]">
-                <span className="bg-card text-secondary-strong flex size-10 shrink-0 items-center justify-center rounded-xl">
-                  <BedDouble className="size-5" />
-                </span>
-                <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-secondary-strong text-xs font-black uppercase">
-                    Ce soir · à montrer au chauffeur
-                  </span>
-                  <span className="truncate text-sm font-extrabold">
-                    {showcase.stay.address}
-                  </span>
+                  {showcase.stay && (
+                    <span className="bg-secondary-soft text-secondary-strong flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold">
+                      <BedDouble className="size-3.5" />
+                      Adresse de l’hôtel
+                    </span>
+                  )}
                 </span>
               </div>
             </div>
@@ -215,7 +192,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
         </div>
       </div>
 
-      <div className="bg-background text-foreground animate-sheet relative z-10 mx-auto flex w-full max-w-xl flex-col gap-3.5 rounded-t-[28px] px-6 pt-8 pb-[calc(env(safe-area-inset-bottom)+28px)] [animation-delay:0.1s]">
+      <div className="bg-background text-foreground animate-sheet relative z-10 mx-auto flex w-full max-w-xl flex-1 flex-col gap-3.5 rounded-t-[28px] px-6 pt-8 pb-[calc(env(safe-area-inset-bottom)+28px)] [animation-delay:0.1s]">
         <h1 className="font-display text-[31px] leading-[1.12]">
           Tout votre voyage, même sans réseau.
         </h1>

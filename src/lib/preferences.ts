@@ -2,8 +2,8 @@
  * Réglages de l'appareil : rappels, téléchargements, astuces déjà vues.
  *
  * Ce sont des conforts d'interface, propres à cet appareil : ils vivent dans
- * le stockage local et ne voyagent jamais avec un partage. Le thème est géré à
- * part, par `next-themes`.
+ * le stockage local et ne voyagent jamais avec un partage. Il n'y a pas de
+ * thème à régler : l'application reste toujours en clair.
  */
 
 export interface Preferences {

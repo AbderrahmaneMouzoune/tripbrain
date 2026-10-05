@@ -28,6 +28,7 @@ import { trackEvent } from '@/lib/analytics/client'
 import { documentKind } from '@/lib/analytics/metrics'
 import {
   describeLink,
+  documentCategoryLabel,
   fileFormatLabel,
   formatFileSize,
 } from '@/lib/document-organize'
@@ -174,10 +175,11 @@ export function DocumentScreen({ screen, onClose }: ScreenProps<'document'>) {
         <ActionButton
           icon={Link2}
           highlight
-          ariaLabel={`Lié à : ${link.long} — modifier`}
+          ariaLabel={`${documentCategoryLabel(file)}, lié à : ${link.long} — modifier le type et l’association`}
           label={
             <span className="leading-[1.15]">
-              {link.dayIndex >= 0 ? `Lié au ${link.short}` : 'Tout le voyage'}
+              {documentCategoryLabel(file)} ·{' '}
+              {link.dayIndex >= 0 ? link.short : 'Tout le voyage'}
               <span className="text-ink-foreground/70 block text-[11px] font-bold underline">
                 modifier
               </span>

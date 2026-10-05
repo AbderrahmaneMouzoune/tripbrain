@@ -148,7 +148,7 @@ export function BeforeTrip({ now }: { now: Date }) {
           aria-hidden
           className="bg-secondary absolute top-[60px] right-[30px] size-[70px] rounded-full opacity-25"
         />
-        <p className="text-secondary dark:text-ink-foreground/70 relative text-[11px] font-black tracking-[0.1em]">
+        <p className="text-secondary relative text-[11px] font-black tracking-[0.1em]">
           DÉPART DANS
         </p>
         <p className="relative mt-1 flex items-baseline gap-2.5">

@@ -11,6 +11,7 @@ import {
 import {
   DOCUMENTS_STORE as STORE_NAME,
   openDocumentsDB as openDB,
+  type DocumentCategory,
   type StoredFile,
 } from '@/lib/documents-db'
 import { isDocumentInTrip, type DocumentLink } from '@/lib/document-organize'
@@ -112,7 +113,11 @@ export function useDocuments() {
   )
 
   const addFiles = useCallback(
-    async (newFiles: File[], link: DocumentLink = {}) => {
+    async (
+      newFiles: File[],
+      link: DocumentLink = {},
+      category: DocumentCategory | null = null,
+    ) => {
       const db = await openDB()
       const tx = db.transaction(STORE_NAME, 'readwrite')
       const store = tx.objectStore(STORE_NAME)
@@ -129,6 +134,7 @@ export function useDocuments() {
             addedAt: now - index,
             blob: file,
             ...(activeTripId ? { tripId: activeTripId } : {}),
+            ...(category ? { category } : {}),
           },
           link,
         ),
@@ -151,6 +157,27 @@ export function useDocuments() {
       request.onsuccess = () => {
         const current = request.result as StoredFile | undefined
         if (current) store.put(withLink(current, link))
+      }
+      await waitFor(tx)
+      notifyDocumentsChanged()
+    },
+    [],
+  )
+
+  /** Fixe le type d'un document ; `null` rend la main à la détection automatique. */
+  const updateDocumentCategory = useCallback(
+    async (id: string, category: DocumentCategory | null) => {
+      const db = await openDB()
+      const tx = db.transaction(STORE_NAME, 'readwrite')
+      const store = tx.objectStore(STORE_NAME)
+      const request = store.get(id)
+      request.onsuccess = () => {
+        const current = request.result as StoredFile | undefined
+        if (!current) return
+        const next: StoredFile = { ...current }
+        if (category) next.category = category
+        else delete next.category
+        store.put(next)
       }
       await waitFor(tx)
       notifyDocumentsChanged()
@@ -220,6 +247,7 @@ export function useDocuments() {
                 addedAt: Date.now() - i,
                 blob: doc.blob,
                 ...(activeTripId ? { tripId: activeTripId } : {}),
+                ...(doc.category ? { category: doc.category } : {}),
               },
               doc,
             ),
@@ -253,6 +281,7 @@ export function useDocuments() {
     loading,
     addFiles,
     updateDocumentLink,
+    updateDocumentCategory,
     deleteFile,
     downloadFile,
     exportAll,

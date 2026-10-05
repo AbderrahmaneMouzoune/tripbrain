@@ -3,7 +3,9 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* L'application est toujours en clair, quel que soit le réglage du téléphone. */
 :root {
+  color-scheme: light;
   /* Palette « voyage électrique » des maquettes mobiles : bleu tension, orange
      allumage, ciel très clair. Les valeurs sont celles du canevas de design. */
   --background: #f3f7fd;
@@ -56,55 +58,6 @@
   --sidebar-accent-foreground: #0e1a3a;
   --sidebar-border: #d6e0ef;
   --sidebar-ring: #1d5fe0;
-}
-
-.dark {
-  --background: #0b1226;
-  --foreground: #f1f4fa;
-  --card: #131d3a;
-  --card-foreground: #f1f4fa;
-  --popover: #131d3a;
-  --popover-foreground: #f1f4fa;
-  --primary: #4d8bff;
-  --primary-foreground: #0b1226;
-  --primary-strong: #8db4ff;
-  --primary-soft: #1b2a52;
-  --secondary: #ff8a4c;
-  --secondary-foreground: #0b1226;
-  --secondary-strong: #ff9a66;
-  --secondary-soft: #3a2116;
-  --muted: #1c2847;
-  --muted-foreground: #a9b6d3;
-  --accent: #5cc8e4;
-  --accent-foreground: #0b1226;
-  --accent-soft: #10303c;
-  --success: #4ade80;
-  --success-foreground: #0b1226;
-  --success-soft: #12331f;
-  --destructive: #f87171;
-  --destructive-foreground: #0b1226;
-  --destructive-soft: #3b1518;
-  --warning: #ff9a66;
-  --warning-foreground: #0b1226;
-  --ink: #f1f4fa;
-  --ink-foreground: #0b1226;
-  --border: #24304f;
-  --border-strong: #2f3d62;
-  --input: #2f3d62;
-  --ring: #4d8bff;
-  --chart-1: #ff8a4c;
-  --chart-2: #4d8bff;
-  --chart-3: #5cc8e4;
-  --chart-4: #4ade80;
-  --chart-5: #f87171;
-  --sidebar: #131d3a;
-  --sidebar-foreground: #f1f4fa;
-  --sidebar-primary: #4d8bff;
-  --sidebar-primary-foreground: #0b1226;
-  --sidebar-accent: #1c2847;
-  --sidebar-accent-foreground: #f1f4fa;
-  --sidebar-border: #24304f;
-  --sidebar-ring: #4d8bff;
 }
 
 @theme inline {
@@ -470,4 +423,35 @@
     animation-delay: 0s !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ── Carte ────────────────────────────────────────────────────────────────
+   Les tuiles OpenStreetMap sont adoucies pour retrouver le fond pâle et
+   bleuté de la maquette : les repères et le tracé passent devant. */
+.tb-map .leaflet-container {
+  background: #eef2f7;
+  font-family: inherit;
+}
+.tb-map .leaflet-tile-pane {
+  filter: saturate(0.4) brightness(1.06) contrast(0.9) hue-rotate(-8deg);
+}
+.tb-route-halo {
+  stroke: #ffffff;
+  stroke-opacity: 0.95;
+  fill: none;
+}
+@keyframes tb-route-march {
+  /* Quatre motifs de 11 px : la boucle repart sans à-coup. */
+  to {
+    stroke-dashoffset: -44;
+  }
+}
+.tb-route {
+  stroke: var(--secondary);
+  stroke-dasharray: 1 10;
+  fill: none;
+  animation: tb-route-march 2.4s linear infinite;
+}
+.tb-route-primary {
+  stroke: var(--primary);
 }

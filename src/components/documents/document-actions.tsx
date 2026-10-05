@@ -21,15 +21,21 @@ import {
 } from '@/hooks/use-documents'
 import { trackEvent } from '@/lib/analytics/client'
 import { documentKind } from '@/lib/analytics/metrics'
-import { sameLink, type DocumentLink } from '@/lib/document-organize'
+import {
+  documentCategory,
+  sameLink,
+  type DocumentLink,
+} from '@/lib/document-organize'
+import type { DocumentCategory } from '@/lib/documents-db'
 import { LinkPicker } from './link-picker'
+import { CategoryPicker } from './category-picker'
 
 function linkTarget(link: DocumentLink) {
   if (!link.dayId) return 'trip' as const
   return link.linkedTo ?? ('day' as const)
 }
 
-/** Feuille « Lié à… » : changer ce que justifie un document. */
+/** Feuille « Classer » : le type du document et ce qu'il justifie. */
 export function LinkDocumentSheet({
   file,
   open,
@@ -40,24 +46,38 @@ export function LinkDocumentSheet({
   onOpenChange: (open: boolean) => void
 }) {
   const { itinerary } = useTrip()
-  const { updateDocumentLink } = useDocuments()
+  const { updateDocumentLink, updateDocumentCategory } = useDocuments()
   const current: DocumentLink = {
     dayId: file.dayId,
     linkedTo: file.linkedTo,
     activityId: file.activityId,
   }
   const [draft, setDraft] = useState<DocumentLink>(current)
+  const currentCategory = file.category ?? null
+  const [category, setCategory] = useState<DocumentCategory | null>(
+    currentCategory,
+  )
   const [saving, setSaving] = useState(false)
 
   const save = async () => {
-    if (sameLink(draft, current)) {
+    const linkChanged = !sameLink(draft, current)
+    const categoryChanged = category !== currentCategory
+    if (!linkChanged && !categoryChanged) {
       onOpenChange(false)
       return
     }
     setSaving(true)
     try {
-      await updateDocumentLink(file.id, draft)
-      trackEvent('document_link_changed', { target: linkTarget(draft) })
+      if (linkChanged) {
+        await updateDocumentLink(file.id, draft)
+        trackEvent('document_link_changed', { target: linkTarget(draft) })
+      }
+      if (categoryChanged) {
+        await updateDocumentCategory(file.id, category)
+        trackEvent('document_category_changed', {
+          category: category ?? 'auto',
+        })
+      }
       onOpenChange(false)
     } finally {
       setSaving(false)
@@ -68,17 +88,31 @@ export function LinkDocumentSheet({
     <BottomSheet
       open={open}
       onOpenChange={(next) => {
-        if (next) setDraft(current)
+        if (next) {
+          setDraft(current)
+          setCategory(currentCategory)
+        }
         onOpenChange(next)
       }}
-      title="Associer ce document"
-      description="Il s’affichera avec la journée, le trajet ou l’hébergement choisi."
+      title="Classer ce document"
+      description="Son type le range dans le bon filtre ; son association l’affiche avec la journée, le trajet ou l’hébergement choisi."
       footer={
         <Button size="xl" className="w-full" onClick={save} disabled={saving}>
           Enregistrer
         </Button>
       }
     >
+      <h3 className="text-muted-foreground mb-2 text-xs font-black tracking-[0.08em] uppercase">
+        Type de document
+      </h3>
+      <CategoryPicker
+        value={category}
+        onChange={setCategory}
+        detected={documentCategory({ ...file, ...draft, category: undefined })}
+      />
+      <h3 className="text-muted-foreground mt-5 mb-2 text-xs font-black tracking-[0.08em] uppercase">
+        Associer à
+      </h3>
       <LinkPicker
         itinerary={itinerary}
         value={draft}

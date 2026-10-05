@@ -8,7 +8,7 @@
  */
 
 import type { DayItinerary } from '@/lib/itinerary-data'
-import type { StoredFile } from '@/lib/documents-db'
+import type { DocumentCategory, StoredFile } from '@/lib/documents-db'
 import { DEMO_DOCUMENT_ID_PREFIX } from '@/lib/demo-documents'
 
 // ---------------------------------------------------------------------------
@@ -152,7 +152,7 @@ export function describeLink(
 // Familles de documents
 // ---------------------------------------------------------------------------
 
-export type DocumentCategory = 'ticket' | 'hotel' | 'identity' | 'other'
+export type { DocumentCategory }
 
 export const DOCUMENT_CATEGORIES: readonly {
   id: DocumentCategory
@@ -163,6 +163,28 @@ export const DOCUMENT_CATEGORIES: readonly {
   { id: 'identity', label: 'Visas & passeports' },
   { id: 'other', label: 'Autres' },
 ]
+
+/** Libellés au singulier, pour choisir le type d'un document. */
+export const DOCUMENT_CATEGORY_CHOICES: readonly {
+  id: DocumentCategory
+  label: string
+}[] = [
+  { id: 'ticket', label: 'Billet' },
+  { id: 'hotel', label: 'Hôtel' },
+  { id: 'identity', label: 'Visa & passeport' },
+  { id: 'other', label: 'Autre' },
+]
+
+/** Type proposé d'office selon ce à quoi on rattache le document. */
+export function suggestedCategory(
+  link: Pick<StoredFile, 'linkedTo'>,
+): DocumentCategory | null {
+  if (link.linkedTo === 'transport' || link.linkedTo === 'activity') {
+    return 'ticket'
+  }
+  if (link.linkedTo === 'accommodation') return 'hotel'
+  return null
+}
 
 /** Minuscules sans accents : « Hôtel » et « hotel » se valent. */
 export function normalizeText(text: string): string {
@@ -228,13 +250,15 @@ const TICKET_WORDS = [
 ]
 
 /**
- * Famille d'un document. Le rattachement fait foi (un document lié à un trajet
- * est un billet) ; sans lui, quelques mots du nom suffisent dans la plupart des
- * cas. Les pièces d'identité passent en premier : « visa-billet » reste un visa.
+ * Famille d'un document. Le choix de l'utilisateur prime ; à défaut, le
+ * rattachement fait foi (un document lié à un trajet est un billet) ; sans lui,
+ * quelques mots du nom suffisent dans la plupart des cas. Les pièces
+ * d'identité passent en premier : « visa-billet » reste un visa.
  */
 export function documentCategory(
-  file: Pick<StoredFile, 'name' | 'linkedTo'>,
+  file: Pick<StoredFile, 'name' | 'linkedTo' | 'category'>,
 ): DocumentCategory {
+  if (file.category) return file.category
   if (file.linkedTo === 'transport' || file.linkedTo === 'activity') {
     return 'ticket'
   }
@@ -249,7 +273,7 @@ export function documentCategory(
 
 /** Libellé au singulier pour la ligne d'un document (« Billet · PDF »). */
 export function documentCategoryLabel(
-  file: Pick<StoredFile, 'name' | 'linkedTo'>,
+  file: Pick<StoredFile, 'name' | 'linkedTo' | 'category'>,
 ): string {
   switch (documentCategory(file)) {
     case 'ticket':

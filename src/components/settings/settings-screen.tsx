@@ -2,7 +2,6 @@
 
 import { useEffect, useState, type ComponentType, type SVGProps } from 'react'
 import Link from 'next/link'
-import { useTheme } from 'next-themes'
 import {
   BarChart3,
   BedDouble,
@@ -11,10 +10,7 @@ import {
   CloudDownload,
   Lightbulb,
   Mail,
-  Monitor,
-  Moon,
   ShieldCheck,
-  Sun,
   Sunrise,
   TrainFront,
 } from 'lucide-react'
@@ -37,18 +33,6 @@ import { REMINDER_TIMES } from '@/lib/reminders'
 import { cn } from '@/lib/utils'
 import packageInfo from '../../../package.json'
 import { useStorageEstimate } from './offline-screen'
-
-type ThemeChoice = 'light' | 'dark' | 'system'
-
-const THEMES: {
-  value: ThemeChoice
-  label: string
-  icon: ComponentType<SVGProps<SVGSVGElement>>
-}[] = [
-  { value: 'light', label: 'Clair', icon: Sun },
-  { value: 'dark', label: 'Sombre', icon: Moon },
-  { value: 'system', label: 'Auto', icon: Monitor },
-]
 
 type NotificationKey = keyof Pick<
   Preferences,
@@ -159,12 +143,9 @@ function RowLink({
   )
 }
 
-/** Réglages de l'appareil : apparence, rappels, hors ligne, confidentialité. */
+/** Réglages de l'appareil : rappels, hors ligne, confidentialité. */
 export function SettingsScreen({ onClose }: ScreenProps<'settings'>) {
   const { push } = useAppNav()
-  const { theme, setTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => setMounted(true), [])
   const { preferences, update } = usePreferences()
   const { permission, request } = useNotificationPermission()
   const { isConfigured, consent, decide } = useAnalytics()
@@ -192,47 +173,7 @@ export function SettingsScreen({ onClose }: ScreenProps<'settings'>) {
 
   return (
     <MobileScreen onBack={onClose} title="Réglages">
-      <SectionTitle className="mb-2">Apparence</SectionTitle>
-      <div className="bg-card border-border rounded-[20px] border p-3">
-        <div
-          role="radiogroup"
-          aria-label="Thème"
-          className="bg-muted grid grid-cols-3 gap-1 rounded-[14px] p-1"
-        >
-          {THEMES.map(({ value, label, icon: Icon }) => {
-            const active = mounted && (theme ?? 'system') === value
-            return (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => {
-                  setTheme(value)
-                  trackEvent('preference_changed', {
-                    setting: `theme_${value}`,
-                    enabled: true,
-                  })
-                }}
-                className={cn(
-                  'pressable focus-visible:ring-ring/50 flex h-11 items-center justify-center gap-1.5 rounded-[11px] text-sm outline-none focus-visible:ring-[3px]',
-                  active
-                    ? 'bg-card text-primary-strong font-black shadow-[0_1px_3px_rgba(14,26,58,0.14)]'
-                    : 'text-muted-foreground font-extrabold',
-                )}
-              >
-                <Icon aria-hidden className="size-4" />
-                {label}
-              </button>
-            )
-          })}
-        </div>
-        <p className="text-muted-foreground mx-1 mt-2 text-[13px]">
-          Auto suit le réglage de votre téléphone.
-        </p>
-      </div>
-
-      <SectionTitle className="mt-6 mb-2">Notifications</SectionTitle>
+      <SectionTitle className="mb-2">Notifications</SectionTitle>
       <ul className="bg-card border-border divide-border/70 divide-y rounded-[20px] border px-4">
         {NOTIFICATIONS.map(
           ({ key, setting, label, time, timeLabel, icon, tone }) => (

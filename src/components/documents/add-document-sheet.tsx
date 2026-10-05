@@ -21,7 +21,13 @@ import { useDocuments } from '@/hooks/use-documents'
 import { trackEvent } from '@/lib/analytics/client'
 import { documentKindOf } from '@/lib/analytics/metrics'
 import { SOURCE_CATEGORIES } from '@/lib/document-sources'
-import { sameLink, type DocumentLink } from '@/lib/document-organize'
+import {
+  sameLink,
+  suggestedCategory,
+  type DocumentLink,
+} from '@/lib/document-organize'
+import type { DocumentCategory } from '@/lib/documents-db'
+import { CategoryPicker } from './category-picker'
 import { useDocumentPickers, type PickerKind } from './document-pickers'
 import { LinkPicker } from './link-picker'
 
@@ -72,6 +78,12 @@ export function AddDocumentSheet({
   const [link, setLink] = useState<DocumentLink>(() =>
     defaultLink(itinerary, screen.dayIndex),
   )
+  // Le type suit le rattachement tant que l'utilisateur ne l'a pas choisi.
+  const [chosenCategory, setChosenCategory] = useState<
+    DocumentCategory | null | undefined
+  >(undefined)
+  const category =
+    chosenCategory === undefined ? suggestedCategory(link) : chosenCategory
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -100,7 +112,7 @@ export function AddDocumentSheet({
     setError(null)
     setBusy('Enregistrement…')
     try {
-      await addFiles(files, link)
+      await addFiles(files, link, category)
       // Seuls le nombre et la famille de fichiers sont mesurés.
       trackEvent('document_added', {
         count: files.length,
@@ -238,6 +250,11 @@ export function AddDocumentSheet({
       <p className="text-muted-foreground mt-1.5 text-xs">
         Téléchargez la confirmation dans l’app, puis revenez l’ajouter ici.
       </p>
+
+      <h3 className="text-muted-foreground mt-4 mb-2 text-xs font-black tracking-[0.08em] uppercase">
+        Type de document
+      </h3>
+      <CategoryPicker value={category} onChange={setChosenCategory} />
 
       <h3 className="text-muted-foreground mt-4 mb-2 text-xs font-black tracking-[0.08em] uppercase">
         Associer à

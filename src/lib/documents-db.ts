@@ -10,6 +10,19 @@ const DB_VERSION = 1
 
 export const DOCUMENTS_STORE = 'files'
 
+/**
+ * Famille d'un document, choisie par l'utilisateur. Sans elle, l'app la devine
+ * d'après le rattachement et le nom du fichier (`documentCategory`).
+ */
+export type DocumentCategory = 'ticket' | 'hotel' | 'identity' | 'other'
+
+export const DOCUMENT_CATEGORY_IDS: readonly DocumentCategory[] = [
+  'ticket',
+  'hotel',
+  'identity',
+  'other',
+]
+
 export interface StoredFile {
   id: string
   name: string
@@ -29,6 +42,8 @@ export interface StoredFile {
   linkedTo?: 'transport' | 'accommodation' | 'activity'
   /** Identifiant de l'activité liée, quand `linkedTo` vaut `activity`. */
   activityId?: string
+  /** Famille choisie par l'utilisateur (billet, hôtel, visa…). */
+  category?: DocumentCategory
 }
 
 export function openDocumentsDB(): Promise<IDBDatabase> {

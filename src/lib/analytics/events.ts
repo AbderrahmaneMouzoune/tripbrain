@@ -104,6 +104,11 @@ export const analyticsEvents = {
       'Passage à un autre voyage enregistré sur l’appareil, depuis « Mes voyages ».',
     properties: {},
   },
+  days_swapped: {
+    description:
+      'Échange du programme de deux journées, et si elles sont dans la même ville.',
+    properties: { same_city: flag() },
+  },
   trip_renamed: {
     description:
       'Un voyage a été renommé depuis « Mes voyages ». Le nouveau nom reste sur l’appareil.',
@@ -307,6 +312,13 @@ export const analyticsEvents = {
       'Une recherche a eu lieu dans les documents, et a donné ou non des résultats. Le texte cherché reste sur l’appareil.',
     properties: { has_results: flag() },
   },
+  document_category_changed: {
+    description:
+      'Choix du type d’un document (billet, hôtel, visa, autre) ou retour à la détection automatique.',
+    properties: {
+      category: choice('ticket', 'hotel', 'identity', 'other', 'auto'),
+    },
+  },
   document_link_changed: {
     description:
       'Un document a été rattaché à autre chose : tout le voyage, une journée, un trajet ou un hébergement — jamais lesquels.',
@@ -337,9 +349,6 @@ export const analyticsEvents = {
         'notify_check_in',
         'wifi_only',
         'tips_reset',
-        'theme_light',
-        'theme_dark',
-        'theme_system',
       ),
       enabled: flag(),
     },

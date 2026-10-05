@@ -7,7 +7,6 @@ import { INSTALL_EVENT_CAPTURE_SCRIPT } from '@/lib/pwa-install'
 import { AnalyticsProvider } from '@/components/analytics/analytics-provider'
 import { ConsentedVercelAnalytics } from '@/components/analytics/vercel-analytics'
 import { getSiteUrl } from '@/lib/site-url'
-import { ThemeProvider } from '@/components/theme-provider'
 import './globals.css'
 
 const nunito = Nunito({
@@ -84,10 +83,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: 'cover',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f3f7fd' },
-    { media: '(prefers-color-scheme: dark)', color: '#0b1226' },
-  ],
+  themeColor: '#f3f7fd',
 }
 
 export default function RootLayout({
@@ -96,7 +92,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="fr" suppressHydrationWarning>
+    <html lang="fr" className="light" style={{ colorScheme: 'light' }}>
       <head>
         {/*
           `beforeinstallprompt` peut se déclencher avant l'hydratation React :
@@ -110,21 +106,14 @@ export default function RootLayout({
       <body
         className={`${nunito.variable} ${paytoneOne.variable} font-sans antialiased`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <AnalyticsProvider>
-            <PWARegister />
-            <PwaInstallProvider>
-              {children}
-              <PwaInstallPrompt />
-            </PwaInstallProvider>
-            <ConsentedVercelAnalytics />
-          </AnalyticsProvider>
-        </ThemeProvider>
+        <AnalyticsProvider>
+          <PWARegister />
+          <PwaInstallProvider>
+            {children}
+            <PwaInstallPrompt />
+          </PwaInstallProvider>
+          <ConsentedVercelAnalytics />
+        </AnalyticsProvider>
       </body>
     </html>
   )

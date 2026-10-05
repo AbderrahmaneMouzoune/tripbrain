@@ -3,6 +3,7 @@ import type { StoredFile } from '@/lib/documents-db'
 import {
   describeLink,
   documentCategory,
+  suggestedCategory,
   documentCategoryLabel,
   fileFormatLabel,
   filterDocuments,
@@ -284,5 +285,26 @@ describe('missingDocuments', () => {
       missing: 0,
       firstDayIndex: -1,
     })
+  })
+})
+
+describe('type choisi par l’utilisateur', () => {
+  it('prime sur le rattachement et le nom du fichier', () => {
+    expect(
+      documentCategory({
+        name: 'billet-train.pdf',
+        linkedTo: 'transport',
+        category: 'identity',
+      }),
+    ).toBe('identity')
+    expect(documentCategory({ name: 'scan-0042.jpg', category: 'hotel' })).toBe(
+      'hotel',
+    )
+  })
+
+  it('se propose d’après le rattachement', () => {
+    expect(suggestedCategory({ linkedTo: 'transport' })).toBe('ticket')
+    expect(suggestedCategory({ linkedTo: 'accommodation' })).toBe('hotel')
+    expect(suggestedCategory({})).toBeNull()
   })
 })

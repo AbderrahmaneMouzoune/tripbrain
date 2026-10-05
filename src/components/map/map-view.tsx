@@ -11,7 +11,6 @@ import { trackEvent } from '@/lib/analytics/client'
 import { useTrip } from '@/components/app/trip-provider'
 import { useAppNav } from '@/components/app/navigation'
 import { Button } from '@/components/ui/button'
-import { SegmentedControl } from '@/components/mobile/segmented-control'
 import {
   ACTIVITY_TYPE_LABELS,
   cityStops,
@@ -210,16 +209,36 @@ export function MapView(_props: {}) {
             <ChevronRight className="size-5" aria-hidden />
           </button>
         </div>
-        <SegmentedControl
-          label="Étendue de la carte"
-          options={[
-            { value: 'day', label: 'Jour' },
-            { value: 'trip', label: 'Tout le voyage' },
-          ]}
-          value={scope}
-          onChange={setScope}
-          className="w-64 shadow-[0_2px_8px_rgb(14_26_58/0.1)]"
-        />
+        <div
+          role="radiogroup"
+          aria-label="Étendue de la carte"
+          className="bg-muted flex gap-1 self-start rounded-[14px] p-1 shadow-[0_2px_8px_rgb(14_26_58/0.1)]"
+        >
+          {(
+            [
+              { value: 'day', label: 'Jour' },
+              { value: 'trip', label: 'Tout le voyage' },
+            ] as const
+          ).map((option) => {
+            const active = scope === option.value
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setScope(option.value)}
+                className={
+                  active
+                    ? 'bg-card text-primary-strong pressable h-9 rounded-[11px] px-4 text-sm font-black shadow-[0_1px_3px_rgb(14_26_58/0.16)]'
+                    : 'text-muted-foreground pressable h-9 rounded-[11px] px-3.5 text-sm font-extrabold'
+                }
+              >
+                {option.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       <div className="pointer-events-none absolute inset-x-3 bottom-3 z-[1000] mx-auto flex max-w-xl flex-col gap-2">
