@@ -801,7 +801,8 @@ function downloadText(filename: string, content: string) {
   URL.revokeObjectURL(url)
 }
 
-async function downloadXlsxTemplate() {
+/** Modèle Excel à remplir (3 onglets), aussi proposé depuis l’écran d’import. */
+export async function downloadXlsxTemplate() {
   const { Workbook } = await import('exceljs')
   const wb = new Workbook()
 

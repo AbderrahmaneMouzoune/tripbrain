@@ -14,7 +14,12 @@ export const MARKETING_SITE_URL = 'https://tripbrain.fr'
 const GENERATOR_PATH = '/generateur-itineraire'
 
 /** D'où part le renvoi vers le générateur — repris tel quel dans la mesure. */
-export type GeneratorSurface = 'onboarding' | 'share_dialog' | 'import_guide'
+export type GeneratorSurface =
+  | 'onboarding'
+  | 'share_dialog'
+  | 'import_guide'
+  /** Repli du générateur intégré, quand le serveur n'a pas de clé d'API. */
+  | 'generator_fallback'
 
 /**
  * URL du générateur, marquée de l'endroit d'où l'on vient.

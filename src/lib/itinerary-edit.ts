@@ -209,3 +209,83 @@ function addDays(date: string, amount: number): string {
   parsed.setDate(parsed.getDate() + amount)
   return parsed.toISOString().slice(0, 10)
 }
+
+/**
+ * Ce qui fait le programme d'une journée et peut changer de date : quand on
+ * est souple en voyage, on échange volontiers « Grande Muraille » et « Cité
+ * interdite ». Le reste — date, numéro, identifiant, trajet et hébergement —
+ * reste attaché au calendrier : un billet de train ou une nuit d'hôtel est
+ * réservé pour une date, pas pour un programme.
+ */
+export const SWAPPABLE_DAY_FIELDS = [
+  'city',
+  'title',
+  'highlights',
+  'foodRecommendations',
+  'walkingDistance',
+  'notes',
+  'packingTips',
+  'dayType',
+  'tips',
+  'activities',
+  'coordinates',
+  'images',
+] as const satisfies readonly (keyof DayItinerary)[]
+
+function withPlanOf(target: DayItinerary, source: DayItinerary): DayItinerary {
+  const next: DayItinerary = { ...target }
+  for (const field of SWAPPABLE_DAY_FIELDS) {
+    if (source[field] === undefined) {
+      delete next[field]
+    } else {
+      ;(next as unknown as Record<string, unknown>)[field] = source[field]
+    }
+  }
+  return next
+}
+
+/**
+ * Échange le programme de deux journées (par index). Dates, trajets et
+ * hébergements restent en place. Des index identiques ou hors bornes
+ * laissent l'itinéraire inchangé.
+ */
+export function swapDayPlans(
+  itinerary: DayItinerary[],
+  first: number,
+  second: number,
+): DayItinerary[] {
+  if (
+    first === second ||
+    first < 0 ||
+    second < 0 ||
+    first >= itinerary.length ||
+    second >= itinerary.length
+  ) {
+    return itinerary
+  }
+  const a = itinerary[first]
+  const b = itinerary[second]
+  return itinerary.map((day, index) => {
+    if (index === first) return withPlanOf(a, b)
+    if (index === second) return withPlanOf(b, a)
+    return day
+  })
+}
+
+/**
+ * Le trajet ou l'hébergement d'une des deux journées ne suit pas l'échange :
+ * le signaler évite une mauvaise surprise (un hôtel à Xi'an un jour passé à
+ * Pékin).
+ */
+export function swapLeavesBookingsBehind(
+  itinerary: DayItinerary[],
+  first: number,
+  second: number,
+): boolean {
+  const a = itinerary[first]
+  const b = itinerary[second]
+  if (!a || !b || a.city === b.city) return false
+  return Boolean(
+    a.transport || b.transport || a.accommodation || b.accommodation,
+  )
+}

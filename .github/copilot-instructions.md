@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-TripBrain is a **local-first Next.js 16 PWA** — a personal travel companion that displays a day-by-day itinerary with a roadbook, interactive map, documents, and offline support. All data lives in IndexedDB; the only server-side code is the sharing API (`src/app/api/share/`), which parks a compressed itinerary in an S3/R2 bucket under a short sync code.
+TripBrain is a **local-first Next.js 16 PWA** — a personal travel companion that displays a day-by-day itinerary with a roadbook, interactive map, documents, and offline support. All data lives in IndexedDB. Server-side code is limited to the sharing API (`src/app/api/share/`), which parks a compressed itinerary in an S3/R2 bucket under a short sync code, and the itinerary generator API (`src/app/api/generate/`), which calls the Claude API (`ANTHROPIC_API_KEY`) and streams the generated itinerary back.
 
 ## Tech Stack
 
@@ -33,7 +33,7 @@ bun run test:watch     # vitest in watch mode
 ### Data flow
 
 1. **Itinerary data** is the core model (`DayItinerary` in `src/lib/itinerary-data.ts`). It includes days, activities, transport, accommodation, and images.
-2. All trip data lives in **IndexedDB** (database `tripbrain`, store `tripData`). There is no backend.
+2. All trip data lives in **IndexedDB** (database `tripbrain`, store `trips`, one record per trip; the legacy single-trip store `tripData` is migrated on upgrade). Several trips can live on the device; the active one is remembered in `localStorage`. Pure helpers are in `src/lib/trips.ts`, persistence in `src/lib/trips-db.ts`.
 3. `useTripData` hook (`src/hooks/use-trip-data.ts`) manages CRUD: load from IndexedDB on mount, save on import/edit, export as JSON.
 4. In-app editing goes through `useTripData().updateDay`, which persists a whole day at a time. The pure edit helpers live in `src/lib/itinerary-edit.ts`; forms are described declaratively in `src/lib/edit-fields.ts` (sections + field types), mapped to controls in `src/components/edit/edit-field-control.tsx`, and rendered by `EntityEditSheet`. Draft conversion and validation live in `src/lib/entity-draft.ts`.
 5. Import supports **JSON**, **XLSX** (3-sheet workbook: Days/Activities/Transports), and **CSV** (3 files: days.csv/activities.csv/transports.csv). Import logic is in `src/lib/importItinerary.ts`.
@@ -47,12 +47,14 @@ bun run test:watch     # vitest in watch mode
 
 ### Single-page structure
 
-The app is a single route (`src/app/page.tsx`). It shows:
+The app is a single route (`src/app/page.tsx`), mobile-first:
 
-- An **onboarding screen** when no data is loaded
-- A **timeline** + **day detail** (roadbook) as the main view
-- A **documents tab** for file storage
-- A **map overlay** (Leaflet) opened via a floating button
+- **Contexts** (`src/components/app/`): `TripProvider`/`useTrip()` (trips and the active itinerary), `NavigationProvider`/`useAppNav()` (bottom tab + a stack of screens tied to browser history, so the phone's back button closes the top screen), `EditSessionProvider`/`useEditSession()` (edit mode, baseline, review).
+- **Onboarding** (`src/components/onboarding/`, `src/components/receive/`) when no trip is stored: welcome, « où en est votre voyage ? », code / QR / file / generator, preview, offline & reminders.
+- **Tabs** (`BottomTabBar`): Aujourd'hui (`today/`), Programme (`program/`), Carte (`map/`, Leaflet), Documents (`documents/`).
+- **Stacked screens** (`ScreenHost`, one registry entry per `AppScreen` kind): day roadbook, activity, transport, accommodation, driver mode, trip menu, trips list, share, receive, calendar, reset, settings, offline status, in-app generator (`generator/`), file import, document preview.
+- **Mobile primitives** in `src/components/mobile/` (`MobileScreen`, `OptionCard`, `SegmentedControl`, `Chip`, `ListRow`, `BottomSheet`…) and animation utilities in `globals.css` (`animate-*`, `stagger`, `pressable`; `prefers-reduced-motion` is honoured globally).
+- **Device preferences** (reminders, Wi-Fi only, contextual tips seen) in `src/lib/preferences.ts` / `usePreferences()`; local reminders in `src/lib/reminders.ts`.
 
 ### UI layer
 

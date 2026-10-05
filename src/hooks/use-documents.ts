@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   exportDocumentsAsZip,
   parseDocumentsZip,
@@ -11,100 +11,193 @@ import {
 import {
   DOCUMENTS_STORE as STORE_NAME,
   openDocumentsDB as openDB,
+  type DocumentCategory,
   type StoredFile,
 } from '@/lib/documents-db'
+import { isDocumentInTrip, type DocumentLink } from '@/lib/document-organize'
+import { useTrip } from '@/components/app/trip-provider'
 
 export type { StoredFile }
 
+/**
+ * Plusieurs écrans lisent les documents en même temps (l'onglet, la feuille
+ * d'ajout, l'aperçu, l'état hors ligne) : chaque écriture prévient toutes les
+ * instances du hook pour qu'elles relisent la base, sinon un document ajouté
+ * depuis la feuille n'apparaîtrait dans l'onglet qu'au prochain lancement.
+ */
+const listeners = new Set<() => void>()
+function notifyDocumentsChanged() {
+  for (const listener of listeners) listener()
+}
+
+function readAll(db: IDBDatabase): Promise<StoredFile[]> {
+  return new Promise((resolve, reject) => {
+    const request = db
+      .transaction(STORE_NAME, 'readonly')
+      .objectStore(STORE_NAME)
+      .getAll()
+    request.onsuccess = () => resolve(request.result as StoredFile[])
+    request.onerror = () => reject(request.error)
+  })
+}
+
+function waitFor(tx: IDBTransaction): Promise<void> {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+/** Enregistre le document dans les téléchargements de l'appareil. */
+export function downloadStoredFile(file: StoredFile): void {
+  const url = URL.createObjectURL(file.blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = file.name
+  a.click()
+  // Laisser au navigateur le temps de lancer le téléchargement.
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+/** Applique un rattachement à un enregistrement (champs vides retirés). */
+function withLink(file: StoredFile, link: DocumentLink): StoredFile {
+  const next: StoredFile = { ...file }
+  delete next.dayId
+  delete next.linkedTo
+  delete next.activityId
+  if (link.dayId) {
+    next.dayId = link.dayId
+    if (link.linkedTo) next.linkedTo = link.linkedTo
+    if (link.linkedTo === 'activity' && link.activityId) {
+      next.activityId = link.activityId
+    }
+  }
+  return next
+}
+
+/**
+ * Documents du voyage consulté. Les documents sans voyage (antérieurs aux
+ * voyages multiples) restent visibles partout ; les nouveaux sont rangés dans
+ * le voyage ouvert au moment de l'ajout.
+ */
 export function useDocuments() {
-  const [files, setFiles] = useState<StoredFile[]>([])
+  const { activeTripId, isDemo } = useTrip()
+  const [allFiles, setAllFiles] = useState<StoredFile[]>([])
   const [loading, setLoading] = useState(true)
 
   const loadFiles = useCallback(async () => {
     try {
       const db = await openDB()
-      const tx = db.transaction(STORE_NAME, 'readonly')
-      const store = tx.objectStore(STORE_NAME)
-      const request = store.getAll()
-
-      return new Promise<void>((resolve) => {
-        request.onsuccess = () => {
-          const sorted = (request.result as StoredFile[]).sort(
-            (a, b) => b.addedAt - a.addedAt,
-          )
-          setFiles(sorted)
-          setLoading(false)
-          resolve()
-        }
-        request.onerror = () => {
-          setLoading(false)
-          resolve()
-        }
-      })
+      const records = await readAll(db)
+      setAllFiles(records.sort((a, b) => b.addedAt - a.addedAt))
     } catch {
+      // Base indisponible (navigation privée stricte) : liste vide.
+    } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    loadFiles()
+    void loadFiles()
+    const listener = () => void loadFiles()
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
   }, [loadFiles])
 
+  const files = useMemo(
+    () =>
+      allFiles.filter((file) => isDocumentInTrip(file, activeTripId, isDemo)),
+    [allFiles, activeTripId, isDemo],
+  )
+
   const addFiles = useCallback(
-    async (newFiles: File[]) => {
+    async (
+      newFiles: File[],
+      link: DocumentLink = {},
+      category: DocumentCategory | null = null,
+    ) => {
       const db = await openDB()
       const tx = db.transaction(STORE_NAME, 'readwrite')
       const store = tx.objectStore(STORE_NAME)
+      const now = Date.now()
+      const stored: StoredFile[] = newFiles.map((file, index) =>
+        withLink(
+          {
+            id: crypto.randomUUID(),
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            lastModified: file.lastModified,
+            // Un lot garde son ordre de sélection dans le tri « récent d'abord ».
+            addedAt: now - index,
+            blob: file,
+            ...(activeTripId ? { tripId: activeTripId } : {}),
+            ...(category ? { category } : {}),
+          },
+          link,
+        ),
+      )
+      for (const record of stored) store.put(record)
+      await waitFor(tx)
+      notifyDocumentsChanged()
+      return stored
+    },
+    [activeTripId],
+  )
 
-      for (const file of newFiles) {
-        const storedFile: StoredFile = {
-          id: crypto.randomUUID(),
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          lastModified: file.lastModified,
-          addedAt: Date.now(),
-          blob: file,
-        }
-        store.put(storedFile)
+  /** Change ce que justifie un document : une journée, un trajet, un hôtel, ou tout le voyage. */
+  const updateDocumentLink = useCallback(
+    async (id: string, link: DocumentLink) => {
+      const db = await openDB()
+      const tx = db.transaction(STORE_NAME, 'readwrite')
+      const store = tx.objectStore(STORE_NAME)
+      const request = store.get(id)
+      request.onsuccess = () => {
+        const current = request.result as StoredFile | undefined
+        if (current) store.put(withLink(current, link))
       }
-
-      await new Promise<void>((resolve, reject) => {
-        tx.oncomplete = () => resolve()
-        tx.onerror = () => reject(tx.error)
-      })
-
-      await loadFiles()
+      await waitFor(tx)
+      notifyDocumentsChanged()
     },
-    [loadFiles],
+    [],
   )
 
-  const deleteFile = useCallback(
-    async (id: string) => {
+  /** Fixe le type d'un document ; `null` rend la main à la détection automatique. */
+  const updateDocumentCategory = useCallback(
+    async (id: string, category: DocumentCategory | null) => {
       const db = await openDB()
       const tx = db.transaction(STORE_NAME, 'readwrite')
       const store = tx.objectStore(STORE_NAME)
-      store.delete(id)
-
-      await new Promise<void>((resolve, reject) => {
-        tx.oncomplete = () => resolve()
-        tx.onerror = () => reject(tx.error)
-      })
-
-      await loadFiles()
+      const request = store.get(id)
+      request.onsuccess = () => {
+        const current = request.result as StoredFile | undefined
+        if (!current) return
+        const next: StoredFile = { ...current }
+        if (category) next.category = category
+        else delete next.category
+        store.put(next)
+      }
+      await waitFor(tx)
+      notifyDocumentsChanged()
     },
-    [loadFiles],
+    [],
   )
 
-  const downloadFile = useCallback(async (file: StoredFile) => {
-    const url = URL.createObjectURL(file.blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = file.name
-    a.click()
-    URL.revokeObjectURL(url)
+  const deleteFile = useCallback(async (id: string) => {
+    const db = await openDB()
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    tx.objectStore(STORE_NAME).delete(id)
+    await waitFor(tx)
+    notifyDocumentsChanged()
   }, [])
 
+  const downloadFile = useCallback(async (file: StoredFile) => {
+    downloadStoredFile(file)
+  }, [])
+
+  /** Exporte les documents du voyage consulté, avec leurs rattachements. */
   const exportAll = useCallback(
     async (onProgress?: (p: ExportProgress) => void) => {
       await exportDocumentsAsZip(files, onProgress)
@@ -140,29 +233,33 @@ export function useDocuments() {
           const safeName = uniqueFileName(doc.name, existingNames)
           existingNames.add(safeName)
 
-          const storedFile: StoredFile = {
-            id: crypto.randomUUID(),
-            name: safeName,
-            size: doc.blob.size,
-            type: doc.type || 'application/octet-stream',
-            lastModified: Date.now(),
-            addedAt: Date.now(),
-            blob: doc.blob,
-          }
-
-          store.put(storedFile)
+          // L'archive est restaurée dans le voyage consulté ; les journées
+          // gardent leur rattachement quand leurs identifiants correspondent
+          // (même voyage partagé), sinon le document vaut pour tout le voyage.
+          store.put(
+            withLink(
+              {
+                id: crypto.randomUUID(),
+                name: safeName,
+                size: doc.blob.size,
+                type: doc.type || 'application/octet-stream',
+                lastModified: Date.now(),
+                addedAt: Date.now() - i,
+                blob: doc.blob,
+                ...(activeTripId ? { tripId: activeTripId } : {}),
+                ...(doc.category ? { category: doc.category } : {}),
+              },
+              doc,
+            ),
+          )
           imported++
         } catch {
           failed++
         }
       }
 
-      await new Promise<void>((resolve, reject) => {
-        tx.oncomplete = () => resolve()
-        tx.onerror = () => reject(tx.error)
-      })
-
-      await loadFiles()
+      await waitFor(tx)
+      notifyDocumentsChanged()
 
       onProgress?.({
         status: 'done',
@@ -176,13 +273,15 @@ export function useDocuments() {
 
       return { imported, failed }
     },
-    [files, loadFiles],
+    [files, activeTripId],
   )
 
   return {
     files,
     loading,
     addFiles,
+    updateDocumentLink,
+    updateDocumentCategory,
     deleteFile,
     downloadFile,
     exportAll,
