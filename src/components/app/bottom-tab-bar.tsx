@@ -1,6 +1,6 @@
 'use client'
 
-import type { ComponentType, SVGProps } from 'react'
+import { useEffect, useState, type ComponentType, type SVGProps } from 'react'
 import { List, Map as MapIcon, Sun, Ticket } from 'lucide-react'
 import {
   SCREENS_WITH_TAB_BAR,
@@ -27,14 +27,13 @@ export const TAB_BAR_SPACER =
 
 /**
  * La barre passe-t-elle au-dessus de l'écran empilé du dessus ? Oui pour les
- * écrans de consultation, sauf en mode édition, où la barre d'édition prend
- * sa place en bas.
+ * écrans de consultation, mode édition compris : la barre d'édition se pose
+ * alors juste au-dessus d'elle.
  */
 export function useTabBarOverScreens(): boolean {
   const { stack } = useAppNav()
-  const { isEditing } = useEditSession()
   const top = stack[stack.length - 1]
-  return Boolean(top && SCREENS_WITH_TAB_BAR.has(top.kind) && !isEditing)
+  return Boolean(top && SCREENS_WITH_TAB_BAR.has(top.kind))
 }
 
 /**
@@ -45,6 +44,35 @@ export function useTabBarOverScreens(): boolean {
 export function BottomTabBar() {
   const { tab, setTab, stack } = useAppNav()
   const overScreens = useTabBarOverScreens()
+  const { isEditing, pendingChanges, openReview, stopEditing, reviewOpen } =
+    useEditSession()
+  // Onglet demandé pendant l'édition : on y va une fois les modifications
+  // enregistrées ou annulées ; « Continuer à modifier » l'oublie.
+  const [pendingTab, setPendingTab] = useState<AppTab | null>(null)
+  useEffect(() => {
+    if (!pendingTab) return
+    if (!isEditing) {
+      setTab(pendingTab)
+      setPendingTab(null)
+    } else if (!reviewOpen) {
+      setPendingTab(null)
+    }
+  }, [isEditing, reviewOpen, pendingTab, setTab])
+
+  // Quitter la journée en cours d'édition : sans modification, on sort du mode
+  // édition et on change d'onglet ; avec des modifications, le récapitulatif
+  // s'ouvre d'abord pour enregistrer ou annuler — rien ne se perd en route.
+  const goTo = (id: AppTab) => {
+    if (isEditing) {
+      if (pendingChanges > 0) {
+        setPendingTab(id)
+        openReview('save')
+        return
+      }
+      stopEditing()
+    }
+    setTab(id)
+  }
   // Sous un parcours ou une vue immersive, la barre est couverte : on la
   // retire aussi de l'ordre de tabulation et des lecteurs d'écran.
   const covered = stack.length > 0 && !overScreens
@@ -66,7 +94,7 @@ export function BottomTabBar() {
             <button
               key={id}
               type="button"
-              onClick={() => setTab(id)}
+              onClick={() => goTo(id)}
               aria-current={active ? 'page' : undefined}
               className={cn(
                 'pressable flex min-h-12 flex-1 flex-col items-center gap-[3px] rounded-xl text-[11px] outline-none',

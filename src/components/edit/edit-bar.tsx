@@ -22,14 +22,11 @@ export function EditChrome() {
     <>
       {isEditing && (
         <>
-          <div
-            aria-hidden
-            className="h-[calc(env(safe-area-inset-bottom)+88px)] shrink-0"
-          />
+          <div aria-hidden className="h-[76px] shrink-0" />
           <div
             role="region"
             aria-label="Mode édition"
-            className="bg-card border-border animate-sheet fixed inset-x-0 bottom-0 z-30 border-t px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+12px)] shadow-[0_-8px_24px_rgba(14,26,58,0.08)]"
+            className="bg-card border-border animate-sheet fixed inset-x-0 bottom-[var(--tab-bar-offset,0px)] z-30 border-t px-4 pt-3 pb-3 shadow-[0_-8px_24px_rgba(14,26,58,0.08)]"
           >
             <div className="mx-auto flex max-w-xl items-center gap-2">
               <div className="flex min-w-0 flex-1 items-center gap-2">
