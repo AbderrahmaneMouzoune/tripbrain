@@ -13,6 +13,8 @@ import {
   missingDocuments,
   normalizeLink,
   sortDocuments,
+  isOrphanDocument,
+  orphanDocumentsOwner,
 } from '../document-organize'
 import { DEMO_DOCUMENT_ID_PREFIX } from '../demo-documents'
 
@@ -87,6 +89,35 @@ describe('isDocumentInTrip', () => {
     const demo = { id: `${DEMO_DOCUMENT_ID_PREFIX}1` }
     expect(isDocumentInTrip(demo, 'demo', true)).toBe(true)
     expect(isDocumentInTrip(demo, 'real', false)).toBe(false)
+  })
+})
+
+describe('documents sans voyage', () => {
+  const real = (id: string, source: 'legacy' | 'json' = 'json') => ({
+    id,
+    source,
+    isDemo: false,
+  })
+  const demo = { id: 'demo', source: 'demo' as const, isDemo: true }
+
+  it('repère les documents à ranger', () => {
+    expect(isOrphanDocument({ id: 'a' })).toBe(true)
+    expect(isOrphanDocument({ id: 'a', tripId: 't1' })).toBe(false)
+    expect(isOrphanDocument({ id: `${DEMO_DOCUMENT_ID_PREFIX}1` })).toBe(false)
+  })
+
+  it('les confie au voyage repris de l’ancienne version', () => {
+    expect(orphanDocumentsOwner([real('a'), real('old', 'legacy')])).toBe('old')
+  })
+
+  it('ou à l’unique vrai voyage', () => {
+    expect(orphanDocumentsOwner([demo, real('a')])).toBe('a')
+  })
+
+  it('ne devine pas quand il y a le choix', () => {
+    expect(orphanDocumentsOwner([real('a'), real('b')])).toBeNull()
+    expect(orphanDocumentsOwner([demo])).toBeNull()
+    expect(orphanDocumentsOwner([])).toBeNull()
   })
 })
 

@@ -101,3 +101,24 @@ export async function deleteTripDocuments(tripId: string): Promise<number> {
   })
   return ids.length
 }
+
+/**
+ * Range dans un voyage les documents qui n'en ont pas (hors documents
+ * d'exemple). Renvoie le nombre rattaché.
+ */
+export async function adoptOrphanDocuments(
+  tripId: string,
+  isOrphan: (file: StoredFile) => boolean,
+): Promise<number> {
+  const db = await openDocumentsDB()
+  const orphans = (await allDocuments(db)).filter(isOrphan)
+  if (orphans.length === 0) return 0
+  const tx = db.transaction(DOCUMENTS_STORE, 'readwrite')
+  const store = tx.objectStore(DOCUMENTS_STORE)
+  for (const file of orphans) store.put({ ...file, tripId })
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+  return orphans.length
+}
