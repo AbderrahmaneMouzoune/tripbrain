@@ -18,7 +18,7 @@ import type { DayItinerary } from '@/lib/itinerary-data'
 export const SHARE_INLINE_LIMIT = 2000
 
 /**
- * Longueur d'un code de partage — celle que le serveur produit (bucketcode).
+ * Longueur d'un code de partage — celle que le serveur produit (s3nd).
  * Le code n'est fait que de chiffres : voir `syncCode` dans `share-store.ts`.
  */
 export const SHARE_CODE_LENGTH = 8
