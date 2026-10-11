@@ -3,6 +3,7 @@
 // navigateur qui le décompresse.
 
 import { isS3ndError, type Bucket } from '@s3nd/core'
+import { isGroupId } from '@/lib/group-sync'
 import { createRateLimiter, getClientKey } from '@/lib/rate-limit'
 import {
   SHARE_SCHEMA_VERSION,
@@ -66,6 +67,9 @@ export async function GET(
     return Response.json(
       {
         data: payload,
+        ...(isGroupId(snapshot.data?.group)
+          ? { group: snapshot.data.group }
+          : {}),
         createdAt: snapshot.createdAt.toISOString(),
         expiresAt: snapshot.expiresAt?.toISOString() ?? null,
       },

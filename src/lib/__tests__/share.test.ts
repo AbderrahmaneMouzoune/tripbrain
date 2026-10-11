@@ -486,3 +486,13 @@ describe('readIncomingShare — invitation de groupe', () => {
     expect(readIncomingShare('?groupe=court', '')).toBeNull()
   })
 })
+
+describe('sameEtag', () => {
+  it('ignore guillemets et préfixe faible', async () => {
+    const { sameEtag } = await import('@/lib/group-sync')
+    expect(sameEtag('"abc"', 'abc')).toBe(true)
+    expect(sameEtag('W/"abc"', '"abc"')).toBe(true)
+    expect(sameEtag('"abc"', '"abd"')).toBe(false)
+    expect(sameEtag(null, '"abc"')).toBe(false)
+  })
+})

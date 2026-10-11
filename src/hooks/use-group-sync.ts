@@ -12,7 +12,7 @@ import { syncGroupTrip, type GroupSyncApi } from '@/lib/group-sync-engine'
 import { cleanAuthor, fetchGroup, pushGroup } from '@/lib/group-sync'
 import { readPreferences } from '@/lib/preferences'
 import { compressItinerary, decompressItinerary } from '@/lib/share'
-import { mergeThreeWay } from '@/lib/trip-merge'
+import { deepEqual, mergeThreeWay } from '@/lib/trip-merge'
 import type { StoredTrip } from '@/lib/trips'
 
 /** Intervalle de vérification tant que l'application est à l'écran. */
@@ -102,9 +102,18 @@ export function useGroupSync({
       if (outcome.kind === 'gone') {
         trackEvent('group_sync_failed', { reason: 'gone' })
       }
+      // On ne prévient que si le programme a vraiment changé sous les yeux :
+      // une version du serveur identique à la copie locale (ses propres
+      // modifications qui reviennent, un simple changement de version)
+      // n'est pas une nouvelle.
+      const contentChanged = !deepEqual(
+        { title: before.title, itinerary: before.itinerary },
+        { title: outcome.trip.title, itinerary: outcome.trip.itinerary },
+      )
       const received =
-        outcome.kind === 'received' ||
-        (outcome.kind === 'sent' && outcome.receivedFrom !== undefined)
+        contentChanged &&
+        (outcome.kind === 'received' ||
+          (outcome.kind === 'sent' && outcome.receivedFrom !== undefined))
       if (received) {
         setRemoteChange({
           tripId: before.id,

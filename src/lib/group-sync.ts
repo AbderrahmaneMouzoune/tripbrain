@@ -27,6 +27,17 @@ export const MAX_AUTHOR_LENGTH = 40
 /** Longueur maximale d'un titre de voyage stocké avec le groupe. */
 export const MAX_GROUP_TITLE_LENGTH = 120
 
+/**
+ * Deux ETag désignent-ils la même version ? Les guillemets et le préfixe
+ * faible (`W/`) varient selon qui les rapporte (écriture, lecture, proxy) :
+ * comparés tels quels, une version inchangée passait pour une nouvelle.
+ */
+export function sameEtag(a: string | null, b: string | null): boolean {
+  const normalize = (value: string) =>
+    value.trim().replace(/^W\//, '').replace(/^"|"$/g, '')
+  return Boolean(a && b) && normalize(a!) === normalize(b!)
+}
+
 export function isGroupId(value: unknown): value is string {
   return typeof value === 'string' && GROUP_ID.test(value)
 }

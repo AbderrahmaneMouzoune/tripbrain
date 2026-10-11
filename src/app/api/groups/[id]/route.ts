@@ -6,7 +6,7 @@
 // 412 avec la version actuelle, que le téléphone fusionne avant de réessayer.
 
 import { isS3ndError, type Bucket } from '@s3nd/core'
-import { isGroupId } from '@/lib/group-sync'
+import { isGroupId, sameEtag } from '@/lib/group-sync'
 import { parseGroupWrite } from '@/lib/group-request'
 import {
   GROUP_SCHEMA_VERSION,
@@ -86,7 +86,7 @@ export async function GET(request: Request, { params }: Context) {
     const known = request.headers.get('if-none-match')
     if (known) {
       const etag = await currentEtag(store, id)
-      if (etag && etag === known) {
+      if (sameEtag(etag, known)) {
         return new Response(null, { status: 304, headers: NO_STORE })
       }
     }

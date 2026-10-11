@@ -11,7 +11,7 @@ import type { DayItinerary } from '@/lib/itinerary-data'
 import type { TripSource } from '@/lib/trips'
 import {
   decompressItinerary,
-  fetchSharedItinerary,
+  fetchShare,
   type IncomingShare,
 } from '@/lib/share'
 
@@ -66,18 +66,25 @@ export function shareAnalyticsSource(
 export async function resolveIncomingShare(
   incoming: IncomingShare,
 ): Promise<{ days: DayItinerary[]; group?: ReceivedTrip['group'] }> {
-  if (incoming.group) {
-    const result = await fetchGroup(incoming.group)
+  // Un code peut mener à un voyage de groupe : on le rejoint dans son état
+  // actuel, pas tel qu'il était quand le code a été créé.
+  const viaCode =
+    !incoming.group && !incoming.payload && incoming.code
+      ? await fetchShare(incoming.code)
+      : null
+  const groupId = incoming.group ?? viaCode?.group
+  if (groupId) {
+    const result = await fetchGroup(groupId)
     if (result.status !== 'changed') throw new Error('Invitation illisible.')
     const days = decompressItinerary(result.state.data)
     if (days.length === 0) {
       throw new Error('Ce voyage ne contient aucune journée.')
     }
-    return { days, group: { id: incoming.group, state: result.state } }
+    return { days, group: { id: groupId, state: result.state } }
   }
   const days = incoming.payload
     ? decompressItinerary(incoming.payload)
-    : await fetchSharedItinerary(incoming.code ?? '')
+    : (viaCode?.days ?? (await fetchShare(incoming.code ?? '')).days)
   if (days.length === 0) {
     throw new Error('Ce partage ne contient aucune journée.')
   }

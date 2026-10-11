@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   Check,
   CloudOff,
+  Copy,
+  KeyRound,
   Link2,
   Loader2,
   RefreshCw,
@@ -20,7 +22,21 @@ import { Button } from '@/components/ui/button'
 import { useClipboard } from '@/hooks/use-clipboard'
 import { usePreferences } from '@/hooks/use-preferences'
 import { MAX_AUTHOR_LENGTH, getGroupInviteUrl } from '@/lib/group-sync'
-import { canShareNatively, shareNatively } from '@/lib/share'
+import {
+  SHARE_CODE_LENGTH,
+  canShareNatively,
+  compressItinerary,
+  createShareCode,
+  formatShareCode,
+  shareNatively,
+  type ShareCode,
+} from '@/lib/share'
+import {
+  formatCountdown,
+  resolveShareExpiry,
+  spellShareCode,
+  toFrenchShareError,
+} from '@/components/share/share-format'
 import { cn } from '@/lib/utils'
 
 /** « à l'instant », « il y a 4 min », « il y a 2 h », sinon la date. */
@@ -283,6 +299,12 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
         </p>
       </div>
 
+      <GroupCode
+        groupId={group.id}
+        itinerary={activeTrip?.itinerary ?? []}
+        now={now}
+      />
+
       {nameField}
 
       <div className="mt-6">
@@ -387,6 +409,135 @@ function SyncState({
         >
           <RefreshCw className="size-4" aria-hidden />
         </button>
+      )}
+    </div>
+  )
+}
+
+type CodeState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'ready'; share: ShareCode; expiresAt: Date }
+  | { status: 'error'; message: string }
+
+/**
+ * Code à dicter pour rejoindre le voyage : le même code à huit chiffres que
+ * pour un partage, valable une heure, mais qui mène au voyage synchronisé.
+ * Pratique quand l'autre est au bout du fil, ou que le QR code ne passe pas.
+ */
+function GroupCode({
+  groupId,
+  itinerary,
+  now,
+}: {
+  groupId: string
+  itinerary: Parameters<typeof compressItinerary>[0]
+  now: number
+}) {
+  const [state, setState] = useState<CodeState>({ status: 'idle' })
+  const clipboard = useClipboard()
+  // Le compte à rebours a besoin d'une horloge plus fine que la minute.
+  const [tick, setTick] = useState(now)
+  useEffect(() => {
+    if (state.status !== 'ready') return
+    setTick(Date.now())
+    const timer = setInterval(() => setTick(Date.now()), 5_000)
+    return () => clearInterval(timer)
+  }, [state.status])
+
+  const create = async () => {
+    setState({ status: 'loading' })
+    const startedAt = Date.now()
+    try {
+      const share = await createShareCode(await compressItinerary(itinerary), {
+        group: groupId,
+      })
+      setState({
+        status: 'ready',
+        share,
+        expiresAt: resolveShareExpiry(share, startedAt),
+      })
+    } catch (error) {
+      setState({ status: 'error', message: toFrenchShareError(error, 'share') })
+    }
+  }
+
+  if (state.status === 'ready') {
+    const remaining = formatCountdown(state.expiresAt, tick)
+    return (
+      <div className="bg-card border-border mt-4 flex flex-col items-center gap-1 rounded-[18px] border px-4 py-3.5">
+        <p className="text-secondary-strong text-[11px] font-black tracking-[0.1em] uppercase">
+          Code pour rejoindre
+        </p>
+        <p
+          aria-label={spellShareCode(state.share.code)}
+          className={cn(
+            'font-mono text-[34px] leading-[1.15] font-semibold tracking-[0.08em] tabular-nums',
+            !remaining && 'text-muted-foreground line-through',
+          )}
+        >
+          {formatShareCode(state.share.code)}
+        </p>
+        {remaining ? (
+          <div className="flex flex-wrap items-center justify-center gap-2.5">
+            <Button
+              variant="soft"
+              size="lg2"
+              className="h-11"
+              onClick={() => void clipboard.copy(state.share.code)}
+            >
+              {clipboard.copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+              {clipboard.copied ? 'Code copié' : 'Copier'}
+            </Button>
+            <span className="text-muted-foreground text-[13px] font-extrabold">
+              Expire dans {remaining}
+            </span>
+          </div>
+        ) : (
+          <Button
+            variant="soft"
+            size="lg2"
+            className="h-11"
+            onClick={() => void create()}
+          >
+            <RefreshCw aria-hidden />
+            Nouveau code
+          </Button>
+        )}
+        <p className="text-muted-foreground mt-1 text-center text-xs leading-snug">
+          À saisir dans TripBrain : « Je l’ai préparé sur tripbrain.fr » au
+          premier lancement, sinon le menu « … » puis « Recevoir un partage ».
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-4">
+      <Button
+        variant="outline"
+        size="lg2"
+        className="w-full"
+        disabled={state.status === 'loading'}
+        onClick={() => void create()}
+      >
+        {state.status === 'loading' ? (
+          <Loader2 className="animate-spin" aria-hidden />
+        ) : (
+          <KeyRound aria-hidden />
+        )}
+        {state.status === 'loading'
+          ? 'Préparation du code…'
+          : `Dicter un code à ${SHARE_CODE_LENGTH} chiffres`}
+      </Button>
+      {state.status === 'error' && (
+        <p
+          role="alert"
+          className="text-destructive mt-2 flex items-start gap-2 text-sm font-bold"
+        >
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          {state.message}
+        </p>
       )}
     </div>
   )

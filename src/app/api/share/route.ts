@@ -6,6 +6,7 @@
 
 import { isS3ndError, type Bucket } from '@s3nd/core'
 import { createRateLimiter, getClientKey } from '@/lib/rate-limit'
+import { isGroupId } from '@/lib/group-sync'
 import { corsHeaders, preflightResponse } from '@/lib/share-cors'
 import {
   SHARE_APP,
@@ -80,7 +81,12 @@ export async function POST(request: Request) {
     )
   }
 
-  const data: SharedSnapshotData = { payload }
+  const group = (body as { group?: unknown } | null)?.group
+  if (group !== undefined && !isGroupId(group)) {
+    return reply({ error: 'Voyage de groupe invalide.' }, { status: 400 })
+  }
+
+  const data: SharedSnapshotData = group ? { payload, group } : { payload }
 
   try {
     for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt++) {

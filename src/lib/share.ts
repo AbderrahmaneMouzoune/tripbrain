@@ -12,7 +12,7 @@
 
 import { encode, decode } from '@msgpack/msgpack'
 import { deflateSync, inflateSync } from 'fflate'
-import { readGroupInvite } from '@/lib/group-sync'
+import { isGroupId as readGroupId, readGroupInvite } from '@/lib/group-sync'
 import type { DayItinerary } from '@/lib/itinerary-data'
 
 /** Au-delà, un QR code inline devient trop dense pour être scanné confortablement. */
@@ -204,12 +204,21 @@ async function readError(
   return fallback
 }
 
-/** Dépose l'itinéraire compressé sur le serveur et retourne le code à partager. */
-export async function createShareCode(compressed: string): Promise<ShareCode> {
+/**
+ * Dépose l'itinéraire compressé sur le serveur et retourne le code à partager.
+ * Avec `group`, le code mène au voyage synchronisé plutôt qu'à une copie.
+ */
+export async function createShareCode(
+  compressed: string,
+  options: { group?: string } = {},
+): Promise<ShareCode> {
   const response = await fetch('/api/share', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ data: compressed }),
+    body: JSON.stringify({
+      data: compressed,
+      ...(options.group ? { group: options.group } : {}),
+    }),
   })
 
   if (!response.ok) {
@@ -236,6 +245,13 @@ export async function createShareCode(compressed: string): Promise<ShareCode> {
 export async function fetchSharedItinerary(
   code: string,
 ): Promise<DayItinerary[]> {
+  return (await fetchShare(code)).days
+}
+
+/** Résout un code : l'itinéraire, et le voyage de groupe s'il y mène. */
+export async function fetchShare(
+  code: string,
+): Promise<{ days: DayItinerary[]; group?: string }> {
   const trimmed = code.trim()
   if (!trimmed) {
     throw new Error('Saisissez un code de partage.')
@@ -247,12 +263,15 @@ export async function fetchSharedItinerary(
     throw new Error(await readError(response, 'Code inconnu ou expiré.'))
   }
 
-  const body = (await response.json()) as { data?: unknown }
+  const body = (await response.json()) as { data?: unknown; group?: unknown }
   if (typeof body.data !== 'string' || !body.data) {
     throw new Error('Le partage ne contient aucune donnée.')
   }
 
-  return decompressItinerary(body.data)
+  const days = decompressItinerary(body.data)
+  return readGroupId(body.group)
+    ? { days, group: body.group as string }
+    : { days }
 }
 
 // ── Résumé d'un partage reçu ──────────────────────────────────────────────────
