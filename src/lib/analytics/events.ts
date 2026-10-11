@@ -68,7 +68,15 @@ export const analyticsEvents = {
     description:
       "Un voyage vient d'être chargé, et par quel chemin : fichier, partage ou démo.",
     properties: {
-      source: choice('json', 'xlsx', 'csv', 'share_qr', 'share_code', 'demo'),
+      source: choice(
+        'json',
+        'xlsx',
+        'csv',
+        'share_qr',
+        'share_code',
+        'demo',
+        'generator',
+      ),
       days_count: count(),
       activities_count: count(),
     },
@@ -91,6 +99,30 @@ export const analyticsEvents = {
     description: 'Sortie du voyage de démonstration.',
     properties: {},
   },
+  trip_switched: {
+    description:
+      'Passage à un autre voyage enregistré sur l’appareil, depuis « Mes voyages ».',
+    properties: {},
+  },
+  days_swapped: {
+    description:
+      'Échange du programme de deux journées, et si elles sont dans la même ville.',
+    properties: { same_city: flag() },
+  },
+  trip_renamed: {
+    description:
+      'Un voyage a été renommé depuis « Mes voyages ». Le nouveau nom reste sur l’appareil.',
+    properties: {},
+  },
+  trip_duplicated: {
+    description: 'Copie d’un voyage enregistré, depuis « Mes voyages ».',
+    properties: {},
+  },
+  trip_deleted: {
+    description:
+      'Suppression d’un voyage depuis « Mes voyages », avec ses documents.',
+    properties: {},
+  },
   day_changed: {
     description:
       'Passage à une autre journée, et par quel geste : utile pour savoir si la navigation est trouvée.',
@@ -100,9 +132,10 @@ export const analyticsEvents = {
     },
   },
   view_changed: {
-    description: 'Bascule entre le roadbook et les documents.',
+    description:
+      'Passage d’un onglet à l’autre : aujourd’hui, programme, carte ou documents.',
     properties: {
-      view: choice('roadbook', 'documents'),
+      view: choice('today', 'program', 'map', 'documents'),
       surface: choice('tabs', 'bottom_nav', 'timeline'),
     },
   },
@@ -210,8 +243,45 @@ export const analyticsEvents = {
     description:
       "Départ vers le générateur d'itinéraire du site, et depuis quel écran de l'app.",
     properties: {
-      surface: choice('onboarding', 'share_dialog', 'import_guide'),
+      surface: choice(
+        'onboarding',
+        'share_dialog',
+        'import_guide',
+        'generator_fallback',
+      ),
     },
+  },
+  generator_started: {
+    description:
+      "Lancement d'une génération d'itinéraire dans l'app, et par quelle voie : phrase libre ou questionnaire.",
+    properties: { mode: choice('express', 'brief') },
+  },
+  generator_completed: {
+    description:
+      "Fin d'une génération d'itinéraire dans l'app, avec le nombre de journées obtenues.",
+    properties: { mode: choice('express', 'brief'), days_count: count() },
+  },
+  generator_failed: {
+    description:
+      "Échec d'une génération ou d'un affinage d'itinéraire, avec sa cause (jamais le texte du voyage).",
+    properties: {
+      step: choice('generate', 'refine'),
+      reason: choice(
+        'not_configured',
+        'rate_limited',
+        'overloaded',
+        'refused',
+        'invalid_json',
+        'invalid_request',
+        'network',
+        'unknown',
+      ),
+    },
+  },
+  generator_refined: {
+    description:
+      'Décision sur un affinage proposé par le générateur : appliqué ou annulé, et combien de changements il comptait.',
+    properties: { applied: flag(), changes_count: count() },
   },
   calendar_exported: {
     description: 'Export du voyage ou d’une journée vers un calendrier.',
@@ -242,9 +312,60 @@ export const analyticsEvents = {
       'Une recherche a eu lieu dans les documents, et a donné ou non des résultats. Le texte cherché reste sur l’appareil.',
     properties: { has_results: flag() },
   },
+  document_category_changed: {
+    description:
+      'Choix du type d’un document (billet, hôtel, visa, autre) ou retour à la détection automatique.',
+    properties: {
+      category: choice('ticket', 'hotel', 'identity', 'other', 'auto'),
+    },
+  },
+  document_link_changed: {
+    description:
+      'Un document a été rattaché à autre chose : tout le voyage, une journée, un trajet ou un hébergement — jamais lesquels.',
+    properties: {
+      target: choice('trip', 'day', 'transport', 'accommodation', 'activity'),
+    },
+  },
+  document_shared: {
+    description:
+      'Partage d’un document vers une autre app du téléphone, ou repli sur le téléchargement quand le partage n’existe pas.',
+    properties: {
+      kind: choice('pdf', 'image', 'other'),
+      method: choice('share', 'download'),
+    },
+  },
+  image_cache_cleared: {
+    description:
+      'Les photos enregistrées pour le hors-ligne ont été effacées depuis l’écran « Disponible hors ligne ».',
+    properties: {},
+  },
+  preference_changed: {
+    description:
+      'Un réglage de l’appareil a été activé ou désactivé (rappels, Wi-Fi seulement, astuces, thème).',
+    properties: {
+      setting: choice(
+        'notify_transport_eve',
+        'notify_morning',
+        'notify_check_in',
+        'wifi_only',
+        'tips_reset',
+      ),
+      enabled: flag(),
+    },
+  },
+  notification_permission_requested: {
+    description:
+      'Demande d’autorisation des notifications depuis les réglages, et la réponse du navigateur.',
+    properties: { result: choice('granted', 'denied', 'default') },
+  },
+  reminder_shown: {
+    description:
+      'Un rappel local s’est affiché sur l’appareil : veille d’un trajet, programme du matin ou check-in.',
+    properties: { kind: choice('transport_eve', 'morning', 'check_in') },
+  },
   data_cleared: {
     description: "Effacement des données du voyage depuis l'application.",
-    properties: { surface: choice('share_dialog', 'demo_banner') },
+    properties: { surface: choice('share_dialog', 'demo_banner', 'trip_menu') },
   },
   pwa_installed: {
     description: "Installation de l'application sur l'appareil.",
@@ -262,6 +383,43 @@ export const analyticsEvents = {
     properties: {
       status: choice('granted', 'denied'),
       surface: choice('banner', 'settings', 'privacy_page'),
+    },
+  },
+  directions_opened: {
+    description:
+      "Ouverture d'un itinéraire vers un lieu du voyage (activité, gare, hébergement), et depuis quel écran — jamais le lieu.",
+    properties: {
+      target: choice('activity', 'transport', 'accommodation', 'city'),
+      surface: choice(
+        'today',
+        'day',
+        'activity',
+        'transport',
+        'accommodation',
+        'map',
+      ),
+    },
+  },
+  contextual_tip_closed: {
+    description:
+      'Fermeture d’une astuce contextuelle : comprise, ou toutes les astuces passées d’un coup.',
+    properties: {
+      tip: choice('long_press', 'swipe_days', 'documents'),
+      outcome: choice('acknowledged', 'skipped_all'),
+    },
+  },
+  driver_mode_opened: {
+    description:
+      'Ouverture du mode chauffeur (adresse du logement en très grand), avec ou sans écran maintenu allumé.',
+    properties: {
+      wake_lock: flag(),
+    },
+  },
+  location_requested: {
+    description:
+      'Demande de la position sur la carte, et sa réponse. La position elle-même ne quitte jamais l’appareil.',
+    properties: {
+      outcome: choice('granted', 'denied', 'unavailable'),
     },
   },
 } as const satisfies EventCatalog

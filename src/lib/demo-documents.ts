@@ -370,11 +370,20 @@ interface DemoDocumentDefinition {
   name: string
   type: string
   build: () => Uint8Array | string
+  /**
+   * Journée (et trajet ou hébergement) du voyage démo que le document
+   * justifie : les identifiants sont ceux de `@/lib/itinerary-data`. Sans
+   * rattachement, le document vaut pour tout le voyage (assurance, contacts).
+   */
+  dayId?: string
+  linkedTo?: StoredFile['linkedTo']
 }
 
 const DEMO_DOCUMENT_DEFINITIONS: DemoDocumentDefinition[] = [
   {
     name: 'Billet-avion-aller-Paris-Shanghai.pdf',
+    // Le vol aller arrive le jour 1, qui n'a pas de trajet dans le programme.
+    dayId: 'day-1',
     type: 'application/pdf',
     build: () =>
       buildPdf({
@@ -409,6 +418,8 @@ const DEMO_DOCUMENT_DEFINITIONS: DemoDocumentDefinition[] = [
   },
   {
     name: 'Billet-avion-retour-Shanghai-Paris.pdf',
+    dayId: 'day-20',
+    linkedTo: 'transport',
     type: 'application/pdf',
     build: () =>
       buildPdf({
@@ -446,6 +457,8 @@ const DEMO_DOCUMENT_DEFINITIONS: DemoDocumentDefinition[] = [
   },
   {
     name: 'Confirmation-hotel-Shanghai.pdf',
+    dayId: 'day-1',
+    linkedTo: 'accommodation',
     type: 'application/pdf',
     build: () =>
       buildPdf({
@@ -482,6 +495,8 @@ const DEMO_DOCUMENT_DEFINITIONS: DemoDocumentDefinition[] = [
   },
   {
     name: 'Billet-train-Shanghai-Qingdao.pdf',
+    dayId: 'day-2',
+    linkedTo: 'transport',
     type: 'application/pdf',
     build: () =>
       buildPdf({
@@ -511,6 +526,8 @@ const DEMO_DOCUMENT_DEFINITIONS: DemoDocumentDefinition[] = [
   },
   {
     name: 'Billet-avion-Pekin-Xian.pdf',
+    dayId: 'day-7',
+    linkedTo: 'transport',
     type: 'application/pdf',
     build: () =>
       buildPdf({
@@ -582,6 +599,8 @@ const DEMO_DOCUMENT_DEFINITIONS: DemoDocumentDefinition[] = [
   },
   {
     name: 'Carte-embarquement-Shanghai-Taipei.svg',
+    dayId: 'day-16',
+    linkedTo: 'transport',
     type: 'image/svg+xml',
     build: () =>
       buildBoardingPassSvg({
@@ -662,6 +681,8 @@ export function createDemoDocuments(now: number = Date.now()): StoredFile[] {
       lastModified: addedAt,
       addedAt,
       blob,
+      ...(definition.dayId ? { dayId: definition.dayId } : {}),
+      ...(definition.linkedTo ? { linkedTo: definition.linkedTo } : {}),
     }
   })
 }

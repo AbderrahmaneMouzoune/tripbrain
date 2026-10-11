@@ -166,3 +166,26 @@ describe('generated demo files', () => {
     expect(contacts).toContain('démonstration')
   })
 })
+
+describe('demo document links', () => {
+  it('attaches tickets and bookings to the matching demo days', async () => {
+    const { itinerary } = await import('../itinerary-data')
+    const documents = createDemoDocuments()
+    const byName = (fragment: string) =>
+      documents.find((d) => d.name.includes(fragment))!
+
+    for (const doc of documents) {
+      if (!doc.dayId) continue
+      const day = itinerary.find((d) => d.id === doc.dayId)
+      expect(day, doc.name).toBeDefined()
+      if (doc.linkedTo === 'transport') expect(day!.transport).toBeDefined()
+      if (doc.linkedTo === 'accommodation') {
+        expect(day!.accommodation).toBeDefined()
+      }
+    }
+    expect(byName('train-Shanghai-Qingdao').linkedTo).toBe('transport')
+    expect(byName('hotel-Shanghai').linkedTo).toBe('accommodation')
+    // L'assurance vaut pour tout le voyage.
+    expect(byName('assurance').dayId).toBeUndefined()
+  })
+})

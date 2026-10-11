@@ -83,3 +83,18 @@ self.addEventListener('fetch', (event) => {
     }),
   )
 })
+
+// Toucher un rappel ramène dans l'application : on réutilise un onglet déjà
+// ouvert plutôt que d'en ouvrir un nouveau.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((windows) => {
+        const existing = windows.find((client) => 'focus' in client)
+        if (existing) return existing.focus()
+        return self.clients.openWindow('/')
+      }),
+  )
+})

@@ -83,7 +83,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: 'cover',
-  themeColor: '#2268c7',
+  themeColor: '#f3f7fd',
 }
 
 export default function RootLayout({
@@ -92,7 +92,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="fr">
+    <html lang="fr" className="light" style={{ colorScheme: 'light' }}>
       <head>
         {/*
           `beforeinstallprompt` peut se déclencher avant l'hydratation React :

@@ -3,6 +3,10 @@ import {
   generateICSContent,
   getGoogleCalendarUrl,
   downloadICS,
+  countCalendarEvents,
+  hasScheduledTransport,
+  transportSummary,
+  transportTimeRange,
 } from '../calendar-export'
 import { type DayItinerary } from '../itinerary-data'
 
@@ -386,5 +390,132 @@ describe('downloadICS', () => {
   it('works with an empty days array', () => {
     expect(() => downloadICS([], 'empty.ics')).not.toThrow()
     expect(clickMock).toHaveBeenCalledOnce()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Trajets horodatés (option includeTransports)
+// ---------------------------------------------------------------------------
+
+describe('includeTransports', () => {
+  const flightDay: DayItinerary = {
+    ...minimalDay,
+    id: 'day-7',
+    date: '2026-05-16',
+    dayNumber: 7,
+    city: 'Xi’an',
+    title: 'Quartier musulman',
+    transport: {
+      id: 'tr-day7',
+      type: 'plane',
+      from: 'PKX',
+      to: 'XIY',
+      details: 'CZ8823',
+      departureAddress: 'Aéroport de Daxing',
+      departureTime: '13:00',
+      arrivalTime: '15:10',
+      bookingReference: 'ABC123',
+      terminal: 'T5',
+    },
+  }
+
+  const nightTrainDay: DayItinerary = {
+    ...minimalDay,
+    id: 'day-9',
+    date: '2026-05-18',
+    dayNumber: 9,
+    transport: {
+      id: 'tr-day9',
+      type: 'train',
+      departureTime: '22:30',
+      arrivalTime: '06:15',
+    },
+  }
+
+  const untimedDay: DayItinerary = {
+    ...minimalDay,
+    id: 'day-10',
+    date: '2026-05-19',
+    dayNumber: 10,
+    transport: { id: 'tr-day10', type: 'car', departureTime: 'matin' },
+  }
+
+  it('n’ajoute aucun trajet par défaut (export historique inchangé)', () => {
+    const ics = generateICSContent([flightDay])
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1)
+    expect(ics).not.toContain('DTSTART:2026')
+  })
+
+  it('ajoute un événement horodaté par trajet', () => {
+    const ics = unfoldICS(
+      generateICSContent([flightDay], { includeTransports: true }),
+    )
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2)
+    expect(ics).toContain('DTSTART:20260516T130000')
+    expect(ics).toContain('DTEND:20260516T151000')
+    expect(ics).toContain('SUMMARY:Vol PKX → XIY')
+    expect(ics).toContain('LOCATION:Aéroport de Daxing')
+    expect(ics).toContain('Réservation : ABC123')
+    expect(ics).toContain('UID:tripbrain-transport-7@voyage')
+  })
+
+  it('fait arriver le lendemain un trajet de nuit', () => {
+    const ics = generateICSContent([nightTrainDay], {
+      includeTransports: true,
+    })
+    expect(ics).toContain('DTSTART:20260518T223000')
+    expect(ics).toContain('DTEND:20260519T061500')
+  })
+
+  it('ignore les trajets sans heure de départ exploitable', () => {
+    const ics = generateICSContent([untimedDay, minimalDay], {
+      includeTransports: true,
+    })
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2)
+    expect(hasScheduledTransport(untimedDay)).toBe(false)
+    expect(hasScheduledTransport(flightDay)).toBe(true)
+  })
+
+  it('compte les événements selon l’option', () => {
+    const days = [flightDay, nightTrainDay, untimedDay, minimalDay]
+    expect(countCalendarEvents(days)).toBe(4)
+    expect(countCalendarEvents(days, { includeTransports: true })).toBe(6)
+  })
+
+  it('met en forme l’intitulé et la plage horaire', () => {
+    expect(transportSummary(flightDay.transport!)).toBe('Vol PKX → XIY')
+    expect(transportSummary(nightTrainDay.transport!)).toBe('Train')
+    expect(transportTimeRange(flightDay.transport!)).toBe('13:00–15:10')
+    expect(
+      transportTimeRange({ id: 't', type: 'bus', departureTime: '9:05' }),
+    ).toBe('09:05')
+    expect(transportTimeRange(untimedDay.transport!)).toBeNull()
+  })
+
+  it('transmet l’option au téléchargement', () => {
+    const blobs: string[] = []
+    const OriginalBlob = globalThis.Blob
+    vi.stubGlobal(
+      'Blob',
+      class extends OriginalBlob {
+        constructor(parts: BlobPart[], options?: BlobPropertyBag) {
+          super(parts, options)
+          blobs.push(String(parts[0]))
+        }
+      },
+    )
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:x'),
+      revokeObjectURL: vi.fn(),
+    })
+    vi.stubGlobal('document', {
+      createElement: vi.fn(() => ({ click: vi.fn() })),
+    })
+    try {
+      downloadICS([flightDay], 'jour.ics', { includeTransports: true })
+      expect(blobs[0]).toContain('SUMMARY:Vol PKX → XIY')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
