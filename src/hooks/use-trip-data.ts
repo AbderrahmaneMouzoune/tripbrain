@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { itinerary as mockItinerary } from '@/lib/itinerary-data'
+import { demoItineraryFor } from '@/lib/demo-trip'
 import { removeDemoDocuments, seedDemoDocuments } from '@/lib/demo-documents'
 import { replaceDay } from '@/lib/itinerary-edit'
 import { trackEvent } from '@/lib/analytics/client'
@@ -191,10 +192,12 @@ export function useTripData() {
     } catch {
       // Les documents sont un bonus : la démo s'ouvre sans eux
     }
-    await addTrip(mockItinerary, { source: 'demo', title: DEMO_TRIP_TITLE })
+    // Recalé sur aujourd'hui : la démo montre un voyage en cours, pas fini.
+    const demo = demoItineraryFor(mockItinerary)
+    await addTrip(demo, { source: 'demo', title: DEMO_TRIP_TITLE })
     trackEvent('trip_imported', {
       source: 'demo',
-      ...itineraryVolume(mockItinerary),
+      ...itineraryVolume(demo),
     })
   }, [activate, addTrip])
 

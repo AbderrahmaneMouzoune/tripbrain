@@ -104,10 +104,11 @@ export default function PrivacyPolicyPage() {
           ]}
         />
         <p>
-          Ces données restent jusqu’à ce que tu les effaces : le bouton «
-          Effacer les données » du panneau « Partager &amp; données » les
-          supprime, et vider les données du site depuis ton navigateur produit
-          le même résultat. Personne d’autre, éditeur compris, n’y a accès.
+          Ces données restent jusqu’à ce que tu les effaces : « Supprimer ce
+          voyage », dans le menu du voyage (bouton « … »), efface un voyage ou
+          tout ce qui est enregistré sur l’appareil, et vider les données du
+          site depuis ton navigateur produit le même résultat. Personne d’autre,
+          éditeur compris, n’y a accès.
         </p>
       </LegalSection>
 
@@ -298,8 +299,8 @@ export default function PrivacyPolicyPage() {
         </p>
         <p>
           En pratique, la plupart s’exercent sans nous : tes données de voyage
-          sont sur ton appareil, tu peux les exporter depuis le panneau «
-          Partager &amp; données » et les effacer d’un bouton. Pour la mesure
+          sont sur ton appareil, tu peux les exporter (« Exporter en JSON »,
+          dans le menu du voyage) et les effacer d’un bouton. Pour la mesure
           d’audience, le réglage ci-dessus suffit à l’arrêter. Pour toute autre
           demande, écris à{' '}
           <a
