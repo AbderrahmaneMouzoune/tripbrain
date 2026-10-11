@@ -96,16 +96,37 @@ export function parseDayDate(iso: string): Date {
   return new Date(year, month - 1, day)
 }
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Première et dernière date du voyage. Les extrêmes plutôt que la première et
+ * la dernière journée : un import n'arrive pas forcément dans l'ordre. Les
+ * dates illisibles sont ignorées ; `null` si aucune ne l'est.
+ */
+export function tripDateRange(
+  itinerary: DayItinerary[],
+): { start: string; end: string } | null {
+  let start: string | null = null
+  let end: string | null = null
+  for (const day of itinerary) {
+    const date = day.date?.trim()
+    if (!date || !ISO_DAY.test(date)) continue
+    // Le format AAAA-MM-JJ se compare comme du texte.
+    if (!start || date < start) start = date
+    if (!end || date > end) end = date
+  }
+  return start && end ? { start, end } : null
+}
+
 export function tripStatus(
   itinerary: DayItinerary[],
   today: Date = new Date(),
 ): TripStatus {
-  if (itinerary.length === 0) return 'upcoming'
+  const range = tripDateRange(itinerary)
+  if (!range) return 'upcoming'
   const now = startOfDay(today)
-  const start = startOfDay(parseDayDate(itinerary[0].date))
-  const end = startOfDay(parseDayDate(itinerary[itinerary.length - 1].date))
-  if (now < start) return 'upcoming'
-  if (now > end) return 'past'
+  if (now < startOfDay(parseDayDate(range.start))) return 'upcoming'
+  if (now > startOfDay(parseDayDate(range.end))) return 'past'
   return 'ongoing'
 }
 
@@ -114,6 +135,7 @@ export function summarizeTrip(
   today: Date = new Date(),
 ): TripSummary {
   const cities = tripCities(trip.itinerary)
+  const range = tripDateRange(trip.itinerary)
   return {
     id: trip.id,
     title: trip.title,
@@ -121,8 +143,8 @@ export function summarizeTrip(
     createdAt: trip.createdAt,
     updatedAt: trip.updatedAt,
     isDemo: Boolean(trip.isDemo),
-    startDate: trip.itinerary[0]?.date ?? null,
-    endDate: trip.itinerary[trip.itinerary.length - 1]?.date ?? null,
+    startDate: range?.start ?? null,
+    endDate: range?.end ?? null,
     dayCount: trip.itinerary.length,
     cityCount: cities.length,
     cities,
@@ -168,8 +190,16 @@ export function currentDayIndex(
     (day) => startOfDay(parseDayDate(day.date)) === now,
   )
   if (index >= 0) return index
-  const end = startOfDay(parseDayDate(itinerary[itinerary.length - 1].date))
-  return now > end ? itinerary.length - 1 : 0
+  const range = tripDateRange(itinerary)
+  if (!range) return 0
+  return now > startOfDay(parseDayDate(range.end)) ? itinerary.length - 1 : 0
+}
+
+/** Délai (ms) jusqu'au prochain minuit local. */
+export function msUntilNextMidnight(now: Date = new Date()): number {
+  const midnight = new Date(now)
+  midnight.setHours(24, 0, 0, 0)
+  return midnight.getTime() - now.getTime()
 }
 
 /** Jours entiers entre aujourd'hui et une date (négatif si elle est passée). */

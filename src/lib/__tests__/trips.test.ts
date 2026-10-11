@@ -7,6 +7,8 @@ import {
   sortTripSummaries,
   summarizeTrip,
   tripCities,
+  msUntilNextMidnight,
+  tripDateRange,
   tripStatus,
   type StoredTrip,
 } from '@/lib/trips'
@@ -72,6 +74,43 @@ describe('tripStatus', () => {
     expect(tripStatus(days, today)).toBe('ongoing')
     expect(tripStatus(days, new Date(2026, 4, 29))).toBe('ongoing')
     expect(tripStatus(days, new Date(2026, 5, 2))).toBe('past')
+  })
+})
+
+describe('tripDateRange', () => {
+  it('prend les extrêmes, même dans le désordre', () => {
+    const days = [
+      day('2026-05-12', 'B'),
+      day('2026-05-10', 'A'),
+      day('2026-05-29', 'C'),
+      day('2026-05-20', 'D'),
+    ]
+    expect(tripDateRange(days)).toEqual({
+      start: '2026-05-10',
+      end: '2026-05-29',
+    })
+    // Le dernier jour du tableau n'est pas la fin : le voyage est bien en cours.
+    expect(tripStatus(days, new Date(2026, 4, 25))).toBe('ongoing')
+    expect(summarizeTrip(trip('x', days), today)).toMatchObject({
+      startDate: '2026-05-10',
+      endDate: '2026-05-29',
+    })
+  })
+
+  it('ignore les dates illisibles', () => {
+    const days = [day('', 'A'), day('bientôt', 'B'), day('2026-05-10', 'C')]
+    expect(tripDateRange(days)).toEqual({
+      start: '2026-05-10',
+      end: '2026-05-10',
+    })
+    expect(tripDateRange([day('', 'A')])).toBeNull()
+    expect(tripStatus([day('', 'A')], today)).toBe('upcoming')
+  })
+})
+
+describe('msUntilNextMidnight', () => {
+  it('compte jusqu’au prochain minuit local', () => {
+    expect(msUntilNextMidnight(new Date(2026, 4, 14, 23, 0))).toBe(3_600_000)
   })
 })
 

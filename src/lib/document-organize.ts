@@ -10,6 +10,7 @@
 import type { DayItinerary } from '@/lib/itinerary-data'
 import type { DocumentCategory, StoredFile } from '@/lib/documents-db'
 import { DEMO_DOCUMENT_ID_PREFIX } from '@/lib/demo-documents'
+import type { TripSummary } from '@/lib/trips'
 
 // ---------------------------------------------------------------------------
 // Rattachement
@@ -39,6 +40,27 @@ export function isDocumentInTrip(
   if (file.id.startsWith(DEMO_DOCUMENT_ID_PREFIX)) return isDemoTrip
   if (!file.tripId) return true
   return file.tripId === tripId
+}
+
+/** Document sans voyage : ni d'exemple, ni rangé (antérieur aux voyages multiples). */
+export function isOrphanDocument(file: Pick<StoredFile, 'id' | 'tripId'>) {
+  return !file.tripId && !file.id.startsWith(DEMO_DOCUMENT_ID_PREFIX)
+}
+
+/**
+ * Le voyage auquel rattacher les documents sans voyage, quand il n'y a pas de
+ * doute : le voyage repris de l'ancienne version (le seul qui existait quand
+ * ils ont été ajoutés), sinon l'unique vrai voyage de l'appareil. `null` s'il
+ * faut deviner : ils restent alors visibles partout.
+ */
+export function orphanDocumentsOwner(
+  trips: readonly Pick<TripSummary, 'id' | 'source' | 'isDemo'>[],
+): string | null {
+  const real = trips.filter((trip) => !trip.isDemo)
+  const legacy = real.filter((trip) => trip.source === 'legacy')
+  if (legacy.length === 1) return legacy[0].id
+  if (legacy.length === 0 && real.length === 1) return real[0].id
+  return null
 }
 
 /** Index de la journée à laquelle le document est rattaché, ou -1. */

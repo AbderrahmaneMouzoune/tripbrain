@@ -11,7 +11,7 @@ TripBrain is a **local-first Next.js 16 PWA** — a personal travel companion th
 - **Language**: TypeScript (strict mode)
 - **UI**: React 19, shadcn/ui (new-york style), Tailwind CSS v4, @tabler/icons-react icons
 - **State**: IndexedDB (3 databases: tripbrain, tripbrain-images, tripbrain-documents)
-- **Sharing**: [bucketcode](https://www.npmjs.com/package/bucketcode) on the server (S3/R2 snapshots + sync codes), `qrcode.react` on the client
+- **Sharing**: [@s3nd/core](https://www.npmjs.com/package/@s3nd/core) on the server (S3/R2 snapshots + sync codes), `qrcode.react` on the client
 - **Map**: Leaflet
 - **Testing**: Vitest with `globals: true`
 - **Formatting**: Prettier — single quotes, no semicolons, 2-space indent, Tailwind class sorting
@@ -39,7 +39,7 @@ bun run test:watch     # vitest in watch mode
 5. Import supports **JSON**, **XLSX** (3-sheet workbook: Days/Activities/Transports), and **CSV** (3 files: days.csv/activities.csv/transports.csv). Import logic is in `src/lib/importItinerary.ts`.
 6. A separate IndexedDB database (`tripbrain-images`) caches images for offline use, managed by `useImageCache` hook.
 7. Documents (PDFs, tickets, etc.) are stored in a third IndexedDB database (`tripbrain-documents`), managed by `useDocuments` hook.
-8. **Sharing** (`src/lib/share.ts`) compresses the itinerary to msgpack + deflate + base64url. Under `SHARE_INLINE_LIMIT` chars the whole trip fits in a self-contained QR code (`/?import=<payload>`) and never leaves the device. Above it — or whenever a code to read out loud is asked for — the payload is POSTed to `/api/share`, which stores it as a bucketcode snapshot under an eight-digit code (digits only, so phones show the numeric keypad) and returns it; the receiving device resolves it through `GET /api/share/[code]` (`/?code=<code>` opens the app straight onto it). Bucket credentials stay on the server: see `.env.example` for the required `R2_*` variables.
+8. **Sharing** (`src/lib/share.ts`) compresses the itinerary to msgpack + deflate + base64url. Under `SHARE_INLINE_LIMIT` chars the whole trip fits in a self-contained QR code (`/?import=<payload>`) and never leaves the device. Above it — or whenever a code to read out loud is asked for — the payload is POSTed to `/api/share`, which stores it as an s3nd snapshot under an eight-digit code (digits only, so phones show the numeric keypad) and returns it; the receiving device resolves it through `GET /api/share/[code]` (`/?code=<code>` opens the app straight onto it). Bucket credentials stay on the server: see `.env.example` for the required `R2_*` variables.
 
 8b. **Itineraries come from the marketing site** (`tripbrain.fr`, repo `tripbrain-landing`): its generator turns a trip description into a day-by-day itinerary, then hands it over in the sharing format above. The app links to it from the onboarding screen, « Partager & données » and the import guide (`src/lib/site-links.ts`, event `generator_opened`). The hand-off comes back as `/#import=<payload>&from=generator` — a fragment, so the itinerary reaches no server — read by `readIncomingShare` (`src/lib/share.ts`) alongside `?import=` and `?code=`, and confirmed through the same `ImportShareDialog`. For a desktop → phone hand-off the site POSTs to `/api/share` from its own origin: `src/lib/share-cors.ts` holds the allow-list (`tripbrain.fr`, plus anything in `SHARE_ALLOWED_ORIGINS`).
 

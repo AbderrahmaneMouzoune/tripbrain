@@ -9,12 +9,18 @@ import {
   type ImportProgress,
 } from '@/lib/document-zip'
 import {
+  adoptOrphanDocuments,
   DOCUMENTS_STORE as STORE_NAME,
   openDocumentsDB as openDB,
   type DocumentCategory,
   type StoredFile,
 } from '@/lib/documents-db'
-import { isDocumentInTrip, type DocumentLink } from '@/lib/document-organize'
+import {
+  isDocumentInTrip,
+  isOrphanDocument,
+  orphanDocumentsOwner,
+  type DocumentLink,
+} from '@/lib/document-organize'
 import { useTrip } from '@/components/app/trip-provider'
 
 export type { StoredFile }
@@ -81,7 +87,7 @@ function withLink(file: StoredFile, link: DocumentLink): StoredFile {
  * le voyage ouvert au moment de l'ajout.
  */
 export function useDocuments() {
-  const { activeTripId, isDemo } = useTrip()
+  const { activeTripId, isDemo, trips, isLoading: tripsLoading } = useTrip()
   const [allFiles, setAllFiles] = useState<StoredFile[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -105,6 +111,21 @@ export function useDocuments() {
       listeners.delete(listener)
     }
   }, [loadFiles])
+
+  // Les documents d'avant les voyages multiples rejoignent leur voyage dès
+  // qu'il n'y a pas de doute sur lequel ; sinon ils restent visibles partout.
+  const owner = tripsLoading ? null : orphanDocumentsOwner(trips)
+  const hasOrphans = allFiles.some(isOrphanDocument)
+  useEffect(() => {
+    if (!owner || !hasOrphans) return
+    adoptOrphanDocuments(owner, isOrphanDocument)
+      .then((count) => {
+        if (count > 0) notifyDocumentsChanged()
+      })
+      .catch(() => {
+        // Sans rattachement, ils restent visibles partout : rien de perdu.
+      })
+  }, [owner, hasOrphans])
 
   const files = useMemo(
     () =>

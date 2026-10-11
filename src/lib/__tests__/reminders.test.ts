@@ -1,9 +1,11 @@
 import type { DayItinerary } from '@/lib/itinerary-data'
 import {
   MISSED_EVE_GRACE_MS,
+  computeAllReminders,
   computeReminders,
   nextReminder,
   planReminders,
+  upgradeSentReminderIds,
 } from '../reminders'
 
 const ALL = {
@@ -74,17 +76,17 @@ const local = (y: number, m: number, d: number, h: number, min = 0) =>
   new Date(y, m - 1, d, h, min).getTime()
 
 describe('computeReminders', () => {
-  const reminders = computeReminders(itinerary, ALL)
+  const reminders = computeReminders('t1', itinerary, ALL)
 
   it('reminds the eve of each trip at 20:00 with the departure time', () => {
-    const eve = reminders.find((r) => r.id === 'eve-d2')!
+    const eve = reminders.find((r) => r.id === 't1:eve-d2')!
     expect(eve.at).toBe(local(2026, 5, 10, 20))
     expect(eve.title).toBe('Demain : train Shanghai → Qingdao')
     expect(eve.body).toContain('07:53')
   })
 
   it('stays useful when the departure time is unknown', () => {
-    const eve = reminders.find((r) => r.id === 'eve-d3')!
+    const eve = reminders.find((r) => r.id === 't1:eve-d3')!
     expect(eve.title).toBe('Demain : vol')
     expect(eve.body).not.toMatch(/\d{2}:\d{2}/)
   })
@@ -98,18 +100,18 @@ describe('computeReminders', () => {
 
   it('reminds the check-in on arrival day only', () => {
     const checkIns = reminders.filter((r) => r.kind === 'check-in')
-    expect(checkIns.map((r) => r.id)).toEqual(['checkin-d1'])
+    expect(checkIns.map((r) => r.id)).toEqual(['t1:checkin-d1'])
     expect(checkIns[0].title).toBe('Check-in : Lingju B&B')
   })
 
   it('follows the preferences', () => {
-    const none = computeReminders(itinerary, {
+    const none = computeReminders('t1', itinerary, {
       notifyTransportEve: false,
       notifyMorning: false,
       notifyCheckIn: false,
     })
     expect(none).toEqual([])
-    const evesOnly = computeReminders(itinerary, {
+    const evesOnly = computeReminders('t1', itinerary, {
       ...ALL,
       notifyMorning: false,
       notifyCheckIn: false,
@@ -124,23 +126,23 @@ describe('computeReminders', () => {
 })
 
 describe('planReminders', () => {
-  const reminders = computeReminders(itinerary, ALL)
+  const reminders = computeReminders('t1', itinerary, ALL)
 
   it('schedules only what lies within the horizon', () => {
     const now = local(2026, 5, 10, 7)
     const plan = planReminders(reminders, now, new Set())
     expect(plan.now).toEqual([])
     expect(plan.later.map((r) => r.id)).toEqual([
-      'morning-d1',
-      'checkin-d1',
-      'eve-d2',
+      't1:morning-d1',
+      't1:checkin-d1',
+      't1:eve-d2',
     ])
   })
 
   it('never sends anything retroactively except a recent eve reminder', () => {
     const now = local(2026, 5, 10, 22) // 2 h après la veille du train
     const plan = planReminders(reminders, now, new Set())
-    expect(plan.now.map((r) => r.id)).toEqual(['eve-d2'])
+    expect(plan.now.map((r) => r.id)).toEqual(['t1:eve-d2'])
     expect(plan.now.some((r) => r.kind === 'morning')).toBe(false)
   })
 
@@ -156,13 +158,57 @@ describe('planReminders', () => {
 
   it('never sends the same reminder twice', () => {
     const now = local(2026, 5, 10, 22)
-    const plan = planReminders(reminders, now, new Set(['eve-d2', 'eve-d3']))
+    const plan = planReminders(
+      reminders,
+      now,
+      new Set(['t1:eve-d2', 't1:eve-d3']),
+    )
     expect(plan.now).toEqual([])
-    expect(plan.later.map((r) => r.id)).not.toContain('eve-d3')
+    expect(plan.later.map((r) => r.id)).not.toContain('t1:eve-d3')
   })
 
   it('finds the next reminder', () => {
-    expect(nextReminder(reminders, local(2026, 5, 11, 9))?.id).toBe('eve-d3')
+    expect(nextReminder(reminders, local(2026, 5, 11, 9))?.id).toBe('t1:eve-d3')
     expect(nextReminder(reminders, local(2027, 1, 1, 0))).toBeNull()
+  })
+})
+
+describe('plusieurs voyages', () => {
+  // Deux voyages aux mêmes identifiants de journée (copie, ou deux voyages générés).
+  const later: DayItinerary[] = JSON.parse(
+    JSON.stringify(itinerary).replaceAll('2026-05', '2026-09'),
+  )
+  const reminders = computeAllReminders(
+    [
+      { id: 't1', itinerary },
+      { id: 't2', itinerary: later },
+    ],
+    ALL,
+  )
+
+  it('programme les rappels de tous les voyages, triés', () => {
+    expect(reminders.filter((r) => r.tripId === 't1')).toHaveLength(6)
+    expect(reminders.filter((r) => r.tripId === 't2')).toHaveLength(6)
+    const times = reminders.map((r) => r.at)
+    expect(times).toEqual([...times].sort((a, b) => a - b))
+  })
+
+  it('ne confond pas deux journées de même identifiant', () => {
+    const ids = reminders.map((r) => r.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    // La veille du train du premier voyage envoyée n'éteint pas celle du second.
+    const plan = planReminders(
+      reminders,
+      local(2026, 9, 10, 7),
+      new Set(['t1:eve-d2']),
+    )
+    expect(plan.later.map((r) => r.id)).toContain('t2:eve-d2')
+  })
+
+  it('rattache les rappels déjà envoyés au voyage affiché', () => {
+    expect(upgradeSentReminderIds(['eve-d2', 't2:morning-d1'], 't1')).toEqual([
+      't1:eve-d2',
+      't2:morning-d1',
+    ])
   })
 })

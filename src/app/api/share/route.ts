@@ -4,7 +4,7 @@
 // Le générateur du site vitrine emprunte la même route depuis son origine :
 // toutes les réponses portent donc les en-têtes CORS de `share-cors.ts`.
 
-import { isBucketCodeError, type Bucket } from 'bucketcode'
+import { isS3ndError, type Bucket } from '@s3nd/core'
 import { createRateLimiter, getClientKey } from '@/lib/rate-limit'
 import { corsHeaders, preflightResponse } from '@/lib/share-cors'
 import {
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
         })
       } catch (error) {
         if (
-          isBucketCodeError(error) &&
+          isS3ndError(error) &&
           error.code === 'PRECONDITION_FAILED' &&
           attempt < CODE_ATTEMPTS - 1
         ) {

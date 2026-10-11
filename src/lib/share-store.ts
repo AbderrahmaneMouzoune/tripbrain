@@ -1,8 +1,8 @@
-// Stockage serveur des partages : bucketcode (S3/R2) + codes de synchronisation.
+// Stockage serveur des partages : s3nd (S3/R2) + codes de synchronisation.
 // Les identifiants R2 ne quittent jamais le serveur — le navigateur ne parle
 // qu'à /api/share, il n'y a donc ni CORS à configurer ni signature côté client.
 
-import { createBucket, syncCodeAlphabets, type Bucket } from 'bucketcode'
+import { createBucket, syncCodeAlphabets, type Bucket } from '@s3nd/core'
 import { SHARE_CODE_LENGTH } from '@/lib/share'
 
 /** Nom d'application inscrit dans l'enveloppe du snapshot. */
