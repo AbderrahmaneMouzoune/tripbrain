@@ -19,12 +19,13 @@ import {
 } from 'lucide-react'
 import type { ScreenProps } from '@/components/app/screen-props'
 import { useTrip } from '@/components/app/trip-provider'
-import { useAppNav } from '@/components/app/navigation'
+import { useAppNav, type DayChangeMethod } from '@/components/app/navigation'
 import { useEditSession } from '@/components/app/edit-session'
 import { EditChrome } from '@/components/edit/edit-bar'
 import { MobileScreen } from '@/components/mobile/mobile-screen'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useSwipe } from '@/hooks/use-swipe'
 import { QuickActionsTarget } from '@/components/quick-actions'
 import { useDayEditor } from '@/components/day/use-day-editor'
 import { ReorderableActivities } from '@/components/day/reorderable-activities'
@@ -55,13 +56,25 @@ const headerButton = 'border-border bg-card shrink-0 shadow-none'
 /** Roadbook complet d'une journée, en lecture comme en mode édition. */
 export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
   const { itinerary } = useTrip()
-  const { push, replace, selectDay } = useAppNav()
+  const { push, replace, selectDay, dayDirection } = useAppNav()
   const { isEditing, startEditing, finishEditing, pendingChanges } =
     useEditSession()
   const index = Math.min(Math.max(screen.dayIndex, 0), itinerary.length - 1)
   const editor = useDayEditor(index)
   const day = editor.day
   const [swapOpen, setSwapOpen] = useState(false)
+
+  const goToDay = (target: number, method: DayChangeMethod = 'arrow') => {
+    if (target < 0 || target >= itinerary.length) return
+    selectDay(target, method)
+    replace({ kind: 'day', dayIndex: target })
+  }
+
+  // Balayer l'écran passe d'une journée à l'autre, comme sur Aujourd'hui.
+  const swipe = useSwipe({
+    onSwipeLeft: () => goToDay(index + 1, 'swipe'),
+    onSwipeRight: () => goToDay(index - 1, 'swipe'),
+  })
 
   if (!day) {
     return (
@@ -79,11 +92,6 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
     if (!isEditing) return onClose()
     finishEditing()
     if (pendingChanges === 0) onClose()
-  }
-
-  const goToDay = (target: number) => {
-    selectDay(target, 'arrow')
-    replace({ kind: 'day', dayIndex: target })
   }
 
   const previous = itinerary[index - 1]
@@ -348,8 +356,22 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
   }
 
   return (
-    <div className="bg-background text-foreground flex min-h-dvh flex-col">
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(env(safe-area-inset-bottom)+24px)]">
+    <div
+      className="bg-background text-foreground flex min-h-dvh flex-col"
+      onTouchStart={swipe.onTouchStart}
+      onTouchEnd={swipe.onTouchEnd}
+    >
+      <div
+        key={index}
+        className={cn(
+          'mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(env(safe-area-inset-bottom)+24px)]',
+          dayDirection === 'next'
+            ? 'animate-[slide-in-from-right_0.3s_ease-out_backwards]'
+            : dayDirection === 'previous'
+              ? 'animate-[slide-in-from-left_0.3s_ease-out_backwards]'
+              : undefined,
+        )}
+      >
         {header}
 
         <DayOverviewStrip
