@@ -116,7 +116,13 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
 
   if (view === 'generation' && state.status !== 'idle') {
     if (state.status === 'error' && state.error?.reason === 'not_configured') {
-      return <GeneratorUnavailable onBack={editRequest} onClose={onClose} />
+      return (
+        <GeneratorUnavailable
+          request={state.request}
+          onBack={editRequest}
+          onClose={onClose}
+        />
+      )
     }
     const showResult =
       state.itinerary &&
