@@ -7,7 +7,8 @@
 // modèle est quand même lu en flux côté serveur, pour qu'une longue réponse
 // ne bute pas sur un délai d'attente.
 //
-// Rien du voyage n'est journalisé, ni l'itinéraire ni la demande.
+// Rien du voyage n'est journalisé, ni l'itinéraire ni la demande : seulement
+// la consommation de l'appel (jetons, modèle, durée).
 
 import {
   completeText,
@@ -88,6 +89,7 @@ export async function POST(request: Request) {
   try {
     ;({ text } = await completeText(
       buildRefinePrompt(itinerary, instruction, startDate),
+      { route: 'refine', days: itinerary.days.length },
       request.signal,
     ))
   } catch (error) {

@@ -7,7 +7,8 @@
 // elle est ajoutée en fin de flux derrière `STREAM_ERROR_MARKER`.
 //
 // Rien du voyage n'est journalisé : ni la description, ni le brief, ni la
-// réponse. Seule la cause d'un échec l'est.
+// réponse. Seules la cause d'un échec et la consommation de l'appel (jetons,
+// modèle, durée) le sont.
 
 import {
   generatorModel,
@@ -26,6 +27,7 @@ import {
 } from '@/lib/generator/itinerary-prompt'
 import { checkGeneratorOrigin } from '@/lib/generator/origin'
 import {
+  expectedDays,
   firstIssueMessage,
   generateRequestSchema,
 } from '@/lib/generator/requests'
@@ -109,7 +111,15 @@ export async function POST(request: Request) {
 
   let chunks: Awaited<ReturnType<typeof openCompletion>>
   try {
-    chunks = await openCompletion(prompt, upstream.signal)
+    chunks = await openCompletion(
+      prompt,
+      {
+        route: 'generate',
+        mode: input.mode,
+        days: expectedDays(input),
+      },
+      upstream.signal,
+    )
   } catch (error) {
     const { reason } = toGeneratorError(error)
     console.error('Génération impossible', { reason, model: generatorModel() })
