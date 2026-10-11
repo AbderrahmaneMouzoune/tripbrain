@@ -20,8 +20,13 @@ import { transportLabel } from '@/lib/document-organize'
 export type ReminderKind = 'transport-eve' | 'morning' | 'check-in'
 
 export interface Reminder {
-  /** Stable d'un calcul à l'autre : sert à ne jamais envoyer deux fois. */
+  /**
+   * Stable d'un calcul à l'autre : sert à ne jamais envoyer deux fois. Préfixé
+   * par le voyage, car les identifiants de journée (`day-1`…) ne sont uniques
+   * qu'à l'intérieur d'un voyage.
+   */
   id: string
+  tripId: string
   kind: ReminderKind
   /** Horodatage (ms) de l'envoi prévu. */
   at: number
@@ -64,18 +69,22 @@ function plural(count: number, word: string): string {
   return `${count} ${word}${count > 1 ? 's' : ''}`
 }
 
+type ReminderPreferences = Pick<
+  Preferences,
+  'notifyTransportEve' | 'notifyMorning' | 'notifyCheckIn'
+>
+
 /**
  * Tous les rappels du voyage selon les préférences, triés par heure d'envoi
  * (passés compris : le tri entre passé et futur revient à `planReminders`).
  */
 export function computeReminders(
+  tripId: string,
   itinerary: DayItinerary[],
-  preferences: Pick<
-    Preferences,
-    'notifyTransportEve' | 'notifyMorning' | 'notifyCheckIn'
-  >,
+  preferences: ReminderPreferences,
 ): Reminder[] {
   const reminders: Reminder[] = []
+  const reminderId = (key: string) => `${tripId}:${key}`
 
   itinerary.forEach((day, dayIndex) => {
     if (!day.date) return
@@ -84,7 +93,8 @@ export function computeReminders(
       const departure = readTime(day.transport.departureTime)
       const { hour, minute } = REMINDER_TIMES.transportEve
       reminders.push({
-        id: `eve-${day.id}`,
+        id: reminderId(`eve-${day.id}`),
+        tripId,
         kind: 'transport-eve',
         at: at(day.date, hour, minute, -1),
         dayIndex,
@@ -99,7 +109,8 @@ export function computeReminders(
       const { hour, minute } = REMINDER_TIMES.morning
       const count = day.activities.length
       reminders.push({
-        id: `morning-${day.id}`,
+        id: reminderId(`morning-${day.id}`),
+        tripId,
         kind: 'morning',
         at: at(day.date, hour, minute),
         dayIndex,
@@ -121,7 +132,8 @@ export function computeReminders(
     ) {
       const { hour, minute } = REMINDER_TIMES.checkIn
       reminders.push({
-        id: `checkin-${day.id}`,
+        id: reminderId(`checkin-${day.id}`),
+        tripId,
         kind: 'check-in',
         at: at(day.date, hour, minute),
         dayIndex,
@@ -132,6 +144,21 @@ export function computeReminders(
   })
 
   return reminders.sort((a, b) => a.at - b.at)
+}
+
+/**
+ * Les rappels de tous les voyages de l'appareil, pas seulement du voyage
+ * affiché : consulter un ancien voyage ne doit pas faire taire celui en cours.
+ * Les voyages passés ne produisent que des rappels passés, que
+ * `planReminders` écarte.
+ */
+export function computeAllReminders(
+  trips: readonly { id: string; itinerary: DayItinerary[] }[],
+  preferences: ReminderPreferences,
+): Reminder[] {
+  return trips
+    .flatMap((trip) => computeReminders(trip.id, trip.itinerary, preferences))
+    .sort((a, b) => a.at - b.at)
 }
 
 export interface ReminderPlan {
@@ -181,6 +208,33 @@ export function nextReminder(
 const SENT_KEY = 'tripbrain-reminders-sent'
 /** Au-delà, les plus anciens identifiants sont oubliés. */
 const SENT_LIMIT = 200
+
+/**
+ * Les rappels envoyés avant les voyages multiples n'ont pas de préfixe de
+ * voyage : ils ne pouvaient venir que du voyage alors affiché, on les lui
+ * rattache. Sans cela, ils seraient soit renvoyés, soit (gardés tels quels)
+ * pris pour ceux d'un autre voyage aux identifiants de journée identiques.
+ */
+export function upgradeSentReminderIds(
+  ids: readonly string[],
+  tripId: string,
+): string[] {
+  return ids.map((id) => (id.includes(':') ? id : `${tripId}:${id}`))
+}
+
+/** Applique `upgradeSentReminderIds` au registre de l'appareil, une seule fois. */
+export function migrateSentReminders(tripId: string): void {
+  try {
+    const sent = [...readSentReminders()]
+    if (sent.every((id) => id.includes(':'))) return
+    localStorage.setItem(
+      SENT_KEY,
+      JSON.stringify(upgradeSentReminderIds(sent, tripId)),
+    )
+  } catch {
+    // Au pire, un rappel de veille récent repartirait une fois.
+  }
+}
 
 export function readSentReminders(): Set<string> {
   try {

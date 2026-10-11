@@ -5,8 +5,9 @@ import { useTrip } from '@/components/app/trip-provider'
 import { usePreferences } from '@/hooks/use-preferences'
 import { trackEvent } from '@/lib/analytics/client'
 import {
-  computeReminders,
+  computeAllReminders,
   markReminderSent,
+  migrateSentReminders,
   planReminders,
   readSentReminders,
   type Reminder,
@@ -62,7 +63,7 @@ function deliver(reminder: Reminder) {
 
 /**
  * Programme les rappels locaux (veille d'un trajet, programme du matin,
- * check-in) tant que l'application est ouverte.
+ * check-in) de tous les voyages, tant que l'application est ouverte.
  *
  * Limite : sans application native ni push serveur, un `setTimeout` ne survit
  * pas à la fermeture de l'onglet, et le système suspend vite une page en
@@ -70,19 +71,27 @@ function deliver(reminder: Reminder) {
  * été très récemment. Voir `@/lib/reminders` pour le détail du calcul.
  */
 export function ReminderScheduler() {
-  const { itinerary } = useTrip()
+  const { storedTrips, activeTripId } = useTrip()
   const { preferences } = usePreferences()
   const { notifyTransportEve, notifyMorning, notifyCheckIn } = preferences
 
+  // Tous les voyages, pas seulement celui affiché : consulter un voyage passé
+  // ne doit pas faire taire les rappels de celui en cours.
   const reminders = useMemo(
     () =>
-      computeReminders(itinerary, {
+      computeAllReminders(storedTrips, {
         notifyTransportEve,
         notifyMorning,
         notifyCheckIn,
       }),
-    [itinerary, notifyTransportEve, notifyMorning, notifyCheckIn],
+    [storedTrips, notifyTransportEve, notifyMorning, notifyCheckIn],
   )
+
+  // Les rappels envoyés avant les voyages multiples venaient du voyage
+  // affiché : ils lui sont rattachés avant toute planification.
+  useEffect(() => {
+    if (activeTripId) migrateSentReminders(activeTripId)
+  }, [activeTripId])
 
   useEffect(() => {
     if (reminders.length === 0) return

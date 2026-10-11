@@ -11,6 +11,7 @@ import {
   createTripId,
   currentDayIndex,
   deriveTripTitle,
+  msUntilNextMidnight,
   pickDefaultTrip,
   sortTripSummaries,
   summarizeTrip,
@@ -50,6 +51,41 @@ export interface ImportSharedOptions {
   source?: TripSource
 }
 
+/** La date du jour, renouvelée à minuit et quand l'application revient au premier plan. */
+function useToday(): Date {
+  const [today, setToday] = useState(() => new Date())
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    const refresh = () => {
+      setToday((current) =>
+        current.toDateString() === new Date().toDateString()
+          ? current
+          : new Date(),
+      )
+    }
+    const arm = () => {
+      clearTimeout(timer)
+      // Une seconde de marge : le minuteur peut partir un peu en avance.
+      timer = setTimeout(() => {
+        refresh()
+        arm()
+      }, msUntilNextMidnight() + 1000)
+    }
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      refresh()
+      arm()
+    }
+    arm()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [])
+  return today
+}
+
 export function useTripData() {
   const [isLoading, setIsLoading] = useState(true)
   const [trips, setTrips] = useState<StoredTrip[]>([])
@@ -74,9 +110,13 @@ export function useTripData() {
   const hasData = itinerary.length > 0
   const isDemo = Boolean(activeTrip?.isDemo)
 
+  // En cours, à venir ou passé dépend du jour : la liste se recalcule à
+  // minuit et au retour au premier plan, l'application pouvant rester
+  // ouverte (ou suspendue) d'un jour à l'autre.
+  const today = useToday()
   const summaries = useMemo<TripSummary[]>(
-    () => sortTripSummaries(trips.map((trip) => summarizeTrip(trip))),
-    [trips],
+    () => sortTripSummaries(trips.map((trip) => summarizeTrip(trip, today))),
+    [trips, today],
   )
 
   const tripStartDate = useMemo(
@@ -422,6 +462,8 @@ export function useTripData() {
     tripStartDate,
     tripEndDate,
     trips: summaries,
+    /** Voyages complets (itinéraires compris), pour ce qui les sert tous : les rappels. */
+    storedTrips: trips,
     activeTrip,
     activeTripId,
     loadMockData,
