@@ -2,7 +2,7 @@
 // itinéraire compressé. Le contenu reste opaque pour le serveur — c'est le
 // navigateur qui le décompresse.
 
-import { isBucketCodeError, type Bucket } from 'bucketcode'
+import { isS3ndError, type Bucket } from '@s3nd/core'
 import { createRateLimiter, getClientKey } from '@/lib/rate-limit'
 import {
   SHARE_SCHEMA_VERSION,
@@ -72,7 +72,7 @@ export async function GET(
       { headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (error) {
-    if (isBucketCodeError(error)) {
+    if (isS3ndError(error)) {
       if (error.code === 'INVALID_SYNC_CODE') {
         return Response.json({ error: 'Code invalide.' }, { status: 400 })
       }
