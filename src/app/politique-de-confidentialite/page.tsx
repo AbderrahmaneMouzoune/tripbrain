@@ -150,6 +150,40 @@ export default function PrivacyPolicyPage() {
         </p>
       </LegalSection>
 
+      <LegalSection id="voyage-de-groupe" title="Quand tu voyages à plusieurs">
+        <p>
+          Un voyage synchronisé est la seule exception à « tout reste sur ton
+          appareil » : pour que chacun reçoive les modifications des autres,
+          l’itinéraire est gardé sur le même espace de stockage que les
+          partages, sous un identifiant aléatoire de 128 bits. Il ne s’active
+          que si tu le demandes, voyage par voyage.
+        </p>
+        <LegalDefinitionList
+          items={[
+            {
+              term: 'Ce qui est gardé',
+              description:
+                'L’itinéraire compressé, son titre et, si tu l’as indiqué, le prénom de la dernière personne qui l’a modifié. Tes documents et tes photos ne sont jamais envoyés.',
+            },
+            {
+              term: 'Combien de temps',
+              description:
+                'Tant que le voyage est modifié : sans aucune modification pendant 400 jours, il est effacé. Arrêter la synchronisation sur ton téléphone ne l’efface pas pour les autres voyageurs.',
+            },
+            {
+              term: 'Qui peut le lire',
+              description:
+                'Toute personne qui a le lien d’invitation peut lire et modifier le voyage. Ne l’envoie qu’à tes compagnons de voyage.',
+            },
+            {
+              term: 'Base légale',
+              description:
+                'L’exécution d’une action que tu as demandée (art. 6.1.b du RGPD).',
+            },
+          ]}
+        />
+      </LegalSection>
+
       <LegalSection id="mesure-audience" title="Mesure d’audience">
         <p>
           Pour savoir quels écrans servent vraiment et où le parcours coince,{' '}

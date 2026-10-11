@@ -19,6 +19,11 @@ export interface Preferences {
   tipsSeen: string[]
   /** L'utilisateur a passé toutes les astuces d'un coup. */
   tipsDismissed: boolean
+  /**
+   * Prénom montré aux autres voyageurs d'un voyage de groupe (« Léa a mis le
+   * programme à jour »). Facultatif : vide, les modifications restent anonymes.
+   */
+  travelerName: string
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -28,6 +33,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   wifiOnly: false,
   tipsSeen: [],
   tipsDismissed: false,
+  travelerName: '',
 }
 
 const STORAGE_KEY = 'tripbrain-preferences'

@@ -98,11 +98,12 @@ export function ReceiveFlow({
       )
       setBusy(true)
       try {
-        const days = await resolveIncomingShare(incoming)
+        const { days, group } = await resolveIncomingShare(incoming)
         push({
           kind: 'preview',
           received: {
             days,
+            ...(group ? { group, title: group.state.title || undefined } : {}),
             source: fromGenerator ? 'generator' : 'share',
             via: fromGenerator ? 'generator' : via,
             analytics: { kind: 'share', source },

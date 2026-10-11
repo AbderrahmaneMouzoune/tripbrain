@@ -131,7 +131,8 @@ export function TripPreviewStep({
   progress?: { step: number; total: number }
   eyebrow?: string
 }) {
-  const { trips, activeTrip, addTrip, importSharedItinerary } = useTrip()
+  const { trips, activeTrip, addTrip, importSharedItinerary, joinGroupTrip } =
+    useTrip()
   const [mode, setMode] = useState<ImportMode>('add')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -150,8 +151,10 @@ export function TripPreviewStep({
   // d'elle-même dès qu'un voyage est ajouté.
   const realTrips = trips.filter((trip) => !trip.isDemo)
   const activeSummary = trips.find((trip) => trip.id === activeTrip?.id)
+  const joining = received.group
+  // Un voyage de groupe se rejoint, il ne remplace jamais un voyage existant.
   const canReplace = Boolean(
-    activeTrip && !activeTrip.isDemo && realTrips.length > 0,
+    !joining && activeTrip && !activeTrip.isDemo && realTrips.length > 0,
   )
 
   const counters = [
@@ -172,7 +175,13 @@ export function TripPreviewStep({
     setError(null)
     const effectiveMode: ImportMode = canReplace ? mode : 'add'
     try {
-      if (received.analytics.kind === 'share') {
+      if (joining) {
+        await joinGroupTrip(days, joining.id, joining.state)
+        trackEvent('share_import_completed', {
+          source: 'group',
+          days_count: days.length,
+        })
+      } else if (received.analytics.kind === 'share') {
         await importSharedItinerary(days, {
           mode: effectiveMode,
           title: received.title,
@@ -231,8 +240,20 @@ export function TripPreviewStep({
       backIcon={backIcon}
       progress={progress}
       eyebrow={eyebrow}
-      title={canReplace ? 'Importer ce voyage ?' : 'Voici votre voyage'}
-      description={`${subtitle} · vérifiez avant d’enregistrer`}
+      title={
+        joining
+          ? 'Rejoindre ce voyage ?'
+          : canReplace
+            ? 'Importer ce voyage ?'
+            : 'Voici votre voyage'
+      }
+      description={
+        joining
+          ? joining.state.author
+            ? `${joining.state.author} vous invite · le programme restera à jour chez chacun`
+            : 'Invitation reçue · le programme restera à jour chez chacun'
+          : `${subtitle} · vérifiez avant d’enregistrer`
+      }
       footer={
         <>
           <Button
@@ -244,9 +265,11 @@ export function TripPreviewStep({
             {canReplace && <Download aria-hidden />}
             {saving
               ? 'Enregistrement…'
-              : canReplace
-                ? 'Importer'
-                : 'Enregistrer sur ce téléphone'}
+              : joining
+                ? 'Rejoindre le voyage'
+                : canReplace
+                  ? 'Importer'
+                  : 'Enregistrer sur ce téléphone'}
           </Button>
           <Button
             variant="ghost"

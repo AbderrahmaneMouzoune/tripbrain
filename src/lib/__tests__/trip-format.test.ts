@@ -23,6 +23,7 @@ function summary(partial: Partial<TripSummary>): TripSummary {
     createdAt: 0,
     updatedAt: 0,
     isDemo: false,
+    isGroup: false,
     startDate: '2026-05-10',
     endDate: '2026-05-29',
     dayCount: 20,

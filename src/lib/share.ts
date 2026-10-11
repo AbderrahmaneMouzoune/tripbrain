@@ -12,6 +12,7 @@
 
 import { encode, decode } from '@msgpack/msgpack'
 import { deflateSync, inflateSync } from 'fflate'
+import { readGroupInvite } from '@/lib/group-sync'
 import type { DayItinerary } from '@/lib/itinerary-data'
 
 /** Au-delà, un QR code inline devient trop dense pour être scanné confortablement. */
@@ -318,6 +319,8 @@ export interface IncomingShare {
   payload?: string
   /** Code d'un partage déposé sur le serveur. */
   code?: string
+  /** Invitation à un voyage de groupe (`?groupe=`), voir `group-sync.ts`. */
+  group?: string
   origin?: ShareOrigin
 }
 
@@ -329,9 +332,10 @@ function toOrigin(value: string | null): ShareOrigin | undefined {
 /**
  * Lit l'itinéraire qu'une URL d'arrivée transporte, où qu'il se trouve.
  *
- * Trois chemins y mènent :
+ * Quatre chemins y mènent :
  *   • `?import=` — QR code autonome produit par un autre appareil ;
  *   • `?code=` — partage déposé sur le serveur, à résoudre ;
+ *   • `?groupe=` — invitation à un voyage synchronisé ;
  *   • `#import=` — passage depuis le générateur du site.
  *
  * Le fragment existe pour ce dernier cas : un itinéraire généré pèse bien plus
@@ -348,6 +352,8 @@ export function readIncomingShare(
 
   const payload = fragment.get('import') ?? query.get('import')
   const code = query.get('code')
+  const group = readGroupInvite(search)
+  if (group && !payload && !code) return { group }
   if (!payload && !code) return null
 
   return {

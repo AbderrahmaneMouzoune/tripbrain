@@ -8,6 +8,7 @@
  * React dans `useTripData`.
  */
 
+import type { TripGroup } from '@/lib/group-sync'
 import type { DayItinerary } from '@/lib/itinerary-data'
 
 /** D'où vient un voyage : sert l'affichage (« Généré il y a 2 jours ») et la mesure. */
@@ -29,6 +30,8 @@ export interface StoredTrip {
   updatedAt: number
   /** Voyage d'exemple : ses documents de démo partent avec lui. */
   isDemo?: boolean
+  /** Voyage tenu à jour avec d'autres voyageurs (voir `group-sync.ts`). */
+  group?: TripGroup
 }
 
 /** Ce qu'il faut pour lister les voyages, sans traîner tout l'itinéraire. */
@@ -39,6 +42,8 @@ export interface TripSummary {
   createdAt: number
   updatedAt: number
   isDemo: boolean
+  /** Synchronisé avec d'autres voyageurs. */
+  isGroup: boolean
   startDate: string | null
   endDate: string | null
   dayCount: number
@@ -143,6 +148,7 @@ export function summarizeTrip(
     createdAt: trip.createdAt,
     updatedAt: trip.updatedAt,
     isDemo: Boolean(trip.isDemo),
+    isGroup: Boolean(trip.group),
     startDate: range?.start ?? null,
     endDate: range?.end ?? null,
     dayCount: trip.itinerary.length,

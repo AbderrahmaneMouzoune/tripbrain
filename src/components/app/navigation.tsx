@@ -40,6 +40,8 @@ export type AppScreen =
   | { kind: 'menu' }
   | { kind: 'trips' }
   | { kind: 'share' }
+  /** Voyager à plusieurs : synchronisation et invitations. */
+  | { kind: 'group' }
   /** Recevoir un partage : code à saisir ou QR code à scanner. */
   | { kind: 'receive'; method?: 'code' | 'scan' }
   | { kind: 'calendar'; dayIndex?: number }
@@ -70,6 +72,7 @@ export const SCREENS_WITH_TAB_BAR: ReadonlySet<AppScreenKind> =
     'menu',
     'trips',
     'share',
+    'group',
     'settings',
     'offline',
   ])

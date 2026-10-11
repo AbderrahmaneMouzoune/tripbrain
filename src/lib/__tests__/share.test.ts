@@ -476,3 +476,13 @@ describe('fetchSharedItinerary', () => {
     )
   })
 })
+
+describe('readIncomingShare — invitation de groupe', () => {
+  const id = 'AbCdEfGhIjKlMnOpQrStUv'
+  it('lit une invitation à un voyage synchronisé', () => {
+    expect(readIncomingShare(`?groupe=${id}`, '')).toEqual({ group: id })
+  })
+  it('ignore un identifiant de groupe malformé', () => {
+    expect(readIncomingShare('?groupe=court', '')).toBeNull()
+  })
+})

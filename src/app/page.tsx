@@ -6,6 +6,7 @@ import { TripProvider, useTrip } from '@/components/app/trip-provider'
 import { NavigationProvider, useAppNav } from '@/components/app/navigation'
 import { EditSessionProvider } from '@/components/app/edit-session'
 import { ScreenHost } from '@/components/app/screen-host'
+import { GroupChangeNotice } from '@/components/app/group-change-notice'
 import { BottomTabBar, TAB_BAR_SPACER } from '@/components/app/bottom-tab-bar'
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow'
 import { DemoChrome } from '@/components/onboarding/demo-chrome'
@@ -48,6 +49,7 @@ function TripShell() {
         <div aria-hidden className={TAB_BAR_SPACER} />
         <BottomTabBar />
         <ReminderScheduler />
+        <GroupChangeNotice />
       </main>
       {/* Dans le fournisseur : les photos des écrans empilés profitent du cache hors ligne. */}
       <ScreenHost />
