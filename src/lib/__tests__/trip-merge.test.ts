@@ -126,3 +126,22 @@ describe('deepEqual', () => {
     expect(deepEqual([1, 2], [2, 1])).toBe(false)
   })
 })
+
+describe('brouillon du mode édition', () => {
+  it('intègre une modification reçue sans perdre les siennes à l’annulation', () => {
+    // Photo prise à l'entrée en édition.
+    const baseline = base
+    // J'ai renommé le jour 1 pendant l'édition.
+    const mine = edit(base, (d) => {
+      d[0].title = 'Tokyo, quartier par quartier'
+    })
+    // Karim ajoute une activité au jour 2 ; la version reçue garde mon titre.
+    const after = edit(mine, (d) => {
+      d[1].activities.push({ id: 'a9', name: 'Nishiki' })
+    })
+    const rebased = mergeThreeWay(mine, baseline, after).value
+    // Annuler restaure ce brouillon : mon titre disparaît, l'ajout de Karim reste.
+    expect(rebased[0].title).toBe('Tokyo')
+    expect(rebased[1].activities.map((a) => a.id)).toEqual(['a3', 'a9'])
+  })
+})

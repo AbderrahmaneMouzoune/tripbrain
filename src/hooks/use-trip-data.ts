@@ -120,9 +120,19 @@ export function useTripData() {
    */
   const [tripRevision, setTripRevision] = useState(0)
 
-  // Toujours la dernière liste, pour les écritures enchaînées sans attendre un rendu.
+  // Toujours la dernière liste, pour les écritures enchaînées sans attendre un
+  // rendu. Mise à jour en même temps que l'état (`commitTrips`), jamais au
+  // rendu : la synchronisation enchaîne plusieurs tours sans rendu entre eux,
+  // et une liste en retard d'un tour lui faisait renvoyer une copie déjà
+  // envoyée, en boucle.
   const tripsRef = useRef<StoredTrip[]>([])
-  tripsRef.current = trips
+  const commitTrips = useCallback(
+    (update: (list: StoredTrip[]) => StoredTrip[]) => {
+      tripsRef.current = update(tripsRef.current)
+      setTrips(tripsRef.current)
+    },
+    [],
+  )
 
   const activeTrip = useMemo(
     () => trips.find((trip) => trip.id === activeTripId) ?? null,
@@ -164,7 +174,7 @@ export function useTripData() {
     readAllTrips()
       .then((stored) => {
         if (cancelled) return
-        setTrips(stored)
+        commitTrips(() => stored)
         const remembered = readActiveTripId()
         const id =
           remembered && stored.some((trip) => trip.id === remembered)
@@ -185,35 +195,42 @@ export function useTripData() {
   }, [])
 
   /** Écrit un voyage et l'insère (ou le remplace) dans la liste en mémoire. */
-  const persistTrip = useCallback(async (trip: StoredTrip) => {
-    await writeTrip(trip)
-    setTrips((current) => {
-      const exists = current.some((item) => item.id === trip.id)
-      return exists
-        ? current.map((item) => (item.id === trip.id ? trip : item))
-        : [...current, trip]
-    })
-  }, [])
+  const persistTrip = useCallback(
+    async (trip: StoredTrip) => {
+      await writeTrip(trip)
+      commitTrips((current) => {
+        const exists = current.some((item) => item.id === trip.id)
+        return exists
+          ? current.map((item) => (item.id === trip.id ? trip : item))
+          : [...current, trip]
+      })
+    },
+    [commitTrips],
+  )
 
   const {
     groupSyncStatus,
     remoteChange,
+    remoteApplied,
     dismissRemoteChange,
     requestGroupSync,
   } = useGroupSync({ tripsRef, activeTripId, persistTrip })
 
   /** Retire un voyage ; s'il s'agit de la démo, ses documents d'exemple partent avec. */
-  const removeTrip = useCallback(async (trip: StoredTrip) => {
-    await deleteTripRecord(trip.id)
-    if (trip.isDemo) {
-      try {
-        await removeDemoDocuments()
-      } catch {
-        // Bonus : ne jamais bloquer la suppression sur les documents
+  const removeTrip = useCallback(
+    async (trip: StoredTrip) => {
+      await deleteTripRecord(trip.id)
+      if (trip.isDemo) {
+        try {
+          await removeDemoDocuments()
+        } catch {
+          // Bonus : ne jamais bloquer la suppression sur les documents
+        }
       }
-    }
-    setTrips((current) => current.filter((item) => item.id !== trip.id))
-  }, [])
+      commitTrips((current) => current.filter((item) => item.id !== trip.id))
+    },
+    [commitTrips],
+  )
 
   /**
    * Enregistre un nouveau voyage. Ajouter un vrai voyage pendant la démo fait
@@ -350,7 +367,14 @@ export function useTripData() {
       const source = options.source ?? 'share'
       const current = tripsRef.current.find((trip) => trip.id === activeTripId)
 
-      if (options.mode === 'replace' && current && !current.isDemo) {
+      // Un voyage synchronisé n'est jamais remplacé : ce serait écraser le
+      // programme de tout le groupe. Le voyage reçu s'ajoute à côté.
+      if (
+        options.mode === 'replace' &&
+        current &&
+        !current.isDemo &&
+        !current.group
+      ) {
         await persistTrip(
           touched(current, {
             itinerary: days,
@@ -378,28 +402,31 @@ export function useTripData() {
       const current = tripsRef.current.find((trip) => trip.id === activeTripId)
       if (!current) return
       const updated = touched(current, { itinerary: next })
-      setTrips((list) =>
+      commitTrips((list) =>
         list.map((trip) => (trip.id === updated.id ? updated : trip)),
       )
       try {
         await writeTrip(updated)
       } catch (error) {
-        setTrips((list) =>
+        commitTrips((list) =>
           list.map((trip) => (trip.id === current.id ? current : trip)),
         )
         throw error
       }
       if (updated.group) requestGroupSync()
     },
-    [activeTripId, requestGroupSync],
+    [activeTripId, commitTrips, requestGroupSync],
   )
 
   /** Remplace un jour édité depuis l'interface, puis persiste l'itinéraire. */
   const updateDay = useCallback(
     async (day: DayItinerary) => {
-      await replaceItinerary(replaceDay(itinerary, day))
+      // La liste à jour, pas celle du dernier rendu : une version reçue du
+      // groupe entre-temps ne doit pas être écrasée par une copie en retard.
+      const current = tripsRef.current.find((trip) => trip.id === activeTripId)
+      await replaceItinerary(replaceDay(current?.itinerary ?? itinerary, day))
     },
-    [itinerary, replaceItinerary],
+    [activeTripId, itinerary, replaceItinerary],
   )
 
   const switchTrip = useCallback(
@@ -558,9 +585,9 @@ export function useTripData() {
     } catch {
       // Ignorer : l'essentiel est d'effacer les voyages
     }
-    setTrips([])
+    commitTrips(() => [])
     activate(null)
-  }, [activate])
+  }, [activate, commitTrips])
 
   const getCurrentDayIndex = useCallback(
     (): number => currentDayIndex(itinerary),
@@ -578,6 +605,7 @@ export function useTripData() {
     trips: summaries,
     groupSyncStatus,
     remoteChange,
+    remoteApplied,
     dismissRemoteChange,
     requestGroupSync,
     enableGroup,

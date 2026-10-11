@@ -124,9 +124,11 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
         await enableGroup(activeTrip.id)
       } catch (err) {
         setError(
-          err instanceof Error
-            ? err.message
-            : 'La synchronisation n’a pas pu démarrer.',
+          err instanceof TypeError || !navigator.onLine
+            ? 'Pas de connexion : la synchronisation démarrera une fois en ligne. Réessayez à ce moment-là.'
+            : err instanceof Error
+              ? err.message
+              : 'La synchronisation n’a pas pu démarrer.',
         )
       } finally {
         setBusy(false)
@@ -363,8 +365,10 @@ function SyncState({
   message?: string
   onRetry: () => void
 }) {
+  // Une simple vérification (toutes les 30 s) ne mérite pas d'être
+  // affichée : seul un envoi en cours se voit.
   const view =
-    state === 'syncing'
+    state === 'syncing' && dirty
       ? {
           icon: <Loader2 className="size-4 animate-spin" aria-hidden />,
           text: dirty ? 'Envoi de vos modifications…' : 'Vérification…',

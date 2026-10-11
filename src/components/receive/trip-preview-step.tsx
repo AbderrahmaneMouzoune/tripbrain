@@ -153,8 +153,14 @@ export function TripPreviewStep({
   const activeSummary = trips.find((trip) => trip.id === activeTrip?.id)
   const joining = received.group
   // Un voyage de groupe se rejoint, il ne remplace jamais un voyage existant.
+  // Ni un voyage synchronisé : le remplacer écraserait le programme de tout
+  // le groupe.
   const canReplace = Boolean(
-    !joining && activeTrip && !activeTrip.isDemo && realTrips.length > 0,
+    !joining &&
+    activeTrip &&
+    !activeTrip.isDemo &&
+    !activeTrip.group &&
+    realTrips.length > 0,
   )
 
   const counters = [

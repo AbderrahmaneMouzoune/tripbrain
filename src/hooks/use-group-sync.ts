@@ -13,6 +13,7 @@ import { cleanAuthor, fetchGroup, pushGroup } from '@/lib/group-sync'
 import { readPreferences } from '@/lib/preferences'
 import { compressItinerary, decompressItinerary } from '@/lib/share'
 import { deepEqual, mergeThreeWay } from '@/lib/trip-merge'
+import type { DayItinerary } from '@/lib/itinerary-data'
 import type { StoredTrip } from '@/lib/trips'
 
 /** Intervalle de vérification tant que l'application est à l'écran. */
@@ -32,6 +33,18 @@ export interface GroupSyncStatus {
   /** Dernière vérification réussie (ms), modifications reçues ou non. */
   checkedAt: number | null
   message?: string
+}
+
+/**
+ * Contenu d'un voyage remplacé par une version venue du groupe : avant et
+ * après. Ce qui garde une copie du programme (le brouillon du mode édition)
+ * s'en sert pour intégrer ces changements au lieu de les écraser.
+ */
+export interface RemoteApplied {
+  tripId: string
+  before: DayItinerary[]
+  after: DayItinerary[]
+  at: number
 }
 
 /** Modifications reçues d'un autre voyageur, à signaler une fois. */
@@ -68,6 +81,7 @@ export function useGroupSync({
     checkedAt: null,
   })
   const [remoteChange, setRemoteChange] = useState<RemoteChange | null>(null)
+  const [remoteApplied, setRemoteApplied] = useState<RemoteApplied | null>(null)
   const runningRef = useRef(false)
   const pendingRef = useRef(false)
   const activeRef = useRef(activeTripId)
@@ -98,6 +112,14 @@ export function useGroupSync({
         pendingRef.current = true
       }
       await persistTrip(next)
+      if (!deepEqual(latest.itinerary, next.itinerary)) {
+        setRemoteApplied({
+          tripId: before.id,
+          before: latest.itinerary,
+          after: next.itinerary,
+          at: Date.now(),
+        })
+      }
 
       if (outcome.kind === 'gone') {
         trackEvent('group_sync_failed', { reason: 'gone' })
@@ -177,12 +199,15 @@ export function useGroupSync({
     [run],
   )
 
-  const activeIsGroup = Boolean(
-    tripsRef.current.find((trip) => trip.id === activeTripId)?.group,
+  // Le voyage consulté est synchronisé, ou un autre a des modifications à
+  // envoyer : sans cette seconde condition, elles attendraient qu'on rouvre
+  // ce voyage-là.
+  const hasGroupWork = tripsRef.current.some(
+    (trip) => trip.group && (trip.id === activeTripId || trip.group.dirty),
   )
 
   useEffect(() => {
-    if (!activeIsGroup) return
+    if (!hasGroupWork) return
     void run()
     const onVisible = () => {
       if (document.visibilityState === 'visible') void run()
@@ -198,7 +223,7 @@ export function useGroupSync({
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('online', onOnline)
     }
-  }, [activeIsGroup, activeTripId, run])
+  }, [hasGroupWork, activeTripId, run])
 
   useEffect(
     () => () => {
@@ -210,6 +235,7 @@ export function useGroupSync({
   return {
     groupSyncStatus: status,
     remoteChange,
+    remoteApplied,
     dismissRemoteChange: useCallback(() => setRemoteChange(null), []),
     requestGroupSync: requestSync,
   }
