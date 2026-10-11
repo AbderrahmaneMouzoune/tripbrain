@@ -5,7 +5,6 @@ import { QRCodeSVG } from 'qrcode.react'
 import {
   AlertTriangle,
   Check,
-  CloudOff,
   Copy,
   KeyRound,
   Link2,
@@ -19,6 +18,7 @@ import type { ScreenProps } from '@/components/app/screen-props'
 import { useTrip } from '@/components/app/trip-provider'
 import { MobileScreen } from '@/components/mobile/mobile-screen'
 import { Button } from '@/components/ui/button'
+import { GroupSyncPanel } from '@/components/share/group-sync-button'
 import { useClipboard } from '@/hooks/use-clipboard'
 import { usePreferences } from '@/hooks/use-preferences'
 import { MAX_AUTHOR_LENGTH, getGroupInviteUrl } from '@/lib/group-sync'
@@ -59,13 +59,7 @@ function formatAgo(at: number | null, now: number): string | null {
  * synchronisation et de quoi inviter les autres.
  */
 export function GroupScreen({ onClose }: ScreenProps<'group'>) {
-  const {
-    activeTrip,
-    enableGroup,
-    leaveGroup,
-    groupSyncStatus,
-    requestGroupSync,
-  } = useTrip()
+  const { activeTrip, enableGroup, leaveGroup } = useTrip()
   const { preferences, update } = usePreferences()
   const nameId = useId()
   const [busy, setBusy] = useState(false)
@@ -167,8 +161,8 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
               'ajouter un restaurant, décaler une visite, cocher ce qui est fait.',
             ],
             [
-              'Les changements arrivent chez tous',
-              'dès qu’il y a du réseau. Sans réseau, le voyage reste lisible et vos modifications attendent.',
+              'Chacun synchronise quand il le décide',
+              'un bouton dit si vous avez la même version que les autres. Rien ne change sur votre téléphone sans que vous l’ayez demandé.',
             ],
           ].map(([lead, rest], index) => (
             <li key={lead} className="flex gap-3">
@@ -213,7 +207,6 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
 
   // ── Synchronisé ───────────────────────────────────────────────────────────
   const inviteUrl = getGroupInviteUrl(group.id)
-  const checked = formatAgo(groupSyncStatus.checkedAt ?? group.syncedAt, now)
   const lastChange = formatAgo(group.remoteUpdatedAt, now)
 
   const sendInvite = async () => {
@@ -263,16 +256,10 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
         </>
       }
     >
-      <SyncState
-        state={groupSyncStatus.state}
-        dirty={group.dirty}
-        checked={checked}
-        message={groupSyncStatus.message}
-        onRetry={() => requestGroupSync(0)}
-      />
+      <GroupSyncPanel />
       {lastChange && (
         <p className="text-muted-foreground mt-2 px-1 text-[13px]">
-          Dernière modification{' '}
+          Votre version : dernière modification{' '}
           {group.lastAuthor ? (
             <>
               par{' '}
@@ -349,72 +336,6 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
         )}
       </div>
     </MobileScreen>
-  )
-}
-
-function SyncState({
-  state,
-  dirty,
-  checked,
-  message,
-  onRetry,
-}: {
-  state: 'idle' | 'syncing' | 'offline' | 'error'
-  dirty: boolean
-  checked: string | null
-  message?: string
-  onRetry: () => void
-}) {
-  // Une simple vérification (toutes les 30 s) ne mérite pas d'être
-  // affichée : seul un envoi en cours se voit.
-  const view =
-    state === 'syncing' && dirty
-      ? {
-          icon: <Loader2 className="size-4 animate-spin" aria-hidden />,
-          text: dirty ? 'Envoi de vos modifications…' : 'Vérification…',
-          tone: 'bg-primary-soft text-primary-strong',
-        }
-      : state === 'offline'
-        ? {
-            icon: <CloudOff className="size-4" aria-hidden />,
-            text: dirty
-              ? 'Hors ligne : vos modifications partiront au retour du réseau'
-              : 'Hors ligne : le voyage reste consultable',
-            tone: 'bg-muted text-muted-foreground',
-          }
-        : state === 'error'
-          ? {
-              icon: <AlertTriangle className="size-4" aria-hidden />,
-              text: message ?? 'La synchronisation a échoué',
-              tone: 'bg-destructive-soft text-destructive',
-            }
-          : {
-              icon: <Check className="size-4" aria-hidden />,
-              text: checked ? `À jour · vérifié ${checked}` : 'À jour',
-              tone: 'bg-success-soft text-success',
-            }
-
-  return (
-    <div
-      role="status"
-      className={cn(
-        'flex min-h-11 items-center gap-2 rounded-[14px] px-3 text-sm font-extrabold',
-        view.tone,
-      )}
-    >
-      {view.icon}
-      <span className="flex-1">{view.text}</span>
-      {(state === 'error' || state === 'offline') && (
-        <button
-          type="button"
-          onClick={onRetry}
-          aria-label="Réessayer"
-          className="-mr-1 flex size-9 items-center justify-center rounded-full"
-        >
-          <RefreshCw className="size-4" aria-hidden />
-        </button>
-      )}
-    </div>
   )
 }
 

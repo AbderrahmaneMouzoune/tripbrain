@@ -496,3 +496,17 @@ describe('sameEtag', () => {
     expect(sameEtag(null, '"abc"')).toBe(false)
   })
 })
+
+describe('groupVersionState', () => {
+  it('compare la copie locale à la version du serveur', async () => {
+    const { groupVersionState } = await import('@/lib/group-sync')
+    const clean = { etag: '"v1"', dirty: false }
+    const dirty = { etag: '"v1"', dirty: true }
+    expect(groupVersionState(clean, 'v1')).toBe('synced')
+    expect(groupVersionState(clean, '"v2"')).toBe('behind')
+    expect(groupVersionState(dirty, '"v1"')).toBe('ahead')
+    expect(groupVersionState(dirty, '"v2"')).toBe('diverged')
+    expect(groupVersionState(clean, null)).toBe('unknown')
+    expect(groupVersionState(dirty, null)).toBe('ahead')
+  })
+})

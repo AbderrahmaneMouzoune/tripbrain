@@ -71,6 +71,11 @@ export const analyticsEvents = {
       'Arrêt de la synchronisation d’un voyage de groupe sur ce téléphone.',
     properties: {},
   },
+  group_synced: {
+    description:
+      'Synchronisation d’un voyage de groupe demandée par le voyageur : modifications reçues, envoyées, ou rien de neuf.',
+    properties: { received: flag(), sent: flag() },
+  },
   group_sync_failed: {
     description:
       'Échec d’une synchronisation de groupe : groupe disparu, ou erreur du serveur. Les coupures de réseau ne sont pas comptées.',

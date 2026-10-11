@@ -48,6 +48,7 @@ import {
   tipAvailable,
   type TipId,
 } from '@/components/today/contextual-tip'
+import { GroupSyncPill } from '@/components/share/group-sync-button'
 
 /** L'heure qui passe : la prochaine étape change quand un lieu ferme. */
 function useNow(intervalMs = 60_000): Date {
@@ -259,6 +260,7 @@ function TodayDay({ now }: { now: Date }) {
           <p className="text-muted-foreground mt-0.5 text-base font-extrabold">
             {day.title}
           </p>
+          <GroupSyncPill className="mt-2" />
         </div>
         <Button
           variant="outline"

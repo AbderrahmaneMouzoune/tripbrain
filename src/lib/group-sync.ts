@@ -195,6 +195,48 @@ export async function fetchGroup(
   return { status: 'changed', state: parseState(await response.json()) }
 }
 
+/**
+ * Version actuelle du groupe sur le serveur, sans télécharger le voyage.
+ * Sert à dire « à jour » ou « nouvelle version disponible ».
+ */
+export async function checkGroupVersion(id: string): Promise<string> {
+  const response = await fetch(`/api/groups/${encodeURIComponent(id)}`, {
+    method: 'HEAD',
+    cache: 'no-store',
+  })
+  if (response.status === 404) throw new GroupNotFoundError()
+  const version = response.headers.get('X-Group-Version')
+  if (!response.ok || !version) {
+    throw new Error('Vérification impossible.')
+  }
+  return version
+}
+
+/**
+ * Où en est la copie de ce téléphone par rapport au groupe :
+ * - `synced` : la même version que les autres ;
+ * - `behind` : les autres ont modifié le voyage depuis ;
+ * - `ahead` : des modifications d'ici ne sont pas encore envoyées ;
+ * - `diverged` : les deux à la fois ;
+ * - `unknown` : pas encore vérifié (hors ligne, par exemple).
+ */
+export type GroupVersionState =
+  | 'synced'
+  | 'behind'
+  | 'ahead'
+  | 'diverged'
+  | 'unknown'
+
+export function groupVersionState(
+  group: Pick<TripGroup, 'etag' | 'dirty'>,
+  remoteVersion: string | null,
+): GroupVersionState {
+  if (!remoteVersion) return group.dirty ? 'ahead' : 'unknown'
+  const same = sameEtag(group.etag, remoteVersion)
+  if (group.dirty) return same ? 'ahead' : 'diverged'
+  return same ? 'synced' : 'behind'
+}
+
 export type PushGroupResult =
   | { status: 'saved'; etag: string; updatedAt: string }
   /** Quelqu'un a écrit entre-temps : voici sa version, à fusionner. */

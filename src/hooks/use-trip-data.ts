@@ -208,13 +208,10 @@ export function useTripData() {
     [commitTrips],
   )
 
-  const {
-    groupSyncStatus,
-    remoteChange,
-    remoteApplied,
-    dismissRemoteChange,
-    requestGroupSync,
-  } = useGroupSync({ tripsRef, activeTripId, persistTrip })
+  // Synchronisation à la demande : modifier un voyage de groupe le marque
+  // seulement « à envoyer » ; rien ne part ni n'arrive sans `syncGroupNow`.
+  const { groupSyncStatus, remoteApplied, syncGroupNow, checkGroupVersion } =
+    useGroupSync({ tripsRef, trips, activeTripId, persistTrip })
 
   /** Retire un voyage ; s'il s'agit de la démo, ses documents d'exemple partent avec. */
   const removeTrip = useCallback(
@@ -383,13 +380,12 @@ export function useTripData() {
           }),
         )
         setTripRevision((revision) => revision + 1)
-        if (current.group) requestGroupSync()
         return
       }
 
       await addTrip(days, { source, title: options.title })
     },
-    [activeTripId, addTrip, persistTrip, requestGroupSync],
+    [activeTripId, addTrip, persistTrip],
   )
 
   /**
@@ -413,9 +409,8 @@ export function useTripData() {
         )
         throw error
       }
-      if (updated.group) requestGroupSync()
     },
-    [activeTripId, commitTrips, requestGroupSync],
+    [activeTripId, commitTrips],
   )
 
   /** Remplace un jour édité depuis l'interface, puis persiste l'itinéraire. */
@@ -444,9 +439,8 @@ export function useTripData() {
       const next = title.trim()
       if (!trip || !next) return
       await persistTrip(touched(trip, { title: next }))
-      if (trip.group) requestGroupSync()
     },
-    [persistTrip, requestGroupSync],
+    [persistTrip],
   )
 
   /**
@@ -508,14 +502,13 @@ export function useTripData() {
           await persistTrip({ ...existing, title, itinerary: days, group })
         }
         activate(existing.id)
-        requestGroupSync(0)
         return existing.id
       }
       const id = await addTrip(days, { source: 'share', title, group })
       trackEvent('group_joined', { days_count: days.length })
       return id
     },
-    [activate, addTrip, persistTrip, requestGroupSync],
+    [activate, addTrip, persistTrip],
   )
 
   /**
@@ -604,10 +597,9 @@ export function useTripData() {
     tripEndDate,
     trips: summaries,
     groupSyncStatus,
-    remoteChange,
     remoteApplied,
-    dismissRemoteChange,
-    requestGroupSync,
+    syncGroupNow,
+    checkGroupVersion,
     enableGroup,
     joinGroupTrip,
     leaveGroup,

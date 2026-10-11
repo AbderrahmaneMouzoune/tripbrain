@@ -71,6 +71,38 @@ async function currentEtag(store: Bucket, id: string): Promise<string | null> {
   return file.etag ?? null
 }
 
+/**
+ * Vérification légère : la version actuelle du voyage, sans son contenu.
+ * C'est ce que l'app interroge en arrière-plan pour dire « à jour » ou
+ * « nouvelle version » — sans rien télécharger ni modifier.
+ */
+export async function HEAD(request: Request, { params }: Context) {
+  const verdict = checkRateLimit(getClientKey(request))
+  if (!verdict.allowed) {
+    return new Response(null, {
+      status: 429,
+      headers: { 'Retry-After': String(verdict.retryAfter) },
+    })
+  }
+  const { id } = await params
+  if (!isGroupId(id)) return new Response(null, { status: 404 })
+  const store = storeOrError()
+  if (store instanceof Response) return new Response(null, { status: 503 })
+  try {
+    const etag = await currentEtag(store, id)
+    if (!etag) return new Response(null, { status: 404 })
+    // En-tête propre plutôt qu'`ETag` : un proxy ou le navigateur ne le
+    // réécrit pas et n'en fait pas une validation de cache.
+    return new Response(null, {
+      status: 200,
+      headers: { ...NO_STORE, 'X-Group-Version': etag },
+    })
+  } catch (error) {
+    console.error('Vérification du groupe impossible', error)
+    return new Response(null, { status: 500 })
+  }
+}
+
 export async function GET(request: Request, { params }: Context) {
   const verdict = checkRateLimit(getClientKey(request))
   if (!verdict.allowed) return tooMany(verdict.retryAfter)
