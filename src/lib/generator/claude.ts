@@ -15,10 +15,12 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import type {
+  BetaMessage,
   BetaMessageStreamParams,
   BetaRawMessageStreamEvent,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages'
 import type { GeneratorFailureReason } from '@/lib/generator/errors'
+import type { GeneratorPrompt } from '@/lib/generator/itinerary-prompt'
 
 export const DEFAULT_GENERATOR_MODEL = 'claude-opus-5-5'
 const DEFAULT_EFFORT = 'low'
@@ -110,13 +112,25 @@ export interface CompletionEnd {
   truncated: boolean
 }
 
-function buildParams(prompt: string): BetaMessageStreamParams {
+/**
+ * Ce que l'on sait de l'appel, pour le journal de consommation. Rien du
+ * voyage lui-même : ni description, ni brief, ni réponse.
+ */
+export interface CompletionContext {
+  route: 'generate' | 'refine'
+  mode?: 'express' | 'brief'
+  /** Nombre de journées demandées, quand il est connu. */
+  days?: number
+}
+
+function buildParams(prompt: GeneratorPrompt): BetaMessageStreamParams {
   const model = generatorModel()
   const params: BetaMessageStreamParams = {
     model,
     max_tokens: MAX_TOKENS,
     output_config: { effort: generatorEffort() },
-    messages: [{ role: 'user', content: prompt }],
+    system: prompt.system,
+    messages: [{ role: 'user', content: prompt.user }],
   }
   if (SERVER_FALLBACK_MODELS.has(model)) {
     params.betas = [SERVER_FALLBACK_BETA]
@@ -135,12 +149,13 @@ function buildParams(prompt: string): BetaMessageStreamParams {
  * on cesse aussi de la payer.
  */
 export async function openCompletion(
-  prompt: string,
+  prompt: GeneratorPrompt,
+  context: CompletionContext,
   signal?: AbortSignal,
 ): Promise<AsyncGenerator<string, CompletionEnd>> {
-  const stream = getClient().beta.messages.stream(buildParams(prompt), {
-    signal,
-  })
+  const startedAt = Date.now()
+  const params = buildParams(prompt)
+  const stream = getClient().beta.messages.stream(params, { signal })
   const events = stream[Symbol.asyncIterator]()
 
   let first: IteratorResult<BetaRawMessageStreamEvent>
@@ -164,6 +179,7 @@ export async function openCompletion(
         result = await events.next()
       }
       const message = await stream.finalMessage()
+      logUsage(message, params, context, Date.now() - startedAt)
       // Un refus arrive en HTTP 200, avec un `stop_reason` dédié : il faut le
       // vérifier avant de croire la réponse complète.
       if (message.stop_reason === 'refusal') throw new GeneratorError('refused')
@@ -176,12 +192,40 @@ export async function openCompletion(
   return texts()
 }
 
+/**
+ * Une ligne de journal par appel terminé : de quoi connaître le coût réel
+ * d'une génération (jetons d'entrée et de sortie, réflexion comprise) et
+ * repérer les réponses coupées ou servies par le modèle de repli.
+ */
+function logUsage(
+  message: BetaMessage,
+  params: BetaMessageStreamParams,
+  context: CompletionContext,
+  durationMs: number,
+): void {
+  const { usage } = message
+  console.info('Appel au modèle terminé', {
+    ...context,
+    model: message.model,
+    requestedModel: params.model,
+    effort: params.output_config?.effort,
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    stopReason: message.stop_reason,
+    fallback: (usage.iterations ?? []).some(
+      (entry) => entry.type === 'fallback_message',
+    ),
+    durationMs,
+  })
+}
+
 /** Toute la réponse d'un coup, pour l'affinage qui rend un JSON complet. */
 export async function completeText(
-  prompt: string,
+  prompt: GeneratorPrompt,
+  context: CompletionContext,
   signal?: AbortSignal,
 ): Promise<{ text: string } & CompletionEnd> {
-  const chunks = await openCompletion(prompt, signal)
+  const chunks = await openCompletion(prompt, context, signal)
   let text = ''
   let result = await chunks.next()
   while (!result.done) {

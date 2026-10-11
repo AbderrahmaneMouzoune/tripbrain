@@ -1017,7 +1017,7 @@ export function buildBriefRules(brief: TripBrief): string[] {
         optionsById(TRANSPORTS, brief.transports).map(
           (option) => option.prompt,
         ),
-      )} : ne propose aucun trajet qui exige un autre moyen, ni pour les activités ni pour les transports entre villes.`,
+      )} : ne propose aucun trajet qui exige un autre moyen, ni pour les activités ni pour les transports entre villes. La marche reste possible pour les courtes distances.`,
     )
   }
   if (brief.budget) {
