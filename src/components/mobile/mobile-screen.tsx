@@ -122,7 +122,7 @@ export function MobileScreen({
         </div>
 
         {footer && (
-          <div className="bg-background/95 sticky bottom-0 z-10 flex flex-col gap-1.5 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+20px)] backdrop-blur">
+          <div className="bg-background/95 sticky bottom-[var(--tab-bar-offset,0px)] z-10 flex flex-col gap-1.5 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+20px)] backdrop-blur">
             {footer}
           </div>
         )}

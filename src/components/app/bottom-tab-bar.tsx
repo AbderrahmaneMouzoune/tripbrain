@@ -2,7 +2,12 @@
 
 import type { ComponentType, SVGProps } from 'react'
 import { List, Map as MapIcon, Sun, Ticket } from 'lucide-react'
-import { useAppNav, type AppTab } from '@/components/app/navigation'
+import {
+  SCREENS_WITH_TAB_BAR,
+  useAppNav,
+  type AppTab,
+} from '@/components/app/navigation'
+import { useEditSession } from '@/components/app/edit-session'
 import { cn } from '@/lib/utils'
 
 const TABS: {
@@ -20,13 +25,39 @@ const TABS: {
 export const TAB_BAR_SPACER =
   'h-[calc(84px+env(safe-area-inset-bottom))]' as const
 
-/** Barre d'onglets du bas, à portée du pouce. */
+/**
+ * La barre passe-t-elle au-dessus de l'écran empilé du dessus ? Oui pour les
+ * écrans de consultation, sauf en mode édition, où la barre d'édition prend
+ * sa place en bas.
+ */
+export function useTabBarOverScreens(): boolean {
+  const { stack } = useAppNav()
+  const { isEditing } = useEditSession()
+  const top = stack[stack.length - 1]
+  return Boolean(top && SCREENS_WITH_TAB_BAR.has(top.kind) && !isEditing)
+}
+
+/**
+ * Barre d'onglets du bas, à portée du pouce. Elle reste accessible depuis les
+ * écrans de consultation (journée, fiches, menu…) : toucher un onglet referme
+ * les écrans ouverts et y mène directement.
+ */
 export function BottomTabBar() {
-  const { tab, setTab } = useAppNav()
+  const { tab, setTab, stack } = useAppNav()
+  const overScreens = useTabBarOverScreens()
+  // Sous un parcours ou une vue immersive, la barre est couverte : on la
+  // retire aussi de l'ordre de tabulation et des lecteurs d'écran.
+  const covered = stack.length > 0 && !overScreens
   return (
     <nav
       aria-label="Navigation principale"
-      className="bg-card/95 border-border animate-fade fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur-xl"
+      aria-hidden={covered || undefined}
+      inert={covered || undefined}
+      className={cn(
+        'bg-card/95 border-border animate-fade fixed inset-x-0 bottom-0 border-t backdrop-blur-xl',
+        // Les écrans empilés vont de z-41 à z-48 ; dialogues et feuilles à z-50.
+        overScreens ? 'z-[49]' : 'z-40',
+      )}
     >
       <div className="mx-auto flex max-w-xl px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+10px)]">
         {TABS.map(({ id, label, icon: Icon }) => {

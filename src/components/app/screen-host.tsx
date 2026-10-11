@@ -1,12 +1,14 @@
 'use client'
 
-import { useEffect, type ComponentType } from 'react'
+import { useEffect, type ComponentType, type CSSProperties } from 'react'
 import {
+  SCREENS_WITH_TAB_BAR,
   useAppNav,
   type AppScreen,
   type AppScreenKind,
 } from '@/components/app/navigation'
 import type { ScreenProps } from '@/components/app/screen-props'
+import { useEditSession } from '@/components/app/edit-session'
 import { ImportFileScreen } from '@/components/onboarding/import-file-screen'
 import { ReceiveScreen } from '@/components/receive/receive-screen'
 import { TripReadyScreen } from '@/components/onboarding/trip-ready-screen'
@@ -71,6 +73,7 @@ function renderScreen(screen: AppScreen, onClose: () => void) {
  */
 export function ScreenHost() {
   const { stack, pop } = useAppNav()
+  const { isEditing } = useEditSession()
 
   // Le défilement de la page sous un écran plein est figé.
   const coversPage = stack.some(
@@ -103,9 +106,20 @@ export function ScreenHost() {
             aria-hidden={!isTop}
             className="bg-background animate-screen fixed inset-0 overflow-y-auto overscroll-contain"
             // Au-dessus de la barre d'onglets (z-40), sous les dialogues et feuilles (z-50).
-            style={{ zIndex: 41 + Math.min(index, 8) }}
+            style={
+              {
+                zIndex: 41 + Math.min(index, 7),
+                // Place réservée à la barre d'onglets, quand elle passe dessus :
+                // les pieds collés en bas des écrans s'arrêtent au-dessus.
+                '--tab-bar-offset':
+                  SCREENS_WITH_TAB_BAR.has(screen.kind) && !isEditing
+                    ? 'calc(84px + env(safe-area-inset-bottom))'
+                    : '0px',
+              } as CSSProperties
+            }
           >
             {renderScreen(screen, pop)}
+            <div aria-hidden className="h-[var(--tab-bar-offset)]" />
           </div>
         )
       })}

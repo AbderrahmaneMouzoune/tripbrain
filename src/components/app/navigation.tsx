@@ -55,6 +55,25 @@ export type AppScreen =
 
 export type AppScreenKind = AppScreen['kind']
 
+/**
+ * Écrans de consultation : la barre d'onglets reste visible par-dessus, pour
+ * passer d'un onglet à l'autre d'un geste comme avant. Les parcours (générateur,
+ * réception, import), les vues immersives (mode chauffeur, aperçu d'un
+ * document) et les feuilles la laissent dessous.
+ */
+export const SCREENS_WITH_TAB_BAR: ReadonlySet<AppScreenKind> =
+  new Set<AppScreenKind>([
+    'day',
+    'activity',
+    'transport',
+    'accommodation',
+    'menu',
+    'trips',
+    'share',
+    'settings',
+    'offline',
+  ])
+
 interface NavigationValue {
   tab: AppTab
   setTab: (tab: AppTab) => void
