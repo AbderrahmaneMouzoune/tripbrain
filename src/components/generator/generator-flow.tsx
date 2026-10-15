@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import { IconSparkles } from '@tabler/icons-react'
 import type { ScreenProps } from '@/components/app/screen-props'
 import { useAppNav } from '@/components/app/navigation'
 import { useTrip } from '@/components/app/trip-provider'
-import { BriefQuestionnaire } from '@/components/generator/brief-questionnaire'
-import { ExpressForm } from '@/components/generator/express-form'
+import { TripJourney } from '@/components/generator/journey/trip-journey'
+import { Button } from '@/components/ui/button'
 import { GenerationResult } from '@/components/generator/generation-result'
 import { GeneratorUnavailable } from '@/components/generator/generator-unavailable'
 import { LiveGeneration } from '@/components/generator/live-generation'
@@ -22,24 +23,43 @@ import {
   updateGeneratorDraft,
   type GenerationState,
 } from '@/lib/generator/generation-store'
+import { buildBriefPrompt } from '@/lib/generator/itinerary-prompt'
+import {
+  isPastDate,
+  isValidIsoDate,
+  todayIso,
+} from '@/lib/generator/itinerary-quality'
 import { toDayItineraries } from '@/lib/generator/itinerary-schema'
-import type { GenerateRequest } from '@/lib/generator/requests'
+import {
+  MAX_DURATION_DAYS,
+  type GenerateRequest,
+} from '@/lib/generator/requests'
+import type { TripBrief } from '@/lib/generator/trip-brief'
 
-/** Où en est le parcours, côté écran. La génération, elle, vit dans le magasin. */
-type View = 'express' | 'brief' | 'generation'
+/**
+ * Où en est le parcours, côté écran. La génération, elle, vit dans le
+ * magasin. `recap` rouvre le parcours sur le billet, pour corriger une
+ * demande déjà envoyée.
+ */
+type View = 'journey' | 'recap' | 'generation'
 
 /**
  * Rouvrir le générateur ramène là où l'on en était : la génération en cours
- * ou son résultat, sinon le formulaire.
+ * ou son résultat, sinon le parcours.
  */
 function initialView(state: GenerationState): View {
-  return state.status === 'idle' ? 'express' : 'generation'
+  return state.status === 'idle' ? 'journey' : 'generation'
+}
+
+/** La date choisie est-elle exploitable : lisible, et pas dans le passé ? */
+function isUsableStartDate(value: string): boolean {
+  return isValidIsoDate(value) && !isPastDate(value)
 }
 
 /**
- * Générateur d'itinéraire dans l'app : décrire (phrase libre ou
- * questionnaire), suivre la génération en direct, relire, affiner, puis
- * enregistrer le voyage.
+ * Générateur d'itinéraire dans l'app : décrire (le parcours, question par
+ * question, ou une phrase), suivre la génération en direct, relire, affiner,
+ * puis enregistrer le voyage.
  */
 export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
   const state = useGeneration()
@@ -53,20 +73,16 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
   const [showPartial, setShowPartial] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  /** Le brief porte sa durée ; le brouillon la garde à part, pour la génération. */
+  const brief: TripBrief = { ...draft.brief, durationDays: draft.durationDays }
 
   const launch = (request: GenerateRequest) => {
     setShowPartial(false)
     setView('generation')
     void startGeneration(request)
   }
-
-  const generateExpress = () =>
-    launch({
-      mode: 'express',
-      description: draft.description.trim(),
-      startDate: draft.startDate,
-      durationDays: draft.durationDays,
-    })
 
   const generateBrief = () =>
     launch({
@@ -84,8 +100,7 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
    * résultat reste dans le magasin tant qu'aucune autre génération n'est
    * lancée : fermer puis rouvrir le générateur le retrouve.
    */
-  const editRequest = () =>
-    setView(state.request?.mode === 'brief' ? 'brief' : 'express')
+  const editRequest = () => setView('recap')
 
   const save = async () => {
     const itinerary = state.itinerary
@@ -156,29 +171,58 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
     )
   }
 
-  if (view === 'brief') {
-    return (
-      <BriefQuestionnaire
-        onBack={() => setView('express')}
-        onGenerate={generateBrief}
-      />
-    )
+  const prompt = buildBriefPrompt(brief, draft.startDate)
+  const copyPrompt = () => {
+    navigator.clipboard
+      ?.writeText(prompt)
+      .then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      })
+      .catch(() => {})
   }
 
+  const dateOk = isUsableStartDate(draft.startDate)
+
   return (
-    <ExpressForm
-      onBack={onClose}
-      onRefineWithQuestions={() => {
-        // La phrase déjà écrite devient la destination du questionnaire :
-        // le voyageur la précise plutôt que de tout réécrire.
-        if (!draft.brief.destination.trim() && draft.description.trim()) {
-          updateGeneratorDraft({
-            brief: { ...draft.brief, destination: draft.description.trim() },
-          })
-        }
-        setView('brief')
-      }}
-      onGenerate={generateExpress}
+    <TripJourney
+      key={view}
+      variant="screen"
+      startOn={view === 'recap' ? 'recap' : 'question'}
+      brief={brief}
+      onBriefChange={(next) =>
+        updateGeneratorDraft({ brief: next, durationDays: next.durationDays })
+      }
+      startDate={draft.startDate}
+      onStartDateChange={(startDate) => updateGeneratorDraft({ startDate })}
+      minDate={todayIso()}
+      maxDays={MAX_DURATION_DAYS}
+      prompt={prompt}
+      copied={copied}
+      onCopyPrompt={copyPrompt}
+      onExit={onClose}
+      renderFinish={(ready) => (
+        <div className="flex flex-col gap-2">
+          {ready && !dateOk && (
+            <p className="bg-destructive-soft text-destructive rounded-2xl px-3.5 py-3 text-sm font-extrabold">
+              Cette date de départ est déjà passée : choisissez un jour à venir.
+            </p>
+          )}
+          <Button
+            size="xl"
+            className="w-full"
+            disabled={!ready || !dateOk}
+            onClick={generateBrief}
+          >
+            <IconSparkles aria-hidden />
+            Générer mon itinéraire
+          </Button>
+          <p className="text-muted-foreground text-center text-[13px] font-bold">
+            Les questions passées ne figurent pas dans la demande : l’IA choisit
+            pour vous.
+          </p>
+        </div>
+      )}
     />
   )
 }
