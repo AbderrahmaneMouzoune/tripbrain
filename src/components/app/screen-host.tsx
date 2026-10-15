@@ -20,6 +20,7 @@ import { DriverScreen } from '@/components/day/driver-screen'
 import { MenuScreen } from '@/components/trip-menu/menu-screen'
 import { TripsScreen } from '@/components/trip-menu/trips-screen'
 import { ShareScreen } from '@/components/share/share-screen'
+import { GroupScreen } from '@/components/share/group-screen'
 import { CalendarSheet } from '@/components/share/calendar-sheet'
 import { ResetSheet } from '@/components/trip-menu/reset-sheet'
 import { DocumentScreen } from '@/components/documents/document-screen'
@@ -45,6 +46,7 @@ const REGISTRY: { [K in AppScreenKind]: Entry<K> } = {
   menu: { component: MenuScreen, presentation: 'screen' },
   trips: { component: TripsScreen, presentation: 'screen' },
   share: { component: ShareScreen, presentation: 'screen' },
+  group: { component: GroupScreen, presentation: 'screen' },
   receive: { component: ReceiveScreen, presentation: 'screen' },
   calendar: { component: CalendarSheet, presentation: 'sheet' },
   reset: { component: ResetSheet, presentation: 'sheet' },

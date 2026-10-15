@@ -476,3 +476,37 @@ describe('fetchSharedItinerary', () => {
     )
   })
 })
+
+describe('readIncomingShare — invitation de groupe', () => {
+  const id = 'AbCdEfGhIjKlMnOpQrStUv'
+  it('lit une invitation à un voyage synchronisé', () => {
+    expect(readIncomingShare(`?groupe=${id}`, '')).toEqual({ group: id })
+  })
+  it('ignore un identifiant de groupe malformé', () => {
+    expect(readIncomingShare('?groupe=court', '')).toBeNull()
+  })
+})
+
+describe('sameEtag', () => {
+  it('ignore guillemets et préfixe faible', async () => {
+    const { sameEtag } = await import('@/lib/group-sync')
+    expect(sameEtag('"abc"', 'abc')).toBe(true)
+    expect(sameEtag('W/"abc"', '"abc"')).toBe(true)
+    expect(sameEtag('"abc"', '"abd"')).toBe(false)
+    expect(sameEtag(null, '"abc"')).toBe(false)
+  })
+})
+
+describe('groupVersionState', () => {
+  it('compare la copie locale à la version du serveur', async () => {
+    const { groupVersionState } = await import('@/lib/group-sync')
+    const clean = { etag: '"v1"', dirty: false }
+    const dirty = { etag: '"v1"', dirty: true }
+    expect(groupVersionState(clean, 'v1')).toBe('synced')
+    expect(groupVersionState(clean, '"v2"')).toBe('behind')
+    expect(groupVersionState(dirty, '"v1"')).toBe('ahead')
+    expect(groupVersionState(dirty, '"v2"')).toBe('diverged')
+    expect(groupVersionState(clean, null)).toBe('unknown')
+    expect(groupVersionState(dirty, null)).toBe('ahead')
+  })
+})

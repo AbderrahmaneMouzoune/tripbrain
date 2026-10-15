@@ -16,9 +16,11 @@ import {
   RefreshCw,
   Share2,
   ShieldCheck,
+  Users,
   WifiOff,
 } from 'lucide-react'
 import type { ScreenProps } from '@/components/app/screen-props'
+import { useAppNav } from '@/components/app/navigation'
 import { useTrip } from '@/components/app/trip-provider'
 import { MobileScreen } from '@/components/mobile/mobile-screen'
 import { OptionCard } from '@/components/mobile/option-card'
@@ -79,6 +81,7 @@ type StepState = 'done' | 'active' | 'todo'
 export function ShareScreen({ onClose }: ScreenProps<'share'>) {
   const { itinerary, activeTrip, trips, activeTripId, exportData } = useTrip()
   const summary = trips.find((trip) => trip.id === activeTripId)
+  const { push } = useAppNav()
 
   const [compress, setCompress] = useState<CompressState>({
     status: 'compressing',
@@ -543,6 +546,31 @@ export function ShareScreen({ onClose }: ScreenProps<'share'>) {
             onClick={() => openTransfer('server')}
           />
         </div>
+      )}
+
+      {activeTrip && !activeTrip.isDemo && (
+        <button
+          type="button"
+          onClick={() => push({ kind: 'group' })}
+          className="pressable bg-secondary-soft focus-visible:ring-ring/50 mt-3 flex w-full items-center gap-3 rounded-[18px] px-3.5 py-3 text-left outline-none focus-visible:ring-[3px]"
+        >
+          <Users
+            className="text-secondary-strong size-5 shrink-0"
+            aria-hidden
+          />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-[15px] font-black">
+              {activeTrip.group
+                ? 'Voyage synchronisé'
+                : 'Vous partez à plusieurs ?'}
+            </span>
+            <span className="text-muted-foreground text-[13px] leading-snug">
+              {activeTrip.group
+                ? 'Invitez un compagnon de plus, voyez qui a modifié quoi'
+                : 'Un partage est une copie. Synchronisé, chacun voit les modifications des autres.'}
+            </span>
+          </span>
+        </button>
       )}
 
       <button

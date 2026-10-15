@@ -104,10 +104,11 @@ export default function PrivacyPolicyPage() {
           ]}
         />
         <p>
-          Ces données restent jusqu’à ce que tu les effaces : le bouton «
-          Effacer les données » du panneau « Partager &amp; données » les
-          supprime, et vider les données du site depuis ton navigateur produit
-          le même résultat. Personne d’autre, éditeur compris, n’y a accès.
+          Ces données restent jusqu’à ce que tu les effaces : « Supprimer ce
+          voyage », dans le menu du voyage (bouton « … »), efface un voyage ou
+          tout ce qui est enregistré sur l’appareil, et vider les données du
+          site depuis ton navigateur produit le même résultat. Personne d’autre,
+          éditeur compris, n’y a accès.
         </p>
       </LegalSection>
 
@@ -147,6 +148,40 @@ export default function PrivacyPolicyPage() {
           Un code de partage est un jeton au porteur : qui l’a peut lire le
           voyage. Ne le diffuse qu’aux personnes concernées.
         </p>
+      </LegalSection>
+
+      <LegalSection id="voyage-de-groupe" title="Quand tu voyages à plusieurs">
+        <p>
+          Un voyage synchronisé est la seule exception à « tout reste sur ton
+          appareil » : pour que chacun reçoive les modifications des autres,
+          l’itinéraire est gardé sur le même espace de stockage que les
+          partages, sous un identifiant aléatoire de 128 bits. Il ne s’active
+          que si tu le demandes, voyage par voyage.
+        </p>
+        <LegalDefinitionList
+          items={[
+            {
+              term: 'Ce qui est gardé',
+              description:
+                'L’itinéraire compressé, son titre et, si tu l’as indiqué, le prénom de la dernière personne qui l’a modifié. Tes documents et tes photos ne sont jamais envoyés.',
+            },
+            {
+              term: 'Combien de temps',
+              description:
+                'Tant que le voyage est modifié : sans aucune modification pendant 400 jours, il est effacé. Arrêter la synchronisation sur ton téléphone ne l’efface pas pour les autres voyageurs.',
+            },
+            {
+              term: 'Qui peut le lire',
+              description:
+                'Toute personne qui a le lien d’invitation peut lire et modifier le voyage. Ne l’envoie qu’à tes compagnons de voyage.',
+            },
+            {
+              term: 'Base légale',
+              description:
+                'L’exécution d’une action que tu as demandée (art. 6.1.b du RGPD).',
+            },
+          ]}
+        />
       </LegalSection>
 
       <LegalSection id="mesure-audience" title="Mesure d’audience">
@@ -298,8 +333,8 @@ export default function PrivacyPolicyPage() {
         </p>
         <p>
           En pratique, la plupart s’exercent sans nous : tes données de voyage
-          sont sur ton appareil, tu peux les exporter depuis le panneau «
-          Partager &amp; données » et les effacer d’un bouton. Pour la mesure
+          sont sur ton appareil, tu peux les exporter (« Exporter en JSON »,
+          dans le menu du voyage) et les effacer d’un bouton. Pour la mesure
           d’audience, le réglage ci-dessus suffit à l’arrêter. Pour toute autre
           demande, écris à{' '}
           <a

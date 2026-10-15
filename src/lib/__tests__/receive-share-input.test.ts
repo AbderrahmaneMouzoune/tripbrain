@@ -153,7 +153,7 @@ describe('réception d’un partage', () => {
 
   it('décode un payload sans aller-retour serveur', async () => {
     const payload = await compressItinerary([day])
-    await expect(resolveIncomingShare({ payload })).resolves.toEqual([day])
+    await expect(resolveIncomingShare({ payload })).resolves.toEqual({ days: [day] })
   })
 
   it('refuse un partage vide', async () => {

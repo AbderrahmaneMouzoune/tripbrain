@@ -1,4 +1,5 @@
-const CACHE_NAME = 'tripbrain-v1'
+// v2 : purge les réponses d'API que la v1 mettait en cache par erreur.
+const CACHE_NAME = 'tripbrain-v2'
 const STATIC_ASSETS = ['/', '/manifest.json', '/icon-192.png', '/icon-512.png']
 
 // Install event - cache static assets
@@ -29,6 +30,10 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (event.request.method !== 'GET') return
+
+  // Jamais de cache pour l'API : un voyage de groupe ou un partage doit
+  // refléter le serveur, pas une réponse gardée de la veille.
+  if (new URL(event.request.url).pathname.startsWith('/api/')) return
 
   // Skip cross-origin requests
   if (!event.request.url.startsWith(self.location.origin)) {

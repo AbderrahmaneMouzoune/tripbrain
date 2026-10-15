@@ -30,6 +30,7 @@ import {
   type DepartureChecklistInput,
 } from '@/components/day/day-logic'
 import { Pill } from '@/components/day/day-ui'
+import { GroupSyncPill } from '@/components/share/group-sync-button'
 
 /** En-tête commun avant et après le voyage : titre, dates, menu. */
 function BookendHeader({ title }: { title: string }) {
@@ -49,6 +50,7 @@ function BookendHeader({ title }: { title: string }) {
         <h1 className="font-display mt-0.5 text-[32px] leading-[1.1]">
           {title}
         </h1>
+        <GroupSyncPill className="mt-2" />
       </div>
       <Button
         variant="outline"

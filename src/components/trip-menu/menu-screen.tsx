@@ -18,6 +18,7 @@ import {
   Sparkles,
   Trash2,
   X,
+  Users,
 } from 'lucide-react'
 import { useAppNav } from '@/components/app/navigation'
 import type { ScreenProps } from '@/components/app/screen-props'
@@ -154,6 +155,19 @@ export function MenuScreen({ onClose }: ScreenProps<'menu'>) {
           description="Lien, QR code ou code à dicter"
           onClick={() => push({ kind: 'share' })}
         />
+        {activeTrip && !activeTrip.isDemo && (
+          <ListRow
+            icon={Users}
+            tone="secondary"
+            label="Voyager à plusieurs"
+            description={
+              activeTrip.group
+                ? 'Synchronisé avec vos compagnons'
+                : 'Un programme à jour sur le téléphone de chacun'
+            }
+            onClick={() => push({ kind: 'group' })}
+          />
+        )}
         <ListRow
           icon={KeyRound}
           tone="accent"

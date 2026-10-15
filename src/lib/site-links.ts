@@ -7,6 +7,9 @@
  * `siteConfig` les regroupe de l'autre côté.
  */
 
+import type { GenerateRequest } from '@/lib/generator/requests'
+import { encodeSitePrefill } from '@/lib/generator/site-prefill'
+
 /** Site vitrine — l'app, elle, vit sur `app.tripbrain.fr` (voir `site-url.ts`). */
 export const MARKETING_SITE_URL = 'https://tripbrain.fr'
 
@@ -26,8 +29,14 @@ export type GeneratorSurface =
  *
  * Les `utm_*` sont les seuls paramètres que le filtre de mesure du site laisse
  * passer : ils disent quelle entrée de l'app amène des visiteurs, sans rien
- * transporter du voyage.
+ * transporter du voyage. Une demande déjà remplie dans l'app, elle, passe par
+ * le fragment (`#brouillon=…`, voir `generator/site-prefill.ts`) : le site
+ * pré-remplit son formulaire, et le contenu ne quitte jamais le navigateur.
  */
-export function getGeneratorUrl(surface: GeneratorSurface): string {
-  return `${MARKETING_SITE_URL}${GENERATOR_PATH}?utm_source=app&utm_medium=${surface}`
+export function getGeneratorUrl(
+  surface: GeneratorSurface,
+  request?: GenerateRequest | null,
+): string {
+  const fragment = request ? encodeSitePrefill(request) : ''
+  return `${MARKETING_SITE_URL}${GENERATOR_PATH}?utm_source=app&utm_medium=${surface}${fragment}`
 }

@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -15,6 +16,7 @@ import {
   type DayChangeSummary,
 } from '@/lib/itinerary-diff'
 import { trackEvent } from '@/lib/analytics/client'
+import { mergeThreeWay } from '@/lib/trip-merge'
 import { useTrip } from '@/components/app/trip-provider'
 
 export type EditReviewIntent = 'save' | 'discard'
@@ -46,7 +48,13 @@ interface EditSessionValue {
 const EditSessionContext = createContext<EditSessionValue | null>(null)
 
 export function EditSessionProvider({ children }: { children: ReactNode }) {
-  const { itinerary, replaceItinerary, updateDay } = useTrip()
+  const {
+    itinerary,
+    replaceItinerary,
+    updateDay,
+    remoteApplied,
+    activeTripId,
+  } = useTrip()
   const [isEditing, setIsEditing] = useState(false)
   // Photo de l'itinéraire prise à l'entrée en mode édition : elle permet de
   // tout remettre en place d'un geste tant que la session d'édition dure.
@@ -55,6 +63,20 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   // titre pendant l'animation de sortie.
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewIntent, setReviewIntent] = useState<EditReviewIntent>('save')
+
+  // Un compagnon de voyage modifie le programme pendant l'édition : sa
+  // modification rejoint la photo de départ. Sinon le récapitulatif la
+  // compterait parmi les vôtres, et « Annuler » l'effacerait chez tout le
+  // groupe.
+  useEffect(() => {
+    if (!remoteApplied || remoteApplied.tripId !== activeTripId) return
+    setBaseline((current) =>
+      current
+        ? mergeThreeWay(remoteApplied.before, current, remoteApplied.after)
+            .value
+        : current,
+    )
+  }, [remoteApplied, activeTripId])
 
   const changeSummaries = useMemo(
     () => (baseline ? summarizeItineraryChanges(baseline, itinerary) : []),

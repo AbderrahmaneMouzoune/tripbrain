@@ -14,6 +14,7 @@ import {
   formatDateRange,
   weekdayShort,
 } from '@/components/day/day-logic'
+import { GroupSyncPill } from '@/components/share/group-sync-button'
 
 /** Onglet Programme : tout le voyage, étape par étape. */
 export function ProgramView(_props: {}) {
@@ -60,6 +61,7 @@ export function ProgramView(_props: {}) {
             {formatDateRange(first.date, last.date, '→')} · {total} jour
             {total > 1 ? 's' : ''} · {cityCount} ville{cityCount > 1 ? 's' : ''}
           </p>
+          <GroupSyncPill className="mt-2" />
         </div>
         <Button
           variant="outline"

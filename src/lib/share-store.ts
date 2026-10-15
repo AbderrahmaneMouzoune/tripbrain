@@ -24,6 +24,11 @@ export const SHARE_MAX_PAYLOAD_CHARS = 2 * 1024 * 1024
 /** Ce que contient le snapshot : l'itinéraire compressé, tel qu'envoyé par le client. */
 export interface SharedSnapshotData {
   payload: string
+  /**
+   * Voyage de groupe auquel ce code donne accès (voir `group-sync.ts`) :
+   * celui qui le saisit rejoint le voyage au lieu d'en recevoir une copie.
+   */
+  group?: string
 }
 
 function requireEnv(name: string): string {

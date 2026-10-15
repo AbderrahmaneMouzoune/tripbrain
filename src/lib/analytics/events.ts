@@ -48,9 +48,39 @@ function flag(): { readonly kind: 'flag' } {
  * connu (`code`), un itinéraire embarqué dans l'URL (`payload`), ou le
  * générateur du site vitrine (`generator`), qui emprunte le même chemin.
  */
-const SHARE_IMPORT_SOURCE = choice('code', 'prompt', 'payload', 'generator')
+const SHARE_IMPORT_SOURCE = choice(
+  'code',
+  'prompt',
+  'payload',
+  'generator',
+  'group',
+)
 
 export const analyticsEvents = {
+  group_created: {
+    description:
+      'Un voyage devient un voyage de groupe, synchronisé entre plusieurs téléphones.',
+    properties: { days_count: count() },
+  },
+  group_joined: {
+    description: 'Un voyage de groupe rejoint par invitation.',
+    properties: { days_count: count() },
+  },
+  group_left: {
+    description:
+      'Arrêt de la synchronisation d’un voyage de groupe sur ce téléphone.',
+    properties: {},
+  },
+  group_synced: {
+    description:
+      'Synchronisation d’un voyage de groupe demandée par le voyageur : modifications reçues, envoyées, ou rien de neuf.',
+    properties: { received: flag(), sent: flag() },
+  },
+  group_sync_failed: {
+    description:
+      'Échec d’une synchronisation de groupe : groupe disparu, ou erreur du serveur. Les coupures de réseau ne sont pas comptées.',
+    properties: { reason: choice('gone', 'error') },
+  },
   app_opened: {
     description:
       "Ouverture de l'application : installée ou dans le navigateur, avec ou sans voyage chargé.",
