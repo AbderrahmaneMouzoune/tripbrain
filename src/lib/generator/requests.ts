@@ -117,6 +117,13 @@ export const refineRequestSchema = z.object({
     .min(3, MESSAGES.shortInstruction)
     .max(MAX_INSTRUCTION_LENGTH, MESSAGES.longInstruction),
   startDate: startDateSchema,
+  /**
+   * La demande d'origine : régime, mobilité, budget, « à éviter » doivent
+   * survivre à l'affinage. Le brief du parcours, ou la phrase d'une demande
+   * express ; absent pour un itinéraire venu d'ailleurs.
+   */
+  brief: tripBriefSchema.optional(),
+  description: z.string().trim().max(MAX_DESCRIPTION_LENGTH).optional(),
 })
 
 export type RefineRequest = z.infer<typeof refineRequestSchema>

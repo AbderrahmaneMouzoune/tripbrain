@@ -9,6 +9,7 @@
  * réponses déjà données. L'affichage vit dans `components/trip-journey`.
  */
 
+import { durationFromDescription } from '@/lib/generator/duration-hint'
 import {
   BUDGETS,
   DAY_STARTS,
@@ -1076,21 +1077,14 @@ export function parseExpress(sentence: string): {
   const detected: Detected[] = []
   const patch: Partial<TripBrief> = {}
 
-  const days = text.match(/(\d{1,2})\s*(jours?|j\b|nuits?|semaines?)/)
-  if (days) {
-    const n = /semaine/.test(days[2])
-      ? Number(days[1]) * 7
-      : Number(days[1]) + (/nuit/.test(days[2]) ? 1 : 0)
-    if (n >= 1 && n <= 30) {
-      patch.durationDays = n
-      detected.push({ kind: 'Durée', value: `${n} jours` })
-    }
-  } else if (/week-?end/.test(text)) {
-    patch.durationDays = 3
-    detected.push({ kind: 'Durée', value: '3 jours' })
-  } else if (/une semaine/.test(text)) {
-    patch.durationDays = 7
-    detected.push({ kind: 'Durée', value: '7 jours' })
+  // Une seule durée claire ; « 4 jours à Paris puis 3 à Lyon » ne tranche pas.
+  const days = durationFromDescription(sentence)
+  if (days !== null) {
+    patch.durationDays = days
+    detected.push({
+      kind: 'Durée',
+      value: `${days} jour${days > 1 ? 's' : ''}`,
+    })
   }
 
   const places = KNOWN_PLACES.filter((place) => text.includes(normalize(place)))

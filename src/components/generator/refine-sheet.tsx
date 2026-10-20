@@ -28,7 +28,10 @@ import {
   toDayItineraries,
   type GeneratedItinerary,
 } from '@/lib/generator/itinerary-schema'
-import { MAX_INSTRUCTION_LENGTH } from '@/lib/generator/requests'
+import {
+  MAX_INSTRUCTION_LENGTH,
+  type GenerateRequest,
+} from '@/lib/generator/requests'
 import { groupByCity } from '@/lib/generator/review'
 import {
   countChanges,
@@ -112,11 +115,14 @@ export function RefineSheet({
   onOpenChange,
   itinerary,
   startDate,
+  request,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   itinerary: GeneratedItinerary
   startDate: string
+  /** La demande d'origine, renvoyée à chaque affinage pour en garder les contraintes. */
+  request: GenerateRequest | null
 }) {
   const [input, setInput] = useState('')
   const [sent, setSent] = useState<string | null>(null)
@@ -153,7 +159,16 @@ export function RefineSheet({
     setPending(true)
     try {
       const next = await requestRefinement(
-        { itinerary, instruction: text, startDate },
+        {
+          itinerary,
+          instruction: text,
+          startDate,
+          ...(request?.mode === 'brief'
+            ? { brief: request.brief }
+            : request?.mode === 'express'
+              ? { description: request.description }
+              : {}),
+        },
         own.signal,
       )
       if (controller.current !== own) return

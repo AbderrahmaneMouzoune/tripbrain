@@ -10,6 +10,7 @@ import {
   buildBriefRules,
   EMPTY_BRIEF,
   SAMPLE_BRIEF,
+  type TripBrief,
 } from '@/lib/generator/trip-brief'
 
 describe('calendarLines', () => {
@@ -155,5 +156,47 @@ describe('buildRefinePrompt', () => {
     expect(user).toContain('- Jour 2 : mardi 13 avril 2027 (2027-04-13)')
     expect(system).toContain('Recopie à l’identique')
     expect(system).not.toContain('```json')
+  })
+  it('sans demande d’origine, ne parle pas du voyageur', () => {
+    expect(user).not.toContain('<voyage>')
+  })
+
+  it('renvoie le brief d’origine et ses contraintes', () => {
+    const brief: TripBrief = {
+      ...EMPTY_BRIEF,
+      destination: 'Japon',
+      diets: ['vegetarian'],
+      mobility: ['wheelchair'],
+      avoid: 'Les files d’attente',
+    }
+    const prompt = buildRefinePrompt(
+      itinerary,
+      'Plus de musées',
+      '2027-04-12',
+      {
+        brief,
+      },
+    )
+    expect(prompt.user.indexOf('<voyage>')).toBeLessThan(
+      prompt.user.indexOf('<itineraire>'),
+    )
+    expect(prompt.user).toContain('À éviter : Les files d’attente')
+    expect(prompt.user).toContain('Contraintes toujours valables')
+    expect(prompt.user).toContain('végétarien')
+    expect(prompt.system).toContain('doit encore la respecter')
+  })
+
+  it('renvoie la phrase d’une demande express', () => {
+    const prompt = buildRefinePrompt(
+      itinerary,
+      'Plus de musées',
+      '2027-04-12',
+      {
+        description: '5 jours au Japon, sans gluten',
+      },
+    )
+    expect(prompt.user).toContain(
+      '<voyage>\n5 jours au Japon, sans gluten\n</voyage>',
+    )
   })
 })

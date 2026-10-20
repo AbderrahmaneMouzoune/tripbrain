@@ -171,7 +171,9 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
     )
   }
 
-  const prompt = buildBriefPrompt(brief, draft.startDate)
+  // Le panneau montre ce qui part vraiment : les consignes, puis le voyage.
+  const { system, user } = buildBriefPrompt(brief, draft.startDate)
+  const prompt = `${system}\n\n${user}`
   const copyPrompt = () => {
     navigator.clipboard
       ?.writeText(prompt)

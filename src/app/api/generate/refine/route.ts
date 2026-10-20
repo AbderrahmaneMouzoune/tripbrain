@@ -84,11 +84,14 @@ export async function POST(request: Request) {
     return fail('invalid_request', firstIssueMessage(parsed.error))
   }
 
-  const { itinerary, instruction, startDate } = parsed.data
+  const { itinerary, instruction, startDate, brief, description } = parsed.data
   let text: string
   try {
     ;({ text } = await completeText(
-      buildRefinePrompt(itinerary, instruction, startDate),
+      buildRefinePrompt(itinerary, instruction, startDate, {
+        brief,
+        description,
+      }),
       { route: 'refine', days: itinerary.days.length },
       request.signal,
     ))

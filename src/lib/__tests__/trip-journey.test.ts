@@ -171,3 +171,12 @@ describe('compteurs de voyageurs', () => {
     ).toContain('party')
   })
 })
+
+describe('phrase libre et durée', () => {
+  it('ne tranche pas entre deux durées', () => {
+    expect(
+      parseExpress('4 jours à Paris puis 3 jours à Lyon').brief.durationDays,
+    ).toBeUndefined()
+    expect(parseExpress('Un week-end à Lisbonne').brief.durationDays).toBe(2)
+  })
+})

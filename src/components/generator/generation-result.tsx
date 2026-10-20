@@ -286,6 +286,7 @@ export function GenerationResult({
         onOpenChange={setRefineOpen}
         itinerary={itinerary}
         startDate={startDate}
+        request={state.request}
       />
     </MobileScreen>
   )
