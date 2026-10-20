@@ -5,6 +5,7 @@ import {
   IconAlertTriangle,
   IconChecks,
   IconChevronDown,
+  IconChevronRight,
   IconCircleCheck,
   IconInfoCircle,
   IconRefresh,
@@ -12,6 +13,7 @@ import {
 } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { MobileScreen } from '@/components/mobile/mobile-screen'
+import { GeneratedDaySheet } from '@/components/generator/generated-day-sheet'
 import { RefineSheet } from '@/components/generator/refine-sheet'
 import type { GenerationState } from '@/lib/generator/generation-store'
 import { analyzeItinerary } from '@/lib/generator/itinerary-quality'
@@ -21,7 +23,7 @@ import {
 } from '@/lib/generator/itinerary-schema'
 import {
   confidenceBars,
-  dayOfMonth,
+  dayMonthShort,
   dayRangeLabel,
   formatTripRange,
   groupByCity,
@@ -69,6 +71,7 @@ export function GenerationResult({
   saveError: string | null
 }) {
   const [refineOpen, setRefineOpen] = useState(false)
+  const [openDay, setOpenDay] = useState<number | null>(null)
   const days = useMemo(() => toDayItineraries(itinerary), [itinerary])
   const report = useMemo(() => analyzeItinerary(days), [days])
   const points = useMemo(
@@ -220,25 +223,38 @@ export function GenerationResult({
                 const day = days[index]
                 const flagged = flaggedDays.has(index + 1)
                 return (
-                  <li
-                    key={day.id}
-                    className="flex min-h-11 items-center gap-3 px-3.5"
-                  >
-                    <span className="text-muted-foreground w-[52px] shrink-0 font-mono text-xs font-semibold">
-                      J{index + 1} · {dayOfMonth(day.date)}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-extrabold">
-                      {day.title}
-                    </span>
-                    {flagged ? (
-                      <span className="bg-secondary-soft text-secondary-strong rounded-full px-2 py-0.5 text-[11px] font-extrabold">
-                        À vérifier
+                  <li key={day.id}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenDay(index)}
+                      aria-label={`Jour ${index + 1}, ${day.title} : voir le détail`}
+                      className="pressable focus-visible:ring-ring/50 flex min-h-12 w-full items-center gap-3 px-3.5 py-1.5 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-inset"
+                    >
+                      <span className="flex w-[52px] shrink-0 flex-col leading-tight">
+                        <span className="text-muted-foreground font-mono text-xs font-semibold">
+                          J{index + 1}
+                        </span>
+                        <span className="text-muted-foreground text-[11px] font-semibold">
+                          {dayMonthShort(day.date)}
+                        </span>
                       </span>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">
-                        {day.activities.length} act.
+                      <span className="min-w-0 flex-1 truncate text-sm font-extrabold">
+                        {day.title}
                       </span>
-                    )}
+                      {flagged ? (
+                        <span className="bg-secondary-soft text-secondary-strong rounded-full px-2 py-0.5 text-[11px] font-extrabold">
+                          À vérifier
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">
+                          {day.activities.length} act.
+                        </span>
+                      )}
+                      <IconChevronRight
+                        aria-hidden
+                        className="text-muted-foreground size-4 shrink-0"
+                      />
+                    </button>
                   </li>
                 )
               })}
@@ -257,6 +273,13 @@ export function GenerationResult({
           Tout régénérer
         </button>
       </div>
+
+      <GeneratedDaySheet
+        days={days}
+        index={openDay}
+        onIndexChange={setOpenDay}
+        onClose={() => setOpenDay(null)}
+      />
 
       <RefineSheet
         open={refineOpen}

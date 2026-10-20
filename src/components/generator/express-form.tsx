@@ -12,6 +12,7 @@ import {
   StartDateField,
 } from '@/components/generator/generator-controls'
 import { useGeneratorDraft } from '@/components/generator/use-generator-store'
+import { durationFromDescription } from '@/lib/generator/duration-hint'
 import { updateGeneratorDraft } from '@/lib/generator/generation-store'
 import { isPastDate, isValidIsoDate } from '@/lib/generator/itinerary-quality'
 import {
@@ -27,6 +28,20 @@ import {
 /** La date choisie est-elle exploitable : lisible, et pas dans le passé ? */
 export function isUsableStartDate(value: string): boolean {
   return isValidIsoDate(value) && !isPastDate(value)
+}
+
+/**
+ * Nouvelle description : quand elle annonce une durée qu'elle n'annonçait pas
+ * avant (« 4 jours à Paris »), le sélecteur la suit. Une durée déjà lue et
+ * corrigée à la main n'est pas réimposée à chaque frappe.
+ */
+function setDescription(previous: string, next: string): void {
+  const days = durationFromDescription(next)
+  if (days !== null && days !== durationFromDescription(previous)) {
+    updateGeneratorDraft({ description: next, durationDays: days })
+  } else {
+    updateGeneratorDraft({ description: next })
+  }
 }
 
 /**
@@ -51,6 +66,9 @@ export function ExpressForm({
   const dateOk = isUsableStartDate(draft.startDate)
   const descriptionOk = description.trim().length >= MIN_DESCRIPTION_LENGTH
   const back = dateOk ? returnDate(draft.startDate, draft.durationDays) : null
+  const describedDays = durationFromDescription(description)
+  const durationMismatch =
+    describedDays !== null && describedDays !== draft.durationDays
 
   let hint: string
   if (draft.startDate && !dateOk) {
@@ -105,7 +123,7 @@ export function ExpressForm({
             placeholder={TRIP_DESCRIPTION_PLACEHOLDER}
             aria-describedby={counterId}
             onChange={(event) =>
-              updateGeneratorDraft({ description: event.target.value })
+              setDescription(description, event.target.value)
             }
             className="border-border-strong bg-card text-foreground placeholder:text-muted-foreground/70 focus:border-primary focus:ring-ring/40 h-[118px] w-full resize-none rounded-[18px] border-[1.5px] px-4 pt-3.5 pb-7 text-base leading-[1.45] font-bold outline-none focus:ring-4"
           />
@@ -125,9 +143,7 @@ export function ExpressForm({
             <Chip
               key={example.label}
               className="text-[13px]"
-              onClick={() =>
-                updateGeneratorDraft({ description: example.prompt })
-              }
+              onClick={() => setDescription(description, example.prompt)}
             >
               {example.label}
             </Chip>
@@ -157,6 +173,28 @@ export function ExpressForm({
       >
         {hint}
       </p>
+      {durationMismatch && (
+        <div
+          role="status"
+          className="bg-secondary-soft text-secondary-strong mt-2.5 flex items-center gap-3 rounded-[14px] px-3.5 py-2.5"
+        >
+          <p className="min-w-0 flex-1 text-[13px] leading-snug font-bold">
+            Votre description parle de {describedDays} jour
+            {describedDays > 1 ? 's' : ''}, la durée choisie est de{' '}
+            {draft.durationDays} jour{draft.durationDays > 1 ? 's' : ''}.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-secondary/40 text-secondary-strong shrink-0 bg-transparent font-extrabold"
+            onClick={() =>
+              updateGeneratorDraft({ durationDays: describedDays })
+            }
+          >
+            Passer à {describedDays} j
+          </Button>
+        </div>
+      )}
 
       <OptionCard
         className="mt-4 py-3.5"

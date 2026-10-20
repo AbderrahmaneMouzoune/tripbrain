@@ -205,8 +205,24 @@ export function formatShortDate(iso: string): string {
   })
 }
 
-/** Jour du mois, pour la colonne « J1 · 12 ». */
-export function dayOfMonth(iso: string): string {
+/**
+ * Jour et mois abrégés, sous « J1 » dans la liste des journées : « 30 oct. ».
+ * Le mois évite qu'un voyage à cheval sur deux mois se lise « 30, 31, 1 ».
+ */
+export function dayMonthShort(iso: string): string {
   const date = parseIso(iso)
-  return Number.isNaN(date.getTime()) ? '' : String(date.getDate())
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+}
+
+/** « Vendredi 30 octobre », en tête du détail d'une journée. */
+export function formatDayHeading(iso: string): string {
+  const date = parseIso(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const label = date.toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+  return label.charAt(0).toUpperCase() + label.slice(1)
 }
