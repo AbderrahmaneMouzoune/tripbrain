@@ -42,6 +42,7 @@ import {
   parseExpress,
   precisionOf,
   questionById,
+  QUESTIONS,
   REFINE_CHAPTERS,
   setMulti,
   setSingle,
@@ -70,6 +71,15 @@ import {
  */
 
 type Screen = 'question' | 'hub' | 'express' | 'recap'
+const SCREENS: Screen[] = ['question', 'hub', 'express', 'recap']
+
+/** Ce qui est gardé d'une visite à l'autre, en plus des réponses. */
+interface SavedProgress {
+  screen: Screen
+  questionId: QuestionId
+  seen: ChapterId[]
+  express: string
+}
 
 export interface TripJourneyProps {
   brief: TripBrief
@@ -102,6 +112,14 @@ export interface TripJourneyProps {
   onChapterDone?: (chapterIndex: number) => void
   onExpressUsed?: () => void
   onFinishShortcut?: () => void
+  /**
+   * Clé de stockage local : où l'on en est (écran, question, chapitres
+   * bouclés) survit à un rechargement. Les réponses, elles, sont gardées par
+   * la page hôte.
+   */
+  storageKey?: string
+  /** Efface toutes les réponses : la page hôte remet le brief à zéro. */
+  onReset?: () => void
 }
 
 const AUTO_ADVANCE_MS = 700
@@ -151,6 +169,63 @@ export function TripJourney(props: TripJourneyProps) {
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const topRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
+  const [confirmReset, setConfirmReset] = useState(false)
+  // Faux tant que la progression enregistrée n'est pas relue : sans lui, le
+  // premier rendu écraserait la sauvegarde avec l'écran de départ.
+  const [restored, setRestored] = useState(false)
+
+  // Reprise après un rechargement : l'écran et la question où l'on en était.
+  const { storageKey } = props
+  useEffect(() => {
+    if (!storageKey || startOn !== 'question') {
+      setRestored(true)
+      return
+    }
+    try {
+      const raw = window.localStorage.getItem(storageKey)
+      const saved = raw ? (JSON.parse(raw) as Partial<SavedProgress>) : null
+      if (saved) {
+        const known = QUESTIONS.some((item) => item.id === saved.questionId)
+        if (known) setQuestionId(saved.questionId as QuestionId)
+        if (saved.screen && SCREENS.includes(saved.screen)) {
+          setScreen(saved.screen)
+        }
+        if (Array.isArray(saved.seen)) {
+          setSeen(
+            saved.seen.filter((id): id is ChapterId =>
+              CHAPTERS.some((chapter) => chapter.id === id),
+            ),
+          )
+        }
+        if (typeof saved.express === 'string') setExpress(saved.express)
+      }
+    } catch {
+      // Stockage indisponible (navigation privée) : on repart du début.
+    }
+    setRestored(true)
+    // Une seule lecture, au montage.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!storageKey || !restored) return
+    try {
+      const progress: SavedProgress = { screen, questionId, seen, express }
+      window.localStorage.setItem(storageKey, JSON.stringify(progress))
+    } catch {
+      // Rien à faire : la progression ne sera simplement pas reprise.
+    }
+  }, [storageKey, restored, screen, questionId, seen, express])
+
+  const restart = () => {
+    propsRef.current.onReset?.()
+    setConfirmReset(false)
+    setSeen([])
+    setExpress('')
+    setReturnTo(null)
+    setChain(false)
+    openQuestion('destination')
+  }
 
   useEffect(
     () => () => {
@@ -575,6 +650,40 @@ export function TripJourney(props: TripJourneyProps) {
             {screen === 'express' && (
               <ExpressScreen value={express} onChange={setExpress} />
             )}
+            {props.onReset &&
+              (screen === 'hub' || (screen === 'recap' && !overlay)) && (
+                <div className="order-last mt-4 flex justify-center">
+                  {confirmReset ? (
+                    <p className="tj-pop flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[13px] font-extrabold">
+                      <span className="text-muted-foreground">
+                        Effacer toutes les réponses ?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={restart}
+                        className="text-destructive min-h-11 cursor-pointer underline underline-offset-4"
+                      >
+                        Oui, tout effacer
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmReset(false)}
+                        className="text-foreground min-h-11 cursor-pointer"
+                      >
+                        Annuler
+                      </button>
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmReset(true)}
+                      className="text-muted-foreground hover:text-foreground min-h-11 cursor-pointer px-3 text-[13px] font-extrabold underline-offset-4 hover:underline"
+                    >
+                      Recommencer à zéro
+                    </button>
+                  )}
+                </div>
+              )}
             {screen === 'recap' &&
               (overlay ? (
                 overlay.content

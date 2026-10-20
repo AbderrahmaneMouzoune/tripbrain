@@ -21,6 +21,8 @@ import {
   startGeneration,
   stopGeneration,
   updateGeneratorDraft,
+  clearGeneratorDraft,
+  PROGRESS_STORAGE_KEY,
   type GenerationState,
 } from '@/lib/generator/generation-store'
 import { buildBriefPrompt } from '@/lib/generator/itinerary-prompt'
@@ -203,6 +205,8 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
       copied={copied}
       onCopyPrompt={copyPrompt}
       onExit={onClose}
+      storageKey={PROGRESS_STORAGE_KEY}
+      onReset={clearGeneratorDraft}
       renderFinish={(ready) => (
         <div className="flex flex-col gap-2">
           {ready && !dateOk && (
