@@ -24,7 +24,7 @@ import {
   JourneyPanel,
   type PanelTab,
 } from '@/components/generator/journey/journey-panel'
-import { BUDGETS, withParty, type TripBrief } from '@/lib/generator/trip-brief'
+import { BUDGETS, type TripBrief } from '@/lib/generator/trip-brief'
 import {
   answerLabel,
   applyExpress,
@@ -54,6 +54,7 @@ import {
   toggleIdea,
   tripTotalFor,
   visibleQuestions,
+  withPartyCounts,
   type ChapterId,
   type JourneyAnswers,
   type Question,
@@ -149,6 +150,7 @@ export function TripJourney(props: TripJourneyProps) {
   const advanceTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const topRef = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
 
   useEffect(
     () => () => {
@@ -177,10 +179,12 @@ export function TripJourney(props: TripJourneyProps) {
       setFlip((value) => value + 1)
       setScreen(next)
       if (id) setQuestionId(id)
+      bodyRef.current?.scrollTo({ top: 0 })
       if (variant === 'page' && topRef.current) {
-        const top = topRef.current.getBoundingClientRect().top
-        if (top < 0)
+        const { top, bottom } = topRef.current.getBoundingClientRect()
+        if (top < 0 || bottom > window.innerHeight + 1) {
           topRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
       }
     },
     [variant],
@@ -202,7 +206,7 @@ export function TripJourney(props: TripJourneyProps) {
       go(returnTo)
       return
     }
-    const inChapter = chapterQuestions(current, question.chapter)
+    const inChapter = chapterQuestions(current, question.chapter, question.id)
     const position = inChapter.findIndex((item) => item.id === question.id)
     if (position >= 0 && position < inChapter.length - 1) {
       openQuestion(inChapter[position + 1].id)
@@ -240,7 +244,7 @@ export function TripJourney(props: TripJourneyProps) {
           go(returnTo)
         }
       }
-      const inChapter = chapterQuestions(answers, question.chapter)
+      const inChapter = chapterQuestions(answers, question.chapter, question.id)
       const position = inChapter.findIndex((item) => item.id === question.id)
       if (position > 0) return () => openQuestion(inChapter[position - 1].id)
       if (question.chapter === 'base') return onExit
@@ -380,6 +384,8 @@ export function TripJourney(props: TripJourneyProps) {
   }
 
   const canFinish = screen !== 'recap' && returnTo !== 'recap'
+  /** Sur le billet, la suite (choix de l'IA, génération) reste toujours visible. */
+  const recapFooter = screen === 'recap' && !overlay
 
   // ── En-tête ──────────────────────────────────────────────────────────────
 
@@ -387,7 +393,7 @@ export function TripJourney(props: TripJourneyProps) {
   let headCount = ''
   let segments: boolean[] = []
   if (screen === 'question') {
-    const inChapter = chapterQuestions(answers, question.chapter)
+    const inChapter = chapterQuestions(answers, question.chapter, question.id)
     const position = inChapter.findIndex((item) => item.id === question.id)
     headLabel =
       CHAPTERS.find((chapter) => chapter.id === question.chapter)?.title ?? ''
@@ -416,10 +422,14 @@ export function TripJourney(props: TripJourneyProps) {
       className={
         isScreen
           ? 'bg-background text-foreground flex min-h-dvh'
-          : 'bg-card border-border text-foreground relative flex scroll-mt-6 overflow-hidden rounded-[28px] border'
+          : // Tout le parcours tient dans l'écran : seule la zone des
+            // questions défile, le bouton principal reste toujours visible.
+            'bg-card border-border text-foreground relative flex h-[calc(100svh-2rem)] max-h-[880px] min-h-[540px] scroll-mt-4 overflow-hidden rounded-[28px] border'
       }
     >
-      <div className="relative flex min-h-[640px] min-w-0 flex-1 flex-col">
+      <div
+        className={`relative flex min-w-0 flex-1 flex-col ${isScreen ? '' : 'min-h-0'}`}
+      >
         {/* En-tête : où l'on est, la jauge, et la sortie vers le billet. */}
         <div
           className={`border-border flex items-center gap-3 border-b bg-white px-4 pb-3 sm:px-6 ${
@@ -515,7 +525,12 @@ export function TripJourney(props: TripJourneyProps) {
           )}
         </div>
 
-        <div className="flex flex-1 flex-col px-5 pt-6 pb-5 sm:px-8">
+        <div
+          ref={bodyRef}
+          className={`flex flex-1 flex-col px-5 pt-6 pb-5 sm:px-8 ${
+            isScreen ? '' : 'min-h-0 overflow-y-auto overscroll-contain'
+          }`}
+        >
           <div
             key={`${screen}-${questionId}-${flip}`}
             className="tj-screen mx-auto flex w-full max-w-xl flex-col"
@@ -577,14 +592,12 @@ export function TripJourney(props: TripJourneyProps) {
                     openQuestion(id)
                   }}
                   onShowPrompt={() => setPanel('prompt')}
-                >
-                  {renderFinish(missing.length === 0)}
-                </RecapScreen>
+                />
               ))}
           </div>
         </div>
 
-        {(primary || secondary) && (
+        {(primary || secondary || recapFooter) && (
           <div
             className={`flex flex-col items-center gap-1.5 px-5 pt-3 sm:px-8 ${
               isScreen
@@ -593,6 +606,11 @@ export function TripJourney(props: TripJourneyProps) {
             }`}
           >
             <div className="flex w-full max-w-xl flex-col items-center gap-1.5">
+              {recapFooter && (
+                <div className="w-full">
+                  {renderFinish(missing.length === 0)}
+                </div>
+              )}
               {primary && (
                 <button
                   type="button"
@@ -646,7 +664,7 @@ export function TripJourney(props: TripJourneyProps) {
           <div
             key={toast.key}
             role="status"
-            className="tj-toast bg-ink pointer-events-none absolute right-4 bottom-24 left-4 z-20 mx-auto flex max-w-md items-center gap-2.5 rounded-2xl px-3.5 py-3 text-white shadow-[0_16px_30px_-12px_rgba(6,20,60,0.6)]"
+            className="tj-toast bg-ink pointer-events-none absolute top-20 right-4 left-4 z-20 mx-auto flex max-w-md items-center gap-2.5 rounded-2xl px-3.5 py-3 text-white shadow-[0_16px_30px_-12px_rgba(6,20,60,0.6)]"
           >
             <span className="flex size-[26px] flex-none items-center justify-center rounded-full bg-[#15803d]">
               <IconCheck className="size-3.5" stroke={3.2} />
@@ -794,7 +812,9 @@ function QuestionScreen({
               value={brief.adults}
               min={1}
               max={30}
-              onChange={(adults) => onBriefChange(withParty(brief, { adults }))}
+              onChange={(adults) =>
+                onBriefChange(withPartyCounts(brief, { adults }))
+              }
             />
             <Counter
               label="Enfants"
@@ -803,7 +823,7 @@ function QuestionScreen({
               min={0}
               max={30}
               onChange={(children) =>
-                onBriefChange(withParty(brief, { children }))
+                onBriefChange(withPartyCounts(brief, { children }))
               }
             />
             {brief.children > 0 && (
@@ -1489,7 +1509,6 @@ function RecapScreen({
   missing,
   onEdit,
   onShowPrompt,
-  children,
 }: {
   answers: JourneyAnswers
   precision: number
@@ -1500,9 +1519,15 @@ function RecapScreen({
   missing: Question[]
   onEdit: (id: QuestionId) => void
   onShowPrompt: () => void
-  children: ReactNode
 }) {
+  const [showAll, setShowAll] = useState(false)
   const rows = visibleQuestions(answers)
+  // Le billet montre ce qui est dit ; ce qui est laissé à l'IA tient en une
+  // ligne, qu'on déplie pour le compléter.
+  const shown = rows.filter(
+    (question) => showAll || question.required || isAnswered(question, answers),
+  )
+  const hidden = rows.length - shown.length
   const suggestions = rows
     .filter(
       (question) =>
@@ -1527,7 +1552,7 @@ function RecapScreen({
           </span>
         </div>
         <div className="px-4 pt-0.5 pb-1.5">
-          {rows.map((question) => {
+          {shown.map((question) => {
             const value = answerLabel(question, answers)
             return (
               <button
@@ -1559,6 +1584,21 @@ function RecapScreen({
               </button>
             )
           })}
+          {(hidden > 0 || showAll) && (
+            <button
+              type="button"
+              aria-expanded={showAll}
+              onClick={() => setShowAll(!showAll)}
+              className="text-primary-strong flex w-full cursor-pointer items-center justify-between gap-3 py-2.5 text-left text-xs font-black hover:underline"
+            >
+              <span>
+                {showAll
+                  ? 'Replier le billet'
+                  : `+ ${hidden} réponse${hidden > 1 ? 's' : ''} laissée${hidden > 1 ? 's' : ''} à l’IA`}
+              </span>
+              <span>{showAll ? 'Replier' : 'Voir et compléter'}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1600,8 +1640,6 @@ function RecapScreen({
           </div>
         </div>
       )}
-
-      {children}
 
       <button
         type="button"
@@ -1645,7 +1683,7 @@ function LiveTicket({
             {precision} %
           </span>
         </div>
-        <div className="max-h-[520px] flex-1 overflow-y-auto px-4 pt-1 pb-2.5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-1 pb-2.5">
           {CHAPTERS.map((chapter) => (
             <div key={chapter.id} className="pt-2 pb-1">
               <p

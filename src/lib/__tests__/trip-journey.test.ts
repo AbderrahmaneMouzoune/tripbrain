@@ -15,6 +15,7 @@ import {
   togglePack,
   tripTotalFor,
   visibleQuestions,
+  withPartyCounts,
   type JourneyAnswers,
 } from '@/lib/generator/trip-journey'
 
@@ -148,5 +149,25 @@ describe('parcours du générateur', () => {
       '2026-11-15',
       '2027-07-05',
     ])
+  })
+})
+
+describe('compteurs de voyageurs', () => {
+  it('garde un groupe cohérent quand les chiffres changent', () => {
+    const group = setSingle(EMPTY_BRIEF, 'group', 'group')
+    const fewer = withPartyCounts(group, { adults: 3 })
+    expect(fewer.group).toBe('friends')
+    expect(withPartyCounts(fewer, { children: 1 }).group).toBe('family')
+    expect(withPartyCounts(fewer, { adults: 1 }).group).toBe('solo')
+  })
+
+  it('garde l’écran affiché même si une réponse le masque', () => {
+    const solo = answers({ group: 'solo' })
+    expect(chapterQuestions(solo, 'people').map((q) => q.id)).not.toContain(
+      'party',
+    )
+    expect(
+      chapterQuestions(solo, 'people', 'party').map((q) => q.id),
+    ).toContain('party')
   })
 })

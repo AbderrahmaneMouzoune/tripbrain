@@ -403,9 +403,14 @@ export function JourneyIllustration({
     }
 
     case 'people': {
-      const shown = Boolean(brief.group)
+      // Sur l'écran des compteurs, les personnages suivent les chiffres même
+      // si le groupe n'est plus déterminé.
+      const shown = Boolean(brief.group) || animKey === 'party'
       const adults = shown ? Math.min(brief.adults, 6) : 0
       const kids = shown ? Math.min(brief.children, 4) : 0
+      const extra = shown
+        ? Math.max(0, brief.adults - 6) + Math.max(0, brief.children - 4)
+        : 0
       return (
         <Frame
           background="#e6eefd"
@@ -436,6 +441,15 @@ export function JourneyIllustration({
               <span className="h-6 w-[30px] rounded-[15px_15px_6px_6px] bg-[#f26a2e]" />
             </span>
           ))}
+          {extra > 0 && (
+            <span
+              key={`${animKey}-extra-${extra}`}
+              className="bg-ink self-center rounded-full px-2.5 py-1 font-mono text-xs font-semibold text-white"
+              style={pop()}
+            >
+              +{extra}
+            </span>
+          )}
         </Frame>
       )
     }

@@ -29,6 +29,7 @@ import {
   withGroup,
   withMobility,
   withOccasion,
+  withParty,
   type BriefOption,
   type TripBrief,
 } from '@/lib/generator/trip-brief'
@@ -367,12 +368,19 @@ export function visibleQuestions(answers: JourneyAnswers): Question[] {
   )
 }
 
+/**
+ * Questions d'un chapitre. `keep` garde la question affichée même si une
+ * réponse vient de la masquer : l'écran ne doit pas disparaître sous le doigt.
+ */
 export function chapterQuestions(
   answers: JourneyAnswers,
   chapter: ChapterId,
+  keep?: QuestionId,
 ): Question[] {
-  return visibleQuestions(answers).filter(
-    (question) => question.chapter === chapter,
+  return QUESTIONS.filter(
+    (question) =>
+      question.chapter === chapter &&
+      (question.id === keep || !question.showIf || question.showIf(answers)),
   )
 }
 
@@ -435,6 +443,31 @@ export function setSingle(
     return { ...brief, budget: value, splurges: [] }
   }
   return { ...brief, [id as SingleField]: value }
+}
+
+/**
+ * Les compteurs de voyageurs. `withParty` peut défaire un groupe devenu
+ * incohérent (une famille sans enfant) ; ici on en déduit aussitôt un autre,
+ * pour que le voyageur ne perde pas sa réponse en ajustant un chiffre.
+ */
+export function withPartyCounts(
+  brief: TripBrief,
+  party: Partial<Pick<TripBrief, 'adults' | 'children'>>,
+): TripBrief {
+  const next = withParty(brief, party)
+  const total = partySize(next)
+  // On ne voyage pas « entre amis » tout seul.
+  if (next.group === 'friends' && total === 1) return { ...next, group: 'solo' }
+  if (next.group) return next
+  const group =
+    next.children > 0
+      ? 'family'
+      : total >= 5
+        ? 'group'
+        : next.adults <= 1
+          ? 'solo'
+          : 'friends'
+  return withParty({ ...next, group }, {})
 }
 
 export function setMulti(
