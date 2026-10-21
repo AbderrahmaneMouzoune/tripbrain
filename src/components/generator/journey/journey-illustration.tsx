@@ -7,6 +7,7 @@ import {
   labelOf,
   OCCASIONS,
   partySize,
+  returnDate,
   type TripBrief,
 } from '@/lib/generator/trip-brief'
 import {
@@ -139,14 +140,14 @@ export function JourneyIllustration({
               </p>
               <p
                 className={`font-display mt-0.5 truncate leading-tight ${destination ? 'text-[22px]' : 'text-lg'}`}
-                style={{ color: destination ? '#0e1a3a' : '#c7d5ec' }}
+                style={{ color: destination ? '#0e1a3a' : '#5b6b8c' }}
               >
                 {destination || 'Où ça ?'}
               </p>
             </div>
             <span
               key={`${animKey}-${code}`}
-              className="flex h-14 w-12 flex-none items-center justify-center rounded-md border-2 border-dashed border-[#f26a2e] font-mono text-[13px] font-semibold text-[#f26a2e]"
+              className="flex h-14 w-12 flex-none items-center justify-center rounded-md border-2 border-dashed border-[#f26a2e] font-mono text-[13px] font-semibold text-[#c2410c]"
               style={destination ? pop() : undefined}
             >
               {code}
@@ -214,7 +215,7 @@ export function JourneyIllustration({
             )}
             <span
               className="absolute bottom-1.5 left-3 text-[13px] font-black"
-              style={{ color: origin ? '#1447b8' : '#8a98b5' }}
+              style={{ color: origin ? '#1447b8' : '#5b6b8c' }}
             >
               {origin || 'Départ ?'}
             </span>
@@ -241,8 +242,7 @@ export function JourneyIllustration({
           weekend: day.getDay() === 0 || day.getDay() === 6,
         }
       })
-      const end = start ? new Date(start) : null
-      end?.setDate(start!.getDate() + brief.durationDays - 1)
+      const end = start ? returnDate(startDate, brief.durationDays) : null
       const weekendDays = cells.filter((cell) => cell.weekend).length
       const note = !start
         ? 'Choisissez une date : chaque journée sera datée.'
@@ -744,7 +744,7 @@ export function JourneyIllustration({
                 <span
                   key={`${animKey}-${label}`}
                   className="flex min-h-[26px] items-end text-center text-[11px] leading-[1.15] font-black"
-                  style={{ color: label ? '#0e1a3a' : '#8a98b5', ...pop() }}
+                  style={{ color: label ? '#0e1a3a' : '#5b6b8c', ...pop() }}
                 >
                   {label ?? '…'}
                 </span>

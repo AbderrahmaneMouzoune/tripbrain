@@ -455,3 +455,16 @@
 .tb-route-primary {
   stroke: var(--primary);
 }
+
+/*
+ * Safari iOS zoome tout seul sur un champ dont le texte fait moins de 16 px.
+ * On porte les champs à 16 px au moins sur iOS, ce qui permet de laisser le
+ * zoom à deux doigts libre partout (voir `viewport` dans layout.tsx).
+ */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em);
+  }
+}

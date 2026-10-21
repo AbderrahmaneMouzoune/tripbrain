@@ -56,6 +56,8 @@ describe('brouillon du générateur gardé sur l’appareil', () => {
     storage.setItem(
       'tripbrain:generateur:brouillon',
       JSON.stringify({
+        v: 1,
+        savedAt: Date.now(),
         startDate: '2020-01-01',
         brief: { destination: 'Rome' },
       }),
@@ -63,6 +65,40 @@ describe('brouillon du générateur gardé sur l’appareil', () => {
     const store = await loadStore()
     expect(store.getGeneratorDraft().startDate).toBe('')
     expect(store.getGeneratorDraft().brief.destination).toBe('Rome')
+  })
+
+  it('écarte un brouillon trop ancien ou d’une autre version', async () => {
+    storage.setItem(
+      'tripbrain:generateur:brouillon',
+      JSON.stringify({
+        v: 1,
+        savedAt: Date.now() - 31 * 24 * 60 * 60 * 1000,
+        brief: { destination: 'Rome' },
+      }),
+    )
+    expect((await loadStore()).getGeneratorDraft().brief.destination).toBe('')
+    storage.setItem(
+      'tripbrain:generateur:brouillon',
+      JSON.stringify({ brief: { destination: 'Rome' } }),
+    )
+    expect((await loadStore()).getGeneratorDraft().brief.destination).toBe('')
+  })
+
+  it('répare un brouillon abîmé champ par champ', async () => {
+    storage.setItem(
+      'tripbrain:generateur:brouillon',
+      JSON.stringify({
+        v: 1,
+        savedAt: Date.now(),
+        durationDays: 45,
+        brief: { destination: 'Rome', interests: 'food', mobility: null },
+      }),
+    )
+    const { brief, durationDays } = (await loadStore()).getGeneratorDraft()
+    expect(durationDays).toBe(30)
+    expect(brief.interests).toEqual([])
+    expect(brief.mobility).toEqual([])
+    expect(brief.destination).toBe('Rome')
   })
 
   it('ignore un brouillon illisible', async () => {

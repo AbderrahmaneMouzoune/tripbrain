@@ -46,15 +46,51 @@ export function JourneyPanel({
   finishLabel: string
 }) {
   const dialogRef = useRef<HTMLDivElement>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
+  // À l'ouverture seulement : le focus entre dans le panneau, et Échap le
+  // referme. Le rendre à chaque rendu le ferait sauter sous le doigt.
   useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
     dialogRef.current?.focus()
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onCloseRef.current()
+        return
+      }
+      // Piège de focus : Tab tourne dans le panneau tant qu'il est ouvert.
+      if (event.key !== 'Tab' || !dialogRef.current) return
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+      if (
+        event.shiftKey &&
+        (active === first || active === dialogRef.current)
+      ) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      // Le focus revient là où il était, la jauge en général.
+      if (previous && document.contains(previous)) {
+        previous.focus({ preventScroll: true })
+      }
+    }
+  }, [])
 
   const base = chapterProgress(answers, CHAPTERS[0])
   const bars = [{ id: 'base', width: BASE_PRECISION, color: CHAPTERS[0].color }]
@@ -119,7 +155,11 @@ export function JourneyPanel({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-[18px] pb-3.5">
+        <div
+          tabIndex={0}
+          aria-label={tab === 'why' ? 'Détail de la précision' : 'Prompt'}
+          className="focus-visible:ring-primary-soft min-h-0 flex-1 overflow-y-auto px-[18px] pb-3.5 outline-none focus-visible:ring-4"
+        >
           {tab === 'why' ? (
             <>
               <div className="flex items-baseline justify-between gap-2">
@@ -246,7 +286,7 @@ function PanelRow({
       />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="font-black">{title}</span>
-        <span className="truncate text-xs font-bold text-[#8a98b5]">
+        <span className="text-muted-foreground truncate text-xs font-bold">
           {detail}
         </span>
       </span>

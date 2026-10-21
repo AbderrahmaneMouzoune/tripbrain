@@ -146,7 +146,7 @@ export function GenerationResult({
         </>
       }
     >
-      <header className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1.5">
         <p className="text-secondary-strong text-xs font-black tracking-[0.08em] uppercase">
           {state.status === 'stopped'
             ? 'Itinéraire partiel'
@@ -181,7 +181,7 @@ export function GenerationResult({
             {itinerary.summary}
           </p>
         )}
-      </header>
+      </div>
 
       <QualityCard
         points={points}
@@ -306,8 +306,10 @@ function QualityCard({
 
   if (points.length === 0) {
     return (
-      <section className="bg-success-soft text-success mt-[18px] flex items-center gap-3 rounded-[22px] p-4">
-        <IconCircleCheck className="size-6 shrink-0" aria-hidden />
+      // Le vert du thème sur son fond clair passe sous le contraste minimal :
+      // le texte reste foncé, la coche porte la couleur.
+      <section className="bg-success-soft text-foreground mt-[18px] flex items-center gap-3 rounded-[22px] p-4">
+        <IconCircleCheck className="text-success size-6 shrink-0" aria-hidden />
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-black">Aucun point à vérifier</h2>
           <p className="text-[13px] font-bold">

@@ -152,7 +152,7 @@ export function LiveGeneration({
         </>
       }
     >
-      <header className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1">
         <p className="text-secondary-strong flex items-center gap-2 text-xs font-black tracking-[0.08em] uppercase">
           {running && (
             <span
@@ -168,7 +168,7 @@ export function LiveGeneration({
         {subtitle && (
           <p className="text-muted-foreground text-sm font-bold">{subtitle}</p>
         )}
-      </header>
+      </div>
 
       <div className="bg-ink text-ink-foreground mt-4 flex flex-col gap-2.5 rounded-[20px] px-4 py-3.5">
         <div className="flex items-center gap-2.5">

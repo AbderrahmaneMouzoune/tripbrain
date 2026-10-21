@@ -29,13 +29,19 @@ import {
   type GeneratedItinerary,
 } from '@/lib/generator/itinerary-schema'
 import { readGeneratedItinerary } from '@/lib/generator/read-result'
-import { expectedDays, type GenerateRequest } from '@/lib/generator/requests'
 import {
   IncrementalItineraryParser,
   type PartialDay,
 } from '@/lib/generator/stream-parser'
 import { isPastDate, isValidIsoDate } from '@/lib/generator/itinerary-quality'
 import { EMPTY_BRIEF, type TripBrief } from '@/lib/generator/trip-brief'
+import { sanitizeBrief } from '@/lib/generator/trip-journey'
+import {
+  expectedDays,
+  MAX_DESCRIPTION_LENGTH,
+  MAX_DURATION_DAYS,
+  type GenerateRequest,
+} from '@/lib/generator/requests'
 
 export type GenerationStatus = 'idle' | 'running' | 'done' | 'stopped' | 'error'
 
@@ -95,6 +101,15 @@ const EMPTY_DRAFT: GeneratorDraft = {
 }
 
 let state: GenerationState = IDLE
+/** Brouillon tel qu'il est écrit sur l'appareil : versionné et daté. */
+interface SavedDraft extends GeneratorDraft {
+  v: 1
+  savedAt: number
+}
+
+/** Au-delà, un brouillon n'est plus repris : les réponses y sont personnelles. */
+const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
 /** Brouillon gardé sur l'appareil, d'une visite à l'autre. */
 export const DRAFT_STORAGE_KEY = 'tripbrain:generateur:brouillon'
 /** Où l'on en est dans le parcours (écran, question), géré par le parcours. */
@@ -110,27 +125,36 @@ function loadDraft(): GeneratorDraft {
   try {
     const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY)
     if (!raw) return EMPTY_DRAFT
-    const saved = JSON.parse(raw) as Partial<GeneratorDraft>
+    const saved = JSON.parse(raw) as Partial<SavedDraft>
+    // Une ancienne version ou un brouillon trop vieux ne sont pas repris.
+    if (
+      saved.v !== 1 ||
+      typeof saved.savedAt !== 'number' ||
+      Date.now() - saved.savedAt > DRAFT_TTL_MS
+    ) {
+      window.localStorage.removeItem(DRAFT_STORAGE_KEY)
+      return EMPTY_DRAFT
+    }
+    // Chaque champ est vérifié : un brouillon abîmé ne doit rien casser.
+    // La durée du brouillon fait foi : c'est elle que la génération reçoit.
+    const brief = sanitizeBrief(
+      { ...(saved.brief ?? {}), durationDays: saved.durationDays },
+      MAX_DURATION_DAYS,
+    )
     const startDate =
       typeof saved.startDate === 'string' &&
       isValidIsoDate(saved.startDate) &&
       !isPastDate(saved.startDate)
         ? saved.startDate
         : ''
-    const durationDays =
-      typeof saved.durationDays === 'number' && saved.durationDays > 0
-        ? saved.durationDays
-        : EMPTY_DRAFT.durationDays
     return {
       description:
-        typeof saved.description === 'string' ? saved.description : '',
+        typeof saved.description === 'string'
+          ? saved.description.slice(0, MAX_DESCRIPTION_LENGTH)
+          : '',
       startDate,
-      durationDays,
-      brief: {
-        ...EMPTY_BRIEF,
-        ...(saved.brief && typeof saved.brief === 'object' ? saved.brief : {}),
-        durationDays,
-      },
+      durationDays: brief.durationDays,
+      brief,
     }
   } catch {
     return EMPTY_DRAFT
@@ -140,7 +164,8 @@ function loadDraft(): GeneratorDraft {
 function saveDraft(): void {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft))
+    const saved: SavedDraft = { ...draft, v: 1, savedAt: Date.now() }
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(saved))
   } catch {
     // Stockage plein ou refusé : le brouillon reste en mémoire.
   }

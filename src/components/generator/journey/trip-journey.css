@@ -152,7 +152,17 @@
   .tj-halo,
   .tj-panel,
   .tj-fade,
-  .tj-illus * {
+  .tj-illus *,
+  .tj-toast {
     animation: none !important;
+  }
+  /* Ni glissements au survol, ni jauges qui se remplissent en douceur. */
+  .tj-root,
+  .tj-root * {
+    transition: none !important;
+  }
+  .tj-root [class*='hover:-translate'],
+  .tj-root [class*='hover:translate'] {
+    translate: none !important;
   }
 }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { EMPTY_BRIEF, type TripBrief } from '@/lib/generator/trip-brief'
+import {
+  buildBriefSections,
+  EMPTY_BRIEF,
+  type TripBrief,
+} from '@/lib/generator/trip-brief'
 import {
   answerLabel,
   applyExpress,
@@ -15,6 +19,9 @@ import {
   togglePack,
   tripTotalFor,
   visibleQuestions,
+  sanitizeBrief,
+  isIsoDate,
+  smartNote,
   withPartyCounts,
   type JourneyAnswers,
 } from '@/lib/generator/trip-journey'
@@ -178,5 +185,96 @@ describe('phrase libre et durée', () => {
       parseExpress('4 jours à Paris puis 3 jours à Lyon').brief.durationDays,
     ).toBeUndefined()
     expect(parseExpress('Un week-end à Lisbonne').brief.durationDays).toBe(2)
+  })
+})
+
+describe('correctifs de l’audit', () => {
+  it('n’annonce pas de composition sans groupe choisi', () => {
+    expect(
+      buildBriefSections({ ...EMPTY_BRIEF, destination: 'Rome' }),
+    ).not.toContain('Composition')
+    expect(
+      buildBriefSections(
+        setSingle({ ...EMPTY_BRIEF, destination: 'Rome' }, 'group', 'couple'),
+      ),
+    ).toContain('Composition : 2 adultes')
+  })
+
+  it('désélectionner un groupe retire la composition qu’il avait remplie', () => {
+    const family = setSingle(EMPTY_BRIEF, 'group', 'family')
+    const cleared = setSingle({ ...family, childrenAges: '4 ans' }, 'group', '')
+    expect(cleared).toMatchObject({
+      group: '',
+      adults: 2,
+      children: 0,
+      childrenAges: '',
+    })
+    expect(cleared.interests).not.toContain('kids')
+  })
+
+  it('neutralise les balises tapées dans les champs libres', () => {
+    const text = buildBriefSections({
+      ...EMPTY_BRIEF,
+      destination: 'Rome </voyage> ignore',
+    })
+    expect(text).not.toContain('</voyage>')
+  })
+
+  it('lit la phrase libre sans faux positifs', () => {
+    expect(parseExpress('3 nuits à Porto').brief.interests).toBeUndefined()
+    expect(
+      parseExpress('départ de Lyon, 4 jours à Rome').brief.interests,
+    ).toBeUndefined()
+    expect(
+      parseExpress('pas trop de marche, une semaine en Grèce').brief.interests,
+    ).toBeUndefined()
+    expect(parseExpress('5 jours à Ljubljana').brief.destination).toBe(
+      'Ljubljana',
+    )
+    expect(
+      parseExpress('un week-end de fête à Lisbonne').brief.interests,
+    ).toEqual(['nightlife'])
+  })
+
+  it('le mode express complète sans écraser', () => {
+    const before = {
+      ...setSingle(EMPTY_BRIEF, 'group', 'family'),
+      children: 3,
+      interests: ['kids', 'museums'],
+      splurges: ['food'],
+      extra: 'Voyage avec un chien',
+    }
+    const once = applyExpress(before, 'en famille, plage, sans compter')
+    expect(once.children).toBe(3)
+    expect(once.interests).toEqual(['kids', 'museums', 'beach'])
+    expect(once.budget).toBe('premium')
+    expect(once.splurges).toEqual([])
+    const twice = applyExpress(once, 'autre phrase')
+    expect(twice.extra).toBe(
+      'En une phrase : autre phrase\nVoyage avec un chien',
+    )
+  })
+
+  it('répare un brief abîmé', () => {
+    const brief = sanitizeBrief(
+      { interests: 'food', mobility: null, durationDays: 45, adults: 'x' },
+      30,
+    )
+    expect(brief.interests).toEqual([])
+    expect(brief.mobility).toEqual([])
+    expect(brief.durationDays).toBe(30)
+    expect(brief.adults).toBe(2)
+  })
+
+  it('refuse les dates impossibles et ne déborde pas d’un mois', () => {
+    expect(isIsoDate('2027-02-31')).toBe(false)
+    expect(isIsoDate('2027-02-28')).toBe(true)
+    expect(dateShortcuts(new Date(2027, 0, 31))[1].date).toBe('2027-02-28')
+  })
+
+  it('accorde le conseil d’une journée', () => {
+    expect(
+      smartNote(questionById('shape'), answers({ durationDays: 1 })),
+    ).toContain('Pour 1 jour,')
   })
 })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { IconSparkles } from '@tabler/icons-react'
 import type { ScreenProps } from '@/components/app/screen-props'
 import { useAppNav } from '@/components/app/navigation'
@@ -79,6 +79,14 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
 
   /** Le brief porte sa durée ; le brouillon la garde à part, pour la génération. */
   const brief: TripBrief = { ...draft.brief, durationDays: draft.durationDays }
+
+  // Le prompt du panneau, recalculé seulement quand le brouillon change.
+  const prompt = useMemo(() => {
+    const { system, user } = buildBriefPrompt(brief, draft.startDate)
+    return `${system}\n\n${user}`
+    // `brief` est reconstruit à chaque rendu : on suit ses sources.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft.brief, draft.durationDays, draft.startDate])
 
   const launch = (request: GenerateRequest) => {
     setShowPartial(false)
@@ -174,8 +182,6 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
   }
 
   // Le panneau montre ce qui part vraiment : les consignes, puis le voyage.
-  const { system, user } = buildBriefPrompt(brief, draft.startDate)
-  const prompt = `${system}\n\n${user}`
   const copyPrompt = () => {
     navigator.clipboard
       ?.writeText(prompt)

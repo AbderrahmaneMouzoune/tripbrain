@@ -734,7 +734,16 @@ function withKidsInterest(brief: TripBrief): TripBrief {
 export function withGroup(brief: TripBrief, group: string): TripBrief {
   const option = TRAVELER_GROUPS.find((item) => item.id === group)
   const next: TripBrief = { ...brief, group }
-  if (!option) return next
+  if (!option) {
+    // Réponse retirée : la composition qu'elle avait remplie s'en va avec elle.
+    return withKidsInterest({
+      ...next,
+      group: '',
+      adults: EMPTY_BRIEF.adults,
+      children: EMPTY_BRIEF.children,
+      childrenAges: '',
+    })
+  }
   return withKidsInterest({ ...next, ...option.party })
 }
 
@@ -870,7 +879,27 @@ function travelersLine(brief: TripBrief): string {
  * marquées « non renseigné », pour ne pas attirer l'attention du modèle sur
  * des vides qu'il comblerait au hasard.
  */
-export function buildBriefSections(brief: TripBrief): string {
+/**
+ * Les textes libres sont placés entre balises dans le prompt (`<voyage>`) :
+ * un chevron tapé par le voyageur ne doit pas pouvoir les refermer.
+ */
+function withSafeText(brief: TripBrief): TripBrief {
+  const safe = (text: string) =>
+    text.replace(/</g, '‹').replace(/>/g, '›')
+  return {
+    ...brief,
+    destination: safe(brief.destination),
+    origin: safe(brief.origin),
+    childrenAges: safe(brief.childrenAges),
+    mustSee: safe(brief.mustSee),
+    avoid: safe(brief.avoid),
+    booked: safe(brief.booked),
+    extra: safe(brief.extra),
+  }
+}
+
+export function buildBriefSections(rawBrief: TripBrief): string {
+  const brief = withSafeText(rawBrief)
   const sections: { title: string; lines: string[] }[] = []
 
   const trip: string[] = [
@@ -888,7 +917,9 @@ export function buildBriefSections(brief: TripBrief): string {
   const travelers: string[] = []
   const group = optionById(TRAVELER_GROUPS, brief.group)
   if (group) travelers.push(group.prompt)
-  const composition = travelersLine(brief)
+  // Sans groupe choisi, les compteurs gardent leurs valeurs par défaut : les
+  // écrire ferait croire à l'IA que le voyageur a répondu.
+  const composition = brief.group ? travelersLine(brief) : ''
   if (composition) travelers.push(`Composition : ${composition}.`)
   const familiarity = optionById(FAMILIARITY_LEVELS, brief.familiarity)
   if (familiarity) travelers.push(familiarity.prompt)
@@ -980,7 +1011,8 @@ export function buildBriefSections(brief: TripBrief): string {
  * Les contraintes qui s'ajoutent aux règles de base du prompt. Elles disent au
  * modèle quoi faire, là où le brief se contente de décrire le voyageur.
  */
-export function buildBriefRules(brief: TripBrief): string[] {
+export function buildBriefRules(rawBrief: TripBrief): string[] {
+  const brief = withSafeText(rawBrief)
   const rules: string[] = []
 
   if (brief.shape === 'base') {

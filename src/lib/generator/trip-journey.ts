@@ -9,11 +9,14 @@
  * réponses déjà données. L'affichage vit dans `components/trip-journey`.
  */
 
+import { IconMoodSmile } from '@tabler/icons-react'
 import { durationFromDescription } from '@/lib/generator/duration-hint'
+import { MAX_DURATION_DAYS } from '@/lib/generator/requests'
 import {
   BUDGETS,
   DAY_STARTS,
   DIETS,
+  EMPTY_BRIEF,
   FAMILIARITY_LEVELS,
   INTERESTS,
   MOBILITIES,
@@ -24,6 +27,7 @@ import {
   TRAVEL_TIMES,
   TRAVELER_GROUPS,
   TRIP_SHAPES,
+  estimatedBudget,
   labelOf,
   labelsOf,
   partySize,
@@ -142,6 +146,7 @@ export interface Question {
 /** « Rien de spécial » : une vraie réponse, qui n'ajoute rien au prompt. */
 export const NO_OCCASION: BriefOption = {
   id: 'none',
+  icon: IconMoodSmile,
   label: 'Rien de spécial',
   prompt: '',
 }
@@ -481,8 +486,12 @@ export function setMulti(
 
 /** Date au format AAAA-MM-JJ, lisible. */
 export function isIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  return !Number.isNaN(new Date(`${value}T00:00:00`).getTime())
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false
+  }
+  const date = new Date(`${value}T00:00:00`)
+  // Le 31 février devient le 3 mars en JavaScript : on vérifie l'aller-retour.
+  return !Number.isNaN(date.getTime()) && iso(date) === value
 }
 
 export function isAnswered(
@@ -618,7 +627,7 @@ export function smartNote(question: Question, answers: JourneyAnswers): string {
   switch (question.id) {
     case 'shape':
       if (brief.durationDays <= 3) {
-        return `Pour ${brief.durationDays} jours, une seule base évite de perdre du temps en valises.`
+        return `Pour ${brief.durationDays} jour${brief.durationDays > 1 ? 's' : ''}, une seule base évite de perdre du temps en valises.`
       }
       if (brief.durationDays >= 10) {
         return `Sur ${brief.durationDays} jours, deux ou trois bases font un bon équilibre.`
@@ -988,8 +997,14 @@ export function dateShortcuts(
   const base = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const saturday = new Date(base)
   saturday.setDate(base.getDate() + ((6 - base.getDay() + 7) % 7 || 7))
-  const month = new Date(base)
-  month.setMonth(base.getMonth() + 1)
+  // Un mois plus tard, sans déborder : le 31 janvier donne le 28 février.
+  const month = new Date(base.getFullYear(), base.getMonth() + 1, 1)
+  month.setDate(
+    Math.min(
+      base.getDate(),
+      new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate(),
+    ),
+  )
   const summerYear =
     base.getMonth() >= 6 ? base.getFullYear() + 1 : base.getFullYear()
   const summer = new Date(summerYear, 6, 5)
@@ -1001,7 +1016,7 @@ export function dateShortcuts(
 }
 
 export const DURATION_SHORTCUTS = [
-  { label: 'Week-end', days: 3 },
+  { label: 'Long week-end', days: 3 },
   { label: 'Une semaine', days: 7 },
   { label: 'Dix jours', days: 10 },
   { label: 'Deux semaines', days: 14 },
@@ -1077,7 +1092,7 @@ export function parseExpress(sentence: string): {
   const detected: Detected[] = []
   const patch: Partial<TripBrief> = {}
 
-  // Une seule durée claire ; « 4 jours à Paris puis 3 à Lyon » ne tranche pas.
+  // Une seule durée claire ; « 4 jours à Paris puis 3 jours à Lyon » ne tranche pas.
   const days = durationFromDescription(sentence)
   if (days !== null) {
     patch.durationDays = days
@@ -1093,7 +1108,8 @@ export function parseExpress(sentence: string): {
     detected.push({ kind: 'Destination', value: patch.destination })
   } else {
     const loose = sentence.match(
-      /\b(?:à|au|aux|en)\s+([A-ZÉÈÎ][\p{L}'-]+(?:\s+[A-ZÉÈÎ][\p{L}'-]+)?)/u,
+      // Pas de \b devant « à » : ce n'est pas un caractère de mot en JS.
+      /(?:^|[\s,(])(?:à|au|aux|en)\s+([A-ZÉÈÎÔ][\p{L}'-]+(?:\s+[A-ZÉÈÎÔ][\p{L}'-]+)?)/u,
     )
     if (loose) {
       patch.destination = loose[1]
@@ -1144,16 +1160,27 @@ export function parseExpress(sentence: string): {
   }
 
   const interestWords: [RegExp, string][] = [
-    [/table|manger|gastro|cuisine|restau/, 'food'],
-    [/musee|art\b|expo/, 'museums'],
-    [/histoire|patrimoine|chateau/, 'history'],
-    [/plage|baignade|mer\b/, 'beach'],
-    [/rando|nature|montagne/, 'nature'],
-    [/fete|nuit|bars?\b|soiree/, 'nightlife'],
-    [/archi/, 'architecture'],
-    [/marche|local/, 'local'],
-    [/photo/, 'photo'],
-    [/vin\b|vins\b|degustation/, 'wine'],
+    // Des mots entiers : « 3 nuits » n'est pas une envie de vie nocturne,
+    // ni « départ » une envie d'art, ni « pas trop de marche » un marché.
+    [
+      /\b(bonnes? tables?|manger|gastronomie|gastro|cuisine|restos?|restaurants?)\b/,
+      'food',
+    ],
+    [/\b(musees?|art|arts|expos?|expositions?)\b/, 'museums'],
+    [/\b(histoire|patrimoine|chateaux?)\b/, 'history'],
+    [/\b(plages?|baignades?|la mer)\b/, 'beach'],
+    [/\b(randos?|randonnees?|nature|montagnes?)\b/, 'nature'],
+    [
+      /\b(fetes?|faire la fete|vie nocturne|bars|soirees?|clubs?)\b/,
+      'nightlife',
+    ],
+    [/\b(architecture|archi)\b/, 'architecture'],
+    [
+      /\b(marches locaux|marche local|vie locale|marches)\b(?! a pied)/,
+      'local',
+    ],
+    [/\b(photos?|photographie)\b/, 'photo'],
+    [/\b(vins?|degustations?|oenologie)\b/, 'wine'],
   ]
   const interests = interestWords
     .filter(([pattern]) => pattern.test(text))
@@ -1169,17 +1196,106 @@ export function parseExpress(sentence: string): {
   return { detected, brief: patch }
 }
 
-/** Applique ce que la phrase a révélé, sans rien perdre de la phrase elle-même. */
+const EXPRESS_NOTE = 'En une phrase : '
+
+/**
+ * Applique ce que la phrase a révélé, sans écraser ce qui était déjà dit :
+ * les envies s'ajoutent, un groupe déjà choisi garde ses compteurs, et la
+ * phrase remplace sa version précédente dans « À savoir ».
+ */
 export function applyExpress(brief: TripBrief, sentence: string): TripBrief {
   const { brief: patch } = parseExpress(sentence)
-  let next: TripBrief = { ...brief, ...patch }
-  if (patch.group) next = withGroup({ ...next, group: '' }, patch.group)
+  let next: TripBrief = { ...brief }
+  if (patch.destination) next.destination = patch.destination
+  if (patch.durationDays) next.durationDays = patch.durationDays
+  if (patch.pace) next = setSingle(next, 'pace', patch.pace)
+  if (patch.budget) next = setSingle(next, 'budget', patch.budget)
+  if (patch.group && patch.group !== brief.group) {
+    next = setSingle(next, 'group', patch.group)
+  }
+  if (patch.interests) {
+    next.interests = [
+      ...next.interests,
+      ...patch.interests.filter((id) => !next.interests.includes(id)),
+    ]
+  }
   const trimmed = sentence.trim()
   if (trimmed) {
-    const note = `En une phrase : ${trimmed}`
-    next.extra = (brief.extra ? `${brief.extra}\n${note}` : note).slice(0, 300)
+    const others = brief.extra
+      .split('\n')
+      .filter((line) => line.trim() && !line.startsWith(EXPRESS_NOTE))
+    const note = `${EXPRESS_NOTE}${trimmed}`
+    // La phrase passe en premier : c'est elle qui ne doit pas être coupée.
+    next.extra = [note, ...others].join('\n').slice(0, 300)
   }
   return next
+}
+
+// ── Brouillon relu depuis le stockage ────────────────────────────────────────
+
+const STRING_FIELDS = [
+  'destination',
+  'origin',
+  'shape',
+  'group',
+  'childrenAges',
+  'familiarity',
+  'pace',
+  'dayStart',
+  'maxTravelTime',
+  'budget',
+  'mustSee',
+  'avoid',
+  'occasion',
+  'booked',
+  'extra',
+] as const
+const LIST_FIELDS = [
+  'splurges',
+  'interests',
+  'diets',
+  'mobility',
+  'transports',
+] as const
+
+/**
+ * Un brief relu depuis le stockage local peut venir d'une ancienne version
+ * ou avoir été abîmé : chaque champ est repris seulement s'il a la bonne
+ * forme, sinon il retombe sur sa valeur vide. Les longueurs suivent les
+ * bornes de la génération.
+ */
+export function sanitizeBrief(
+  raw: unknown,
+  maxDays: number = MAX_DURATION_DAYS,
+): TripBrief {
+  const source =
+    raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}
+  const brief: TripBrief = { ...EMPTY_BRIEF }
+  for (const key of STRING_FIELDS) {
+    const value = source[key]
+    if (typeof value === 'string') brief[key] = value.slice(0, 300)
+  }
+  for (const key of LIST_FIELDS) {
+    const value = source[key]
+    if (Array.isArray(value)) {
+      brief[key] = value
+        .filter((item): item is string => typeof item === 'string')
+        .slice(0, 20)
+    }
+  }
+  const count = (value: unknown, min: number, max: number, fallback: number) =>
+    typeof value === 'number' && Number.isInteger(value)
+      ? Math.min(max, Math.max(min, value))
+      : fallback
+  brief.durationDays = count(
+    source.durationDays,
+    1,
+    maxDays,
+    EMPTY_BRIEF.durationDays,
+  )
+  brief.adults = count(source.adults, 1, 30, EMPTY_BRIEF.adults)
+  brief.children = count(source.children, 0, 30, EMPTY_BRIEF.children)
+  return brief
 }
 
 // ── Budget du séjour ─────────────────────────────────────────────────────────
@@ -1191,9 +1307,11 @@ export function formatEuros(amount: number): string {
 }
 
 export function tripTotalFor(brief: TripBrief, budgetId: string): string {
-  const budget = BUDGETS.find((option) => option.id === budgetId)
-  if (!budget) return ''
-  const total =
-    budget.perDay * Math.max(1, partySize(brief)) * brief.durationDays
+  const total = estimatedBudget({
+    ...brief,
+    budget: budgetId,
+    adults: Math.max(1, brief.adults),
+  })
+  if (total === null) return ''
   return `${budgetId === 'premium' ? '+ de ' : '≈ '}${formatEuros(total)}`
 }
