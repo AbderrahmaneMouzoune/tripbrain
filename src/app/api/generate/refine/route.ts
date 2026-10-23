@@ -7,7 +7,8 @@
 // modèle est quand même lu en flux côté serveur, pour qu'une longue réponse
 // ne bute pas sur un délai d'attente.
 //
-// Rien du voyage n'est journalisé, ni l'itinéraire ni la demande.
+// Rien du voyage n'est journalisé, ni l'itinéraire ni la demande : seulement
+// la consommation de l'appel (jetons, modèle, durée).
 
 import {
   completeText,
@@ -33,6 +34,9 @@ import { preflightResponse } from '@/lib/share-cors'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
+
+/** Taille maximale du corps d'une demande d'affinage, en caractères. */
+const MAX_REFINE_BODY = 200_000
 
 /** Un affinage se répète plus volontiers qu'une génération : limite plus large. */
 const checkRateLimit = createRateLimiter({ limit: 20, windowMs: 60 * 60_000 })
@@ -72,9 +76,19 @@ export async function POST(request: Request) {
     })
   }
 
+  // Un itinéraire de 60 journées tient largement sous cette taille : au-delà,
+  // la requête ne vient pas de l'app et coûterait cher au modèle.
+  const declared = Number(request.headers.get('content-length') ?? 0)
+  if (declared > MAX_REFINE_BODY) {
+    return fail('invalid_request', 'Requête trop volumineuse.')
+  }
   let body: unknown
   try {
-    body = await request.json()
+    const text = await request.text()
+    if (text.length > MAX_REFINE_BODY) {
+      return fail('invalid_request', 'Requête trop volumineuse.')
+    }
+    body = JSON.parse(text)
   } catch {
     return fail('invalid_request', 'Requête illisible.')
   }
@@ -83,11 +97,15 @@ export async function POST(request: Request) {
     return fail('invalid_request', firstIssueMessage(parsed.error))
   }
 
-  const { itinerary, instruction, startDate } = parsed.data
+  const { itinerary, instruction, startDate, brief, description } = parsed.data
   let text: string
   try {
     ;({ text } = await completeText(
-      buildRefinePrompt(itinerary, instruction, startDate),
+      buildRefinePrompt(itinerary, instruction, startDate, {
+        brief,
+        description,
+      }),
+      { route: 'refine', days: itinerary.days.length },
       request.signal,
     ))
   } catch (error) {

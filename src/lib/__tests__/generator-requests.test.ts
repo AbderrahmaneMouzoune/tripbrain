@@ -119,6 +119,25 @@ describe('refineRequestSchema', () => {
     ).toBe(true)
   })
 
+  it('accepte la demande d’origine, brief ou phrase', () => {
+    expect(
+      refineRequestSchema.safeParse({
+        itinerary,
+        instruction: 'Plus de musées',
+        startDate: future,
+        brief: { ...EMPTY_BRIEF, destination: 'Japon' },
+      }).success,
+    ).toBe(true)
+    expect(
+      refineRequestSchema.safeParse({
+        itinerary,
+        instruction: 'Plus de musées',
+        startDate: future,
+        description: 'x'.repeat(400),
+      }).success,
+    ).toBe(false)
+  })
+
   it('refuse une demande vide ou un itinéraire sans journée', () => {
     expect(
       refineRequestSchema.safeParse({

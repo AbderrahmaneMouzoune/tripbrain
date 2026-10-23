@@ -100,7 +100,7 @@ export function MobileScreen({
           )}
         >
           {(title || eyebrow || description) && (
-            <header className="mb-5 flex flex-col gap-1.5">
+            <div className="mb-5 flex flex-col gap-1.5">
               {eyebrow && (
                 <p className="text-secondary-strong text-xs font-black tracking-[0.08em] uppercase">
                   {eyebrow}
@@ -116,7 +116,7 @@ export function MobileScreen({
                   {description}
                 </p>
               )}
-            </header>
+            </div>
           )}
           {children}
         </div>

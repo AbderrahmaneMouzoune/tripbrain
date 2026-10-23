@@ -8,7 +8,9 @@
  * qu'une vue (`useSyncExternalStore`) : le rouvrir montre l'avancement.
  *
  * Le brouillon des formulaires est gardé de la même façon, pour qu'un
- * aller-retour ne fasse pas perdre une description à moitié écrite.
+ * aller-retour ne fasse pas perdre une description à moitié écrite. Il est
+ * aussi recopié dans le stockage local : fermer l'app ou recharger la page
+ * ne fait pas perdre un parcours à moitié rempli.
  */
 
 import { trackEvent } from '@/lib/analytics/client'
@@ -27,12 +29,19 @@ import {
   type GeneratedItinerary,
 } from '@/lib/generator/itinerary-schema'
 import { readGeneratedItinerary } from '@/lib/generator/read-result'
-import { expectedDays, type GenerateRequest } from '@/lib/generator/requests'
 import {
   IncrementalItineraryParser,
   type PartialDay,
 } from '@/lib/generator/stream-parser'
+import { isPastDate, isValidIsoDate } from '@/lib/generator/itinerary-quality'
 import { EMPTY_BRIEF, type TripBrief } from '@/lib/generator/trip-brief'
+import { sanitizeBrief } from '@/lib/generator/trip-journey'
+import {
+  expectedDays,
+  MAX_DESCRIPTION_LENGTH,
+  MAX_DURATION_DAYS,
+  type GenerateRequest,
+} from '@/lib/generator/requests'
 
 export type GenerationStatus = 'idle' | 'running' | 'done' | 'stopped' | 'error'
 
@@ -92,7 +101,87 @@ const EMPTY_DRAFT: GeneratorDraft = {
 }
 
 let state: GenerationState = IDLE
-let draft: GeneratorDraft = EMPTY_DRAFT
+/** Brouillon tel qu'il est écrit sur l'appareil : versionné et daté. */
+interface SavedDraft extends GeneratorDraft {
+  v: 1
+  savedAt: number
+}
+
+/** Au-delà, un brouillon n'est plus repris : les réponses y sont personnelles. */
+const DRAFT_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+/** Brouillon gardé sur l'appareil, d'une visite à l'autre. */
+export const DRAFT_STORAGE_KEY = 'tripbrain:generateur:brouillon'
+/** Où l'on en est dans le parcours (écran, question), géré par le parcours. */
+export const PROGRESS_STORAGE_KEY = 'tripbrain:generateur:parcours'
+
+/**
+ * Relit le brouillon enregistré. Tout ce qui n'a pas la bonne forme retombe
+ * sur le brouillon vide, et une date déjà passée n'est pas reprise : elle
+ * bloquerait la génération sans que le voyageur comprenne pourquoi.
+ */
+function loadDraft(): GeneratorDraft {
+  if (typeof window === 'undefined') return EMPTY_DRAFT
+  try {
+    const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY)
+    if (!raw) return EMPTY_DRAFT
+    const saved = JSON.parse(raw) as Partial<SavedDraft>
+    // Une ancienne version ou un brouillon trop vieux ne sont pas repris.
+    if (
+      saved.v !== 1 ||
+      typeof saved.savedAt !== 'number' ||
+      Date.now() - saved.savedAt > DRAFT_TTL_MS
+    ) {
+      window.localStorage.removeItem(DRAFT_STORAGE_KEY)
+      return EMPTY_DRAFT
+    }
+    // Chaque champ est vérifié : un brouillon abîmé ne doit rien casser.
+    // La durée du brouillon fait foi : c'est elle que la génération reçoit.
+    const brief = sanitizeBrief(
+      { ...(saved.brief ?? {}), durationDays: saved.durationDays },
+      MAX_DURATION_DAYS,
+    )
+    const startDate =
+      typeof saved.startDate === 'string' &&
+      isValidIsoDate(saved.startDate) &&
+      !isPastDate(saved.startDate)
+        ? saved.startDate
+        : ''
+    return {
+      description:
+        typeof saved.description === 'string'
+          ? saved.description.slice(0, MAX_DESCRIPTION_LENGTH)
+          : '',
+      startDate,
+      durationDays: brief.durationDays,
+      brief,
+    }
+  } catch {
+    return EMPTY_DRAFT
+  }
+}
+
+function saveDraft(): void {
+  if (typeof window === 'undefined') return
+  try {
+    const saved: SavedDraft = { ...draft, v: 1, savedAt: Date.now() }
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(saved))
+  } catch {
+    // Stockage plein ou refusé : le brouillon reste en mémoire.
+  }
+}
+
+function forgetDraft(): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.removeItem(DRAFT_STORAGE_KEY)
+    window.localStorage.removeItem(PROGRESS_STORAGE_KEY)
+  } catch {
+    // Rien à effacer.
+  }
+}
+
+let draft: GeneratorDraft = loadDraft()
 let controller: AbortController | null = null
 const listeners = new Set<() => void>()
 
@@ -129,6 +218,14 @@ export function getServerGeneratorDraft(): GeneratorDraft {
 
 export function updateGeneratorDraft(patch: Partial<GeneratorDraft>): void {
   draft = { ...draft, ...patch }
+  saveDraft()
+  emit()
+}
+
+/** « Recommencer à zéro » : le brouillon et la progression sont effacés. */
+export function clearGeneratorDraft(): void {
+  draft = EMPTY_DRAFT
+  forgetDraft()
   emit()
 }
 
@@ -298,5 +395,6 @@ export function resetGeneration(): void {
   controller = null
   state = IDLE
   draft = EMPTY_DRAFT
+  forgetDraft()
   emit()
 }

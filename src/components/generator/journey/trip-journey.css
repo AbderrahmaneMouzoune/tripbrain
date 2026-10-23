@@ -1,0 +1,168 @@
+/*
+ * Animations du parcours du générateur. Toutes dépendent d'une réponse :
+ * elles disent au voyageur que sa réponse a été prise en compte.
+ */
+
+@keyframes tj-screen {
+  from {
+    opacity: 0;
+    transform: translateX(22px);
+  }
+}
+@keyframes tj-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  70% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+@keyframes tj-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@keyframes tj-march {
+  to {
+    stroke-dashoffset: -44;
+  }
+}
+@keyframes tj-float {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -6px;
+  }
+}
+@keyframes tj-fly {
+  from {
+    offset-distance: 0%;
+  }
+  to {
+    offset-distance: 100%;
+  }
+}
+@keyframes tj-ride {
+  from {
+    left: 0;
+  }
+  to {
+    left: calc(100% - 26px);
+  }
+}
+@keyframes tj-burst {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.2);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--x), var(--y)) scale(1);
+  }
+}
+@keyframes tj-halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(242, 106, 46, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(242, 106, 46, 0);
+  }
+}
+@keyframes tj-panel {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+}
+@keyframes tj-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes tj-toast {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  12%,
+  85% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.tj-screen {
+  animation: tj-screen 0.38s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.tj-pop {
+  animation: tj-pop 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.tj-rise {
+  animation: tj-rise 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.tj-route {
+  stroke-dasharray: 1 9;
+  animation: tj-march 2.4s linear infinite;
+}
+.tj-float {
+  animation: tj-float 4.5s ease-in-out infinite;
+}
+.tj-halo {
+  animation: tj-halo 1.8s ease-in-out infinite;
+}
+.tj-panel {
+  animation: tj-panel 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: top right;
+}
+.tj-fade {
+  animation: tj-fade 0.2s ease;
+}
+.tj-toast {
+  animation: tj-toast 2.6s ease forwards;
+}
+.tj-illus {
+  position: relative;
+  height: 132px;
+  border-radius: 22px;
+  overflow: hidden;
+  flex: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tj-screen,
+  .tj-pop,
+  .tj-rise,
+  .tj-route,
+  .tj-float,
+  .tj-halo,
+  .tj-panel,
+  .tj-fade,
+  .tj-illus *,
+  .tj-toast {
+    animation: none !important;
+  }
+  /* Ni glissements au survol, ni jauges qui se remplissent en douceur. */
+  .tj-root,
+  .tj-root * {
+    transition: none !important;
+  }
+  .tj-root [class*='hover:-translate'],
+  .tj-root [class*='hover:translate'] {
+    translate: none !important;
+  }
+}

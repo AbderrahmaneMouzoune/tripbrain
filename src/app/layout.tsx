@@ -74,14 +74,14 @@ export const metadata: Metadata = {
  * ignoré, et l'application se retrouvait avec le viewport par défaut. Sur iOS,
  * cela laissait Safari zoomer tout seul dès qu'un champ prenait le focus — le
  * champ de code du partage, par exemple — sans moyen évident de revenir en
- * arrière. `maximumScale` coupe ce zoom automatique ; le zoom à deux doigts,
- * lui, reste possible, parce qu'un texte trop petit doit toujours pouvoir être
- * agrandi.
+ * arrière. Ce zoom ne se déclenche que sous 16 px : `globals.css` porte donc
+ * les champs à 16 px au moins sur iOS, plutôt que de bloquer le zoom avec
+ * `maximumScale`, ce qui empêchait aussi, sur Android, d'agrandir un texte
+ * trop petit.
  */
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
   viewportFit: 'cover',
   themeColor: '#f3f7fd',
 }

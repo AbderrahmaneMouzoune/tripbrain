@@ -35,28 +35,98 @@ type Entry<K extends AppScreenKind> = {
    * `sheet` : le composant rend lui-même une feuille du bas, ouverte d'office.
    */
   presentation: 'screen' | 'sheet'
+  /** Nom annoncé par les lecteurs d'écran quand l'écran s'ouvre. */
+  label: string
 }
 
 const REGISTRY: { [K in AppScreenKind]: Entry<K> } = {
-  day: { component: DayScreen, presentation: 'screen' },
-  activity: { component: ActivityScreen, presentation: 'screen' },
-  transport: { component: TransportScreen, presentation: 'screen' },
-  accommodation: { component: AccommodationScreen, presentation: 'screen' },
-  driver: { component: DriverScreen, presentation: 'screen' },
-  menu: { component: MenuScreen, presentation: 'screen' },
-  trips: { component: TripsScreen, presentation: 'screen' },
-  share: { component: ShareScreen, presentation: 'screen' },
-  group: { component: GroupScreen, presentation: 'screen' },
-  receive: { component: ReceiveScreen, presentation: 'screen' },
-  calendar: { component: CalendarSheet, presentation: 'sheet' },
-  reset: { component: ResetSheet, presentation: 'sheet' },
-  settings: { component: SettingsScreen, presentation: 'screen' },
-  offline: { component: OfflineScreen, presentation: 'screen' },
-  generator: { component: GeneratorScreen, presentation: 'screen' },
-  'trip-ready': { component: TripReadyScreen, presentation: 'screen' },
-  'import-file': { component: ImportFileScreen, presentation: 'screen' },
-  document: { component: DocumentScreen, presentation: 'screen' },
-  'add-document': { component: AddDocumentSheet, presentation: 'sheet' },
+  day: { component: DayScreen, presentation: 'screen', label: 'Journée' },
+  activity: {
+    component: ActivityScreen,
+    presentation: 'screen',
+    label: 'Activité',
+  },
+  transport: {
+    component: TransportScreen,
+    presentation: 'screen',
+    label: 'Trajet',
+  },
+  accommodation: {
+    component: AccommodationScreen,
+    presentation: 'screen',
+    label: 'Hébergement',
+  },
+  driver: {
+    component: DriverScreen,
+    presentation: 'screen',
+    label: 'Chauffeur',
+  },
+  menu: { component: MenuScreen, presentation: 'screen', label: 'Menu' },
+  trips: {
+    component: TripsScreen,
+    presentation: 'screen',
+    label: 'Mes voyages',
+  },
+  share: {
+    component: ShareScreen,
+    presentation: 'screen',
+    label: 'Partager le voyage',
+  },
+  group: {
+    component: GroupScreen,
+    presentation: 'screen',
+    label: 'Voyager à plusieurs',
+  },
+  receive: {
+    component: ReceiveScreen,
+    presentation: 'screen',
+    label: 'Recevoir un voyage',
+  },
+  calendar: {
+    component: CalendarSheet,
+    presentation: 'sheet',
+    label: 'Calendrier',
+  },
+  reset: {
+    component: ResetSheet,
+    presentation: 'sheet',
+    label: 'Réinitialiser',
+  },
+  settings: {
+    component: SettingsScreen,
+    presentation: 'screen',
+    label: 'Réglages',
+  },
+  offline: {
+    component: OfflineScreen,
+    presentation: 'screen',
+    label: 'Hors ligne',
+  },
+  generator: {
+    component: GeneratorScreen,
+    presentation: 'screen',
+    label: 'Générateur d’itinéraire',
+  },
+  'trip-ready': {
+    component: TripReadyScreen,
+    presentation: 'screen',
+    label: 'Voyage prêt',
+  },
+  'import-file': {
+    component: ImportFileScreen,
+    presentation: 'screen',
+    label: 'Importer un fichier',
+  },
+  document: {
+    component: DocumentScreen,
+    presentation: 'screen',
+    label: 'Document',
+  },
+  'add-document': {
+    component: AddDocumentSheet,
+    presentation: 'sheet',
+    label: 'Ajouter un document',
+  },
 }
 
 function renderScreen(screen: AppScreen, onClose: () => void) {
@@ -102,6 +172,7 @@ export function ScreenHost() {
           <div
             key={key}
             role="dialog"
+            aria-label={REGISTRY[screen.kind].label}
             aria-modal={isTop}
             aria-hidden={!isTop}
             className="bg-background animate-screen fixed inset-0 overflow-y-auto overscroll-contain"
