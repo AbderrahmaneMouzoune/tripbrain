@@ -26,6 +26,7 @@ import {
   type InstallPlatform,
   type InstallPromptState,
 } from '@/lib/pwa-install'
+import { isNativeApp } from '@/lib/native-app'
 
 /** D'où vient l'ouverture : relance automatique ou geste explicite. */
 export type InstallPromptOrigin = 'auto' | 'manual'
@@ -80,6 +81,8 @@ function readStoredState(): InstallPromptState {
 }
 
 function detectStandalone(): boolean {
+  // L'app native est déjà « installée » : rien à proposer.
+  if (isNativeApp()) return true
   const matchesDisplayMode = STANDALONE_QUERIES.some(
     (query) => window.matchMedia(query).matches,
   )

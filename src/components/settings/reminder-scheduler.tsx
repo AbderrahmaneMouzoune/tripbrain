@@ -12,6 +12,7 @@ import {
   readSentReminders,
   type Reminder,
 } from '@/lib/reminders'
+import { isNativeApp, syncNativeReminders } from '@/lib/native-app'
 
 /** Le plan est refait régulièrement : veille de l'appareil, horloge qui saute… */
 const REPLAN_INTERVAL_MS = 30 * 60 * 1000
@@ -65,7 +66,7 @@ function deliver(reminder: Reminder) {
  * Programme les rappels locaux (veille d'un trajet, programme du matin,
  * check-in) de tous les voyages, tant que l'application est ouverte.
  *
- * Limite : sans application native ni push serveur, un `setTimeout` ne survit
+ * Dans le navigateur, sans push serveur, un `setTimeout` ne survit
  * pas à la fermeture de l'onglet, et le système suspend vite une page en
  * arrière-plan. Les rappels ne partent donc que si TripBrain est ouvert ou l'a
  * été très récemment. Voir `@/lib/reminders` pour le détail du calcul.
@@ -93,7 +94,26 @@ export function ReminderScheduler() {
     if (activeTripId) migrateSentReminders(activeTripId)
   }, [activeTripId])
 
+  // Dans l'app native, le téléphone planifie lui-même les rappels : ils
+  // partent même app fermée. Chaque changement remplace toute la liste.
   useEffect(() => {
+    if (!isNativeApp()) return
+    const now = Date.now()
+    void syncNativeReminders(
+      reminders
+        .filter((reminder) => reminder.at > now)
+        .map((reminder) => ({
+          id: reminder.id,
+          title: reminder.title,
+          body: reminder.body,
+          at: new Date(reminder.at).toISOString(),
+          path: '/',
+        })),
+    )
+  }, [reminders])
+
+  useEffect(() => {
+    if (isNativeApp()) return
     if (reminders.length === 0) return
     if (typeof Notification === 'undefined') return
 

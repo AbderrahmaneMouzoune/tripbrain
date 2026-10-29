@@ -1,4 +1,5 @@
 import { type DayItinerary, type Transport } from './itinerary-data'
+import { saveFile } from './save-file'
 
 /** Ce que l'export vers le calendrier peut ajouter aux journées elles-mêmes. */
 export interface CalendarExportOptions {
@@ -289,14 +290,7 @@ export function downloadICS(
 ): void {
   const content = generateICSContent(days, options)
   const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-
-  URL.revokeObjectURL(url)
+  saveFile(blob, filename)
 }
 
 export function getGoogleCalendarUrl(day: DayItinerary): string {

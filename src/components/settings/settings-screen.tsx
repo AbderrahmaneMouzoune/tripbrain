@@ -30,6 +30,14 @@ import { formatFileSize } from '@/lib/document-organize'
 import { legalConfig } from '@/lib/legal-config'
 import type { Preferences } from '@/lib/preferences'
 import { REMINDER_TIMES } from '@/lib/reminders'
+import {
+  NATIVE_PERMISSION_EVENT,
+  getNativeNotificationPermission,
+  isNativeApp,
+  openNativeSettings,
+  requestNativeNotifications,
+  type NativeNotificationPermission,
+} from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 import packageInfo from '../../../package.json'
 import { useStorageEstimate } from './offline-screen'
@@ -82,22 +90,51 @@ const NOTIFICATIONS: {
 
 type PermissionState = NotificationPermission | 'unsupported'
 
+/** L'app native dit « undetermined » là où le navigateur dit « default ». */
+function fromNativePermission(
+  permission: NativeNotificationPermission | null,
+): PermissionState {
+  if (permission === 'granted' || permission === 'denied') return permission
+  if (permission === 'unsupported') return 'unsupported'
+  return 'default'
+}
+
 /** Autorisation des notifications du navigateur, relue à chaque retour sur l'app. */
 function useNotificationPermission() {
   const [permission, setPermission] = useState<PermissionState>('default')
   useEffect(() => {
     const read = () =>
       setPermission(
-        typeof Notification === 'undefined'
-          ? 'unsupported'
-          : Notification.permission,
+        isNativeApp()
+          ? fromNativePermission(getNativeNotificationPermission())
+          : typeof Notification === 'undefined'
+            ? 'unsupported'
+            : Notification.permission,
       )
     read()
     document.addEventListener('visibilitychange', read)
-    return () => document.removeEventListener('visibilitychange', read)
+    window.addEventListener(NATIVE_PERMISSION_EVENT, read)
+    return () => {
+      document.removeEventListener('visibilitychange', read)
+      window.removeEventListener(NATIVE_PERMISSION_EVENT, read)
+    }
   }, [])
 
   const request = async () => {
+    if (isNativeApp()) {
+      // Refusée une fois, seule la page Réglages de l'app peut la rendre.
+      if (getNativeNotificationPermission() === 'denied') {
+        openNativeSettings()
+        return
+      }
+      const result = fromNativePermission(await requestNativeNotifications())
+      setPermission(result)
+      // « unsupported » : simulateur, sans écran de permission à mesurer.
+      if (result !== 'unsupported') {
+        trackEvent('notification_permission_requested', { result })
+      }
+      return
+    }
     if (typeof Notification === 'undefined') return
     const result = await Notification.requestPermission()
     setPermission(result)
@@ -396,8 +433,9 @@ function NotificationPermissionNote({
   if (permission === 'granted') {
     return (
       <p className="text-muted-foreground mx-1 mt-2 text-[13px] leading-snug">
-        Les rappels partent tant que TripBrain est ouvert ou utilisé depuis peu
-        : sans application native, le téléphone ne réveille pas l’app.
+        {isNativeApp()
+          ? 'Le téléphone vous prévient à l’heure dite, même application fermée.'
+          : 'Les rappels partent tant que TripBrain est ouvert ou utilisé depuis peu : sans application native, le téléphone ne réveille pas l’app.'}
       </p>
     )
   }
@@ -412,8 +450,9 @@ function NotificationPermissionNote({
   if (permission === 'denied') {
     return (
       <p className="bg-destructive-soft text-destructive mt-2 rounded-2xl px-4 py-3 text-[13px] leading-snug font-bold">
-        Les notifications sont bloquées pour TripBrain. Réactivez-les dans les
-        réglages du navigateur (cadenas à côté de l’adresse) ou du téléphone.
+        {isNativeApp()
+          ? 'Les notifications sont bloquées pour TripBrain. Réactivez-les dans Réglages → TripBrain → Notifications.'
+          : 'Les notifications sont bloquées pour TripBrain. Réactivez-les dans les réglages du navigateur (cadenas à côté de l’adresse) ou du téléphone.'}
       </p>
     )
   }

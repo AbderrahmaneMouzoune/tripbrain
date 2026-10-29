@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import { trackEvent } from '@/lib/analytics/client'
 import { getGeneratorUrl } from '@/lib/site-links'
+import { saveFile } from '@/lib/save-file'
 
 /**
  * Le renvoi vers le générateur ne sert qu'une fois : celui qui revient dans ce
@@ -793,12 +794,7 @@ function makeCsv(
 
 function downloadText(filename: string, content: string) {
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
+  saveFile(blob, filename)
 }
 
 /** Modèle Excel à remplir (3 onglets), aussi proposé depuis l’écran d’import. */
@@ -822,12 +818,7 @@ export async function downloadXlsxTemplate() {
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'tripbrain-template.xlsx'
-  a.click()
-  URL.revokeObjectURL(url)
+  saveFile(blob, 'tripbrain-template.xlsx')
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -1177,12 +1168,7 @@ const JSON_TEMPLATE: TripData = {
 function downloadJsonTemplate() {
   const json = JSON.stringify(JSON_TEMPLATE, null, 2)
   const blob = new Blob([json], { type: 'application/json;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'tripbrain-template.json'
-  a.click()
-  URL.revokeObjectURL(url)
+  saveFile(blob, 'tripbrain-template.json')
 }
 
 // ── Template config ───────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { zip, unzip } from 'fflate'
+import { saveFile } from './save-file'
 
 export interface ZipManifest {
   version: '1.0'
@@ -124,13 +125,8 @@ export async function exportDocumentsAsZip(
 
   // Trigger download
   const blob = new Blob([zipData], { type: 'application/zip' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
   const dateStr = new Date().toISOString().slice(0, 10)
-  a.download = `tripbrain-documents-${dateStr}.zip`
-  a.click()
-  URL.revokeObjectURL(url)
+  saveFile(blob, `tripbrain-documents-${dateStr}.zip`)
 
   onProgress?.({ status: 'done', message: 'Export terminé' })
 }
