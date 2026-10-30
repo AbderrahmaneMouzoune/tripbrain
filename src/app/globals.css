@@ -119,6 +119,22 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/*
+ * Marges de sécurité (encoche, Dynamic Island, barre de gestes). `env()` les
+ * donne dans Safari et la WebView iOS ; la WebView Android dessinée bord à
+ * bord renvoie souvent 0 : l'app native injecte alors les vraies valeurs dans
+ * `--native-safe-*`. `max()` évite de les compter deux fois.
+ */
+:root {
+  --safe-top: max(env(safe-area-inset-top), var(--native-safe-top, 0px));
+  --safe-bottom: max(
+    env(safe-area-inset-bottom),
+    var(--native-safe-bottom, 0px)
+  );
+  --safe-left: max(env(safe-area-inset-left), var(--native-safe-left, 0px));
+  --safe-right: max(env(safe-area-inset-right), var(--native-safe-right, 0px));
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

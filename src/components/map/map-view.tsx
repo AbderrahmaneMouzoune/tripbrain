@@ -153,7 +153,7 @@ export function MapView(_props: {}) {
     scope === 'trip' && selectedStop !== null ? stops[selectedStop] : undefined
 
   return (
-    <div className="fixed inset-x-0 top-0 bottom-[calc(84px+env(safe-area-inset-bottom))] z-0">
+    <div className="fixed inset-x-0 top-0 bottom-[calc(84px+var(--safe-bottom))] z-0">
       <TripLeaflet
         className="absolute inset-0"
         itinerary={itinerary}
@@ -171,7 +171,7 @@ export function MapView(_props: {}) {
         recenterToken={recenterToken}
       />
 
-      <div className="absolute inset-x-3 top-[calc(env(safe-area-inset-top)+12px)] z-[1000] mx-auto flex max-w-xl flex-col gap-2">
+      <div className="absolute inset-x-3 top-[calc(var(--safe-top)+12px)] z-[1000] mx-auto flex max-w-xl flex-col gap-2">
         <div className="bg-card border-border flex items-center gap-1 rounded-[20px] border p-1 shadow-[0_4px_14px_rgb(14_26_58/0.12)]">
           <button
             type="button"

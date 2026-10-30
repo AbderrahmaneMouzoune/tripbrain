@@ -116,7 +116,7 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
             size="icon-round"
             onClick={onClose}
             aria-label={`Retour au jour ${screen.dayIndex + 1}`}
-            className="border-border bg-card absolute top-[calc(env(safe-area-inset-top)+12px)] left-4 shadow-none"
+            className="border-border bg-card absolute top-[calc(var(--safe-top)+12px)] left-4 shadow-none"
           >
             <ArrowLeft />
           </Button>
@@ -125,13 +125,13 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
             size="icon-round"
             onClick={() => editor.editActivity(activity)}
             aria-label="Modifier l’activité"
-            className="border-border bg-card absolute top-[calc(env(safe-area-inset-top)+12px)] right-4 shadow-none"
+            className="border-border bg-card absolute top-[calc(var(--safe-top)+12px)] right-4 shadow-none"
           >
             <Pencil />
           </Button>
         </div>
 
-        <div className="bg-background relative -mt-[22px] flex flex-1 flex-col rounded-t-[26px] px-5 pt-[18px] pb-[calc(env(safe-area-inset-bottom)+24px)]">
+        <div className="bg-background relative -mt-[22px] flex flex-1 flex-col rounded-t-[26px] px-5 pt-[18px] pb-[calc(var(--safe-bottom)+24px)]">
           <p className="text-secondary-strong text-xs leading-4 font-black tracking-[0.08em]">
             {[
               ACTIVITY_TYPE_LABELS[activity.type],

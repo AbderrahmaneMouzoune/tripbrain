@@ -130,7 +130,7 @@ export function DocumentScreen({ screen, onClose }: ScreenProps<'document'>) {
 
   return (
     <div className="bg-ink text-ink-foreground flex h-dvh flex-col">
-      <header className="flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+12px)]">
+      <header className="flex items-center gap-3 px-4 pt-[calc(var(--safe-top)+12px)]">
         <button
           type="button"
           onClick={close}
@@ -155,7 +155,7 @@ export function DocumentScreen({ screen, onClose }: ScreenProps<'document'>) {
 
       <nav
         aria-label="Actions sur le document"
-        className="flex rounded-t-3xl bg-white/5 px-2 pt-2.5 pb-[calc(env(safe-area-inset-bottom)+14px)]"
+        className="flex rounded-t-3xl bg-white/5 px-2 pt-2.5 pb-[calc(var(--safe-bottom)+14px)]"
       >
         <ActionButton
           icon={sharing ? Loader2 : Share2}

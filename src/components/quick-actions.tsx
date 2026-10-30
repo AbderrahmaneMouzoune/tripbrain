@@ -216,7 +216,7 @@ export function QuickActionsSheet({
       title={title}
       description={description ?? 'Que faire de cette information ?'}
       hideHeader
-      className="pb-[env(safe-area-inset-bottom)]"
+      className="pb-[var(--safe-bottom)]"
     >
       <div className="mt-1 flex items-center gap-3">
         {HeaderIcon && (

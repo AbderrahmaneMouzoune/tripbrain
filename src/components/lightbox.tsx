@@ -43,7 +43,7 @@ export function Lightbox({ images, isOpen, onClose }: LightboxProps) {
       <Button
         variant="outline"
         size="icon-round"
-        className="border-border bg-card absolute top-[calc(env(safe-area-inset-top)+12px)] right-4 z-10"
+        className="border-border bg-card absolute top-[calc(var(--safe-top)+12px)] right-4 z-10"
         onClick={onClose}
         aria-label="Fermer"
         autoFocus

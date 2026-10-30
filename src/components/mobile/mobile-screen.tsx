@@ -59,7 +59,7 @@ export function MobileScreen({
     >
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
         {hasTopBar && (
-          <div className="flex items-center gap-3.5 px-4 pt-[calc(env(safe-area-inset-top)+12px)]">
+          <div className="flex items-center gap-3.5 px-4 pt-[calc(var(--safe-top)+12px)]">
             {onBack ? (
               <Button
                 variant="outline"
@@ -94,7 +94,7 @@ export function MobileScreen({
         <div
           className={cn(
             'flex flex-1 flex-col px-5 pb-6',
-            hasTopBar ? 'pt-6' : 'pt-[calc(env(safe-area-inset-top)+24px)]',
+            hasTopBar ? 'pt-6' : 'pt-[calc(var(--safe-top)+24px)]',
             stagger && 'stagger',
             bodyClassName,
           )}
@@ -122,7 +122,7 @@ export function MobileScreen({
         </div>
 
         {footer && (
-          <div className="bg-background/95 sticky bottom-[var(--tab-bar-offset,0px)] z-10 flex flex-col gap-1.5 px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+20px)] backdrop-blur">
+          <div className="bg-background/95 sticky bottom-[var(--tab-bar-offset,0px)] z-10 flex flex-col gap-1.5 px-5 pt-3 pb-[calc(var(--safe-bottom)+20px)] backdrop-blur">
             {footer}
           </div>
         )}

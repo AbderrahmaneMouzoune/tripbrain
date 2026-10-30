@@ -108,7 +108,7 @@ export function AccommodationScreen({
 
   return (
     <div className="bg-background text-foreground flex min-h-dvh flex-col">
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(env(safe-area-inset-bottom)+24px)]">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(var(--safe-bottom)+24px)]">
         {images.length > 0 ? (
           <section
             aria-label="Photos de l’hébergement"
@@ -152,15 +152,15 @@ export function AccommodationScreen({
                 )}
               </button>
             ))}
-            <div className="absolute top-[calc(env(safe-area-inset-top)+12px)] left-4">
+            <div className="absolute top-[calc(var(--safe-top)+12px)] left-4">
               {backButton}
             </div>
-            <div className="absolute top-[calc(env(safe-area-inset-top)+12px)] right-4">
+            <div className="absolute top-[calc(var(--safe-top)+12px)] right-4">
               {editButton}
             </div>
           </section>
         ) : (
-          <div className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+12px)]">
+          <div className="flex items-center justify-between px-5 pt-[calc(var(--safe-top)+12px)]">
             {backButton}
             {editButton}
           </div>

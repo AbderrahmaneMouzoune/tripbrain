@@ -261,7 +261,7 @@ export function QrScanStep({
       />
       <div aria-hidden className="absolute inset-0 bg-black/30" />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-xl items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+12px)]">
+      <div className="relative z-10 mx-auto flex w-full max-w-xl items-center justify-between px-4 pt-[calc(var(--safe-top)+12px)]">
         <button
           type="button"
           onClick={onBack}
@@ -345,7 +345,7 @@ export function QrScanStep({
         )}
       </div>
 
-      <div className="bg-background text-foreground animate-sheet relative z-10 mx-auto flex w-full max-w-xl flex-col gap-2.5 rounded-t-[28px] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+24px)]">
+      <div className="bg-background text-foreground animate-sheet relative z-10 mx-auto flex w-full max-w-xl flex-col gap-2.5 rounded-t-[28px] px-5 pt-5 pb-[calc(var(--safe-bottom)+24px)]">
         <p className="text-muted-foreground mb-1 text-[13px] font-extrabold">
           Pas de QR code sous la main ?
         </p>

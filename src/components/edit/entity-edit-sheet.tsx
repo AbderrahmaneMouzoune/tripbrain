@@ -338,7 +338,7 @@ export function EntityEditSheet<T extends object>({
             noValidate
             className="flex min-h-0 flex-1 flex-col"
           >
-            <header className="bg-card border-border/70 shrink-0 border-b px-2 pt-[calc(env(safe-area-inset-top)+8px)] pb-2.5">
+            <header className="bg-card border-border/70 shrink-0 border-b px-2 pt-[calc(var(--safe-top)+8px)] pb-2.5">
               <div className="mx-auto flex max-w-xl items-center gap-1">
                 <button
                   type="button"
@@ -371,7 +371,7 @@ export function EntityEditSheet<T extends object>({
               key={draftVersion}
               className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
             >
-              <div className="stagger mx-auto flex max-w-xl flex-col gap-3 px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+32px)]">
+              <div className="stagger mx-auto flex max-w-xl flex-col gap-3 px-4 pt-4 pb-[calc(var(--safe-bottom)+32px)]">
                 {firstSection && (
                   <section
                     aria-labelledby={`${formId}-section-${firstSection.id}`}

@@ -90,7 +90,7 @@ export function useCopyToast() {
           <div
             role="status"
             aria-live="polite"
-            className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+104px)] z-[70] flex justify-center px-4"
+            className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--safe-bottom)+104px)] z-[70] flex justify-center px-4"
           >
             {message && (
               <span className="bg-ink text-ink-foreground animate-pop flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-extrabold shadow-lg">

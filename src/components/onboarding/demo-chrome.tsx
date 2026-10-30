@@ -44,7 +44,7 @@ export function DemoChrome(_props: {}) {
 
   return (
     <>
-      <div className="animate-fade mx-auto flex w-full max-w-xl items-center justify-between gap-3 px-5 pt-[calc(env(safe-area-inset-top)+12px)]">
+      <div className="animate-fade mx-auto flex w-full max-w-xl items-center justify-between gap-3 px-5 pt-[calc(var(--safe-top)+12px)]">
         <span className="bg-secondary-soft text-secondary-strong border-secondary flex items-center gap-1.5 rounded-full border-[1.5px] border-dashed py-1.5 pr-3 pl-2.5 text-[13px] font-extrabold">
           <FlaskConical className="size-4" aria-hidden />
           Voyage exemple
@@ -61,7 +61,7 @@ export function DemoChrome(_props: {}) {
 
       {/* La carte flotte au-dessus de la barre d'onglets ; la carte (onglet) a ses propres commandes en bas. */}
       {!inviteDismissed && (tab === 'today' || tab === 'program') && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(84px+env(safe-area-inset-bottom)+12px)] z-30 px-3">
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(84px+var(--safe-bottom)+12px)] z-30 px-3">
           <div className="bg-ink text-ink-foreground animate-rise pointer-events-auto mx-auto flex max-w-xl items-center gap-3 rounded-[20px] py-3.5 pr-2 pl-4 shadow-[0_12px_30px_rgba(6,20,60,0.3)] [animation-delay:0.6s]">
             <span className="min-w-0 flex-1">
               <span className="block text-[15px] font-black">

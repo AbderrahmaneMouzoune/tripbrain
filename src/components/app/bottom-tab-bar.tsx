@@ -22,8 +22,7 @@ const TABS: {
 ]
 
 /** Hauteur réservée en bas des onglets pour ne rien cacher sous la barre. */
-export const TAB_BAR_SPACER =
-  'h-[calc(84px+env(safe-area-inset-bottom))]' as const
+export const TAB_BAR_SPACER = 'h-[calc(84px+var(--safe-bottom))]' as const
 
 /**
  * La barre passe-t-elle au-dessus de l'écran empilé du dessus ? Oui pour les
@@ -87,7 +86,7 @@ export function BottomTabBar() {
         overScreens ? 'z-[49]' : 'z-40',
       )}
     >
-      <div className="mx-auto flex max-w-xl px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+10px)]">
+      <div className="mx-auto flex max-w-xl px-2 pt-2 pb-[calc(var(--safe-bottom)+10px)]">
         {TABS.map(({ id, label, icon: Icon }) => {
           const active = tab === id
           return (

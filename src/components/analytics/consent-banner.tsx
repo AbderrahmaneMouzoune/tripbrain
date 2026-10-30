@@ -88,7 +88,7 @@ export function ConsentBanner({
         aria-modal={!compact}
         aria-labelledby="consent-title"
         aria-describedby="consent-description"
-        className="bg-card text-foreground animate-sheet pointer-events-auto relative max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-[28px] px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+24px)] shadow-[0_-12px_40px_rgba(11,18,38,0.3)] outline-none"
+        className="bg-card text-foreground animate-sheet pointer-events-auto relative max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-[28px] px-5 pt-3 pb-[calc(var(--safe-bottom)+24px)] shadow-[0_-12px_40px_rgba(11,18,38,0.3)] outline-none"
       >
         <span
           aria-hidden

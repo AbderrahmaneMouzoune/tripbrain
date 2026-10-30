@@ -142,7 +142,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
   return (
     <div className="bg-primary relative flex min-h-dvh flex-col overflow-hidden">
       <div className="mx-auto flex w-full max-w-xl flex-col">
-        <div className="animate-rise flex items-center gap-2.5 px-6 pt-[calc(env(safe-area-inset-top)+16px)]">
+        <div className="animate-rise flex items-center gap-2.5 px-6 pt-[calc(var(--safe-top)+16px)]">
           <span className="bg-card text-primary flex size-10 items-center justify-center rounded-xl">
             <Route className="size-[22px]" aria-hidden />
           </span>
@@ -192,7 +192,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
         </div>
       </div>
 
-      <div className="bg-background text-foreground animate-sheet relative z-10 mx-auto flex w-full max-w-xl flex-1 flex-col gap-3.5 rounded-t-[28px] px-6 pt-8 pb-[calc(env(safe-area-inset-bottom)+28px)] [animation-delay:0.1s]">
+      <div className="bg-background text-foreground animate-sheet relative z-10 mx-auto flex w-full max-w-xl flex-1 flex-col gap-3.5 rounded-t-[28px] px-6 pt-8 pb-[calc(var(--safe-bottom)+28px)] [animation-delay:0.1s]">
         <h1 className="font-display text-[31px] leading-[1.12]">
           Tout votre voyage, même sans réseau.
         </h1>

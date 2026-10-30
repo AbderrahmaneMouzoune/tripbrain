@@ -121,8 +121,8 @@ export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
 
   return (
     <div className="bg-background text-foreground flex min-h-dvh flex-col">
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(env(safe-area-inset-bottom)+24px)]">
-        <header className="px-5 pt-[calc(env(safe-area-inset-top)+12px)]">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(var(--safe-bottom)+24px)]">
+        <header className="px-5 pt-[calc(var(--safe-top)+12px)]">
           <div className="flex items-center gap-2">
             <Button
               variant="outline"

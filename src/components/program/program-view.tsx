@@ -52,7 +52,7 @@ export function ProgramView(_props: {}) {
 
   return (
     <div className="mx-auto w-full max-w-xl pb-6">
-      <header className="flex items-start gap-2 px-5 pt-[calc(env(safe-area-inset-top)+20px)]">
+      <header className="flex items-start gap-2 px-5 pt-[calc(var(--safe-top)+20px)]">
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-[30px] leading-[1.1]">
             {activeTrip?.title ?? 'Mon voyage'}

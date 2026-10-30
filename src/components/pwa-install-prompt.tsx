@@ -235,7 +235,7 @@ export function PwaInstallPrompt() {
                 itinéraire déjà en mémoire.
               </DrawerDescription>
             </DrawerHeader>
-            <DrawerFooter className="pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+            <DrawerFooter className="pt-2 pb-[calc(1rem+var(--safe-bottom))]">
               <Button onClick={close} className="w-full">
                 Parfait
               </Button>
@@ -261,7 +261,7 @@ export function PwaInstallPrompt() {
               <GuideBody guide={guide} />
             </div>
 
-            <DrawerFooter className="pt-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+            <DrawerFooter className="pt-3 pb-[calc(1rem+var(--safe-bottom))]">
               {guide === 'native' ? (
                 <Button
                   onClick={handleNativeInstall}

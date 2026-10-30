@@ -183,7 +183,7 @@ export function ScreenHost() {
                 // Place réservée à la barre d'onglets, quand elle passe dessus :
                 // les pieds collés en bas des écrans s'arrêtent au-dessus.
                 '--tab-bar-offset': SCREENS_WITH_TAB_BAR.has(screen.kind)
-                  ? 'calc(84px + env(safe-area-inset-bottom))'
+                  ? 'calc(84px + var(--safe-bottom))'
                   : '0px',
               } as CSSProperties
             }

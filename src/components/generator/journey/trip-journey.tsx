@@ -564,7 +564,7 @@ export function TripJourney(props: TripJourneyProps) {
         {/* En-tête : où l'on est, la jauge, et la sortie vers le billet. */}
         <div
           className={`border-border flex items-center gap-3 border-b bg-white px-4 pb-3 sm:px-6 ${
-            isScreen ? 'pt-[calc(env(safe-area-inset-top)+12px)]' : 'pt-4'
+            isScreen ? 'pt-[calc(var(--safe-top)+12px)]' : 'pt-4'
           }`}
         >
           {back ? (
@@ -777,7 +777,7 @@ export function TripJourney(props: TripJourneyProps) {
           <div
             className={`flex flex-col items-center gap-1.5 px-5 pt-3 sm:px-8 ${
               isScreen
-                ? 'bg-background/95 sticky bottom-0 z-10 pb-[calc(env(safe-area-inset-bottom)+16px)] backdrop-blur'
+                ? 'bg-background/95 sticky bottom-0 z-10 pb-[calc(var(--safe-bottom)+16px)] backdrop-blur'
                 : 'pb-6'
             }`}
           >

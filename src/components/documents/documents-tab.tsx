@@ -157,7 +157,7 @@ export function DocumentsTab(_props: {}) {
   }
 
   const header = (
-    <header className="flex items-start gap-3 px-5 pt-[calc(env(safe-area-inset-top)+20px)]">
+    <header className="flex items-start gap-3 px-5 pt-[calc(var(--safe-top)+20px)]">
       <div className="min-w-0 flex-1">
         <h1 className="font-display text-[30px] leading-[1.1]">Documents</h1>
         {files.length > 0 && (
@@ -240,7 +240,7 @@ export function DocumentsTab(_props: {}) {
         <button
           type="button"
           onClick={() => push({ kind: 'add-document' })}
-          className="bg-primary text-primary-foreground pressable animate-pop focus-visible:ring-ring/50 fixed right-5 bottom-[calc(100px+env(safe-area-inset-bottom))] z-30 flex h-14 items-center gap-2 rounded-full pr-[22px] pl-[18px] text-base font-extrabold shadow-[0_10px_24px_rgba(29,95,224,0.38)] outline-none focus-visible:ring-[3px]"
+          className="bg-primary text-primary-foreground pressable animate-pop focus-visible:ring-ring/50 fixed right-5 bottom-[calc(100px+var(--safe-bottom))] z-30 flex h-14 items-center gap-2 rounded-full pr-[22px] pl-[18px] text-base font-extrabold shadow-[0_10px_24px_rgba(29,95,224,0.38)] outline-none focus-visible:ring-[3px]"
         >
           <Plus aria-hidden className="size-5" strokeWidth={2.5} />
           Ajouter

@@ -249,7 +249,7 @@ function TodayDay({ now }: { now: Date }) {
       onTouchStart={swipe.onTouchStart}
       onTouchEnd={swipe.onTouchEnd}
     >
-      <header className="flex items-start gap-3 px-5 pt-[calc(env(safe-area-inset-top)+20px)]">
+      <header className="flex items-start gap-3 px-5 pt-[calc(var(--safe-top)+20px)]">
         <div className="min-w-0 flex-1">
           <p className="text-secondary-strong text-xs font-black tracking-[0.08em]">
             {dayEyebrow(day, index, itinerary.length)}

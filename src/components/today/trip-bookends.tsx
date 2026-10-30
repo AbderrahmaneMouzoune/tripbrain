@@ -39,7 +39,7 @@ function BookendHeader({ title }: { title: string }) {
   const first = itinerary[0]
   const last = itinerary[itinerary.length - 1]
   return (
-    <header className="flex items-start gap-3 px-5 pt-[calc(env(safe-area-inset-top)+20px)]">
+    <header className="flex items-start gap-3 px-5 pt-[calc(var(--safe-top)+20px)]">
       <div className="min-w-0 flex-1">
         <p className="text-secondary-strong text-xs font-black tracking-[0.08em]">
           {[activeTrip?.title, formatDateRange(first.date, last.date, '→')]

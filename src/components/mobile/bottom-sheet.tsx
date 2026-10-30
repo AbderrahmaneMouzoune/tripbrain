@@ -57,7 +57,7 @@ export function BottomSheet({
         </DrawerHeader>
         <div className="stagger overflow-y-auto px-5 pb-4">{children}</div>
         {footer && (
-          <DrawerFooter className="px-5 pt-2 pb-[calc(env(safe-area-inset-bottom)+20px)]">
+          <DrawerFooter className="px-5 pt-2 pb-[calc(var(--safe-bottom)+20px)]">
             {footer}
           </DrawerFooter>
         )}
