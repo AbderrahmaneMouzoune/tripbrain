@@ -4,6 +4,7 @@ import { PWARegister } from '@/components/pwa-register'
 import { PwaInstallProvider } from '@/components/pwa-install-provider'
 import { PwaInstallPrompt } from '@/components/pwa-install-prompt'
 import { INSTALL_EVENT_CAPTURE_SCRIPT } from '@/lib/pwa-install'
+import { NATIVE_BOOT_SCRIPT } from '@/lib/native-app'
 import { AnalyticsProvider } from '@/components/analytics/analytics-provider'
 import { ConsentedVercelAnalytics } from '@/components/analytics/vercel-analytics'
 import { getSiteUrl } from '@/lib/site-url'
@@ -92,8 +93,23 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="fr" className="light" style={{ colorScheme: 'light' }}>
+    // `suppressHydrationWarning` : le script natif ajoute `data-native` à
+    // <html> avant l'hydratation.
+    <html
+      lang="fr"
+      className="light"
+      style={{ colorScheme: 'light' }}
+      suppressHydrationWarning
+    >
       <head>
+        {/*
+          Avant tout le reste : marque <html> dans l'app native (CSS `native:`)
+          et garde les événements natifs arrivés avant l'hydratation.
+        */}
+        <script
+          id="native-boot"
+          dangerouslySetInnerHTML={{ __html: NATIVE_BOOT_SCRIPT }}
+        />
         {/*
           `beforeinstallprompt` peut se déclencher avant l'hydratation React :
           on le met de côté dès le chargement du document.

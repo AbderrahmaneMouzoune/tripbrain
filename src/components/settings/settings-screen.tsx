@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, type ComponentType, type SVGProps } from 'react'
+import { useState, type ComponentType, type SVGProps } from 'react'
 import Link from 'next/link'
 import {
   BarChart3,
@@ -30,14 +30,11 @@ import { formatFileSize } from '@/lib/document-organize'
 import { legalConfig } from '@/lib/legal-config'
 import type { Preferences } from '@/lib/preferences'
 import { REMINDER_TIMES } from '@/lib/reminders'
+import { isNativeApp } from '@/lib/native-app'
 import {
-  NATIVE_PERMISSION_EVENT,
-  getNativeNotificationPermission,
-  isNativeApp,
-  openNativeSettings,
-  requestNativeNotifications,
-  type NativeNotificationPermission,
-} from '@/lib/native-app'
+  useNotificationPermission,
+  type NotificationPermissionState,
+} from '@/hooks/use-notification-permission'
 import { cn } from '@/lib/utils'
 import packageInfo from '../../../package.json'
 import { useStorageEstimate } from './offline-screen'
@@ -88,60 +85,7 @@ const NOTIFICATIONS: {
   },
 ]
 
-type PermissionState = NotificationPermission | 'unsupported'
-
-/** L'app native dit « undetermined » là où le navigateur dit « default ». */
-function fromNativePermission(
-  permission: NativeNotificationPermission | null,
-): PermissionState {
-  if (permission === 'granted' || permission === 'denied') return permission
-  if (permission === 'unsupported') return 'unsupported'
-  return 'default'
-}
-
-/** Autorisation des notifications du navigateur, relue à chaque retour sur l'app. */
-function useNotificationPermission() {
-  const [permission, setPermission] = useState<PermissionState>('default')
-  useEffect(() => {
-    const read = () =>
-      setPermission(
-        isNativeApp()
-          ? fromNativePermission(getNativeNotificationPermission())
-          : typeof Notification === 'undefined'
-            ? 'unsupported'
-            : Notification.permission,
-      )
-    read()
-    document.addEventListener('visibilitychange', read)
-    window.addEventListener(NATIVE_PERMISSION_EVENT, read)
-    return () => {
-      document.removeEventListener('visibilitychange', read)
-      window.removeEventListener(NATIVE_PERMISSION_EVENT, read)
-    }
-  }, [])
-
-  const request = async () => {
-    if (isNativeApp()) {
-      // Refusée une fois, seule la page Réglages de l'app peut la rendre.
-      if (getNativeNotificationPermission() === 'denied') {
-        openNativeSettings()
-        return
-      }
-      const result = fromNativePermission(await requestNativeNotifications())
-      setPermission(result)
-      // « unsupported » : simulateur, sans écran de permission à mesurer.
-      if (result !== 'unsupported') {
-        trackEvent('notification_permission_requested', { result })
-      }
-      return
-    }
-    if (typeof Notification === 'undefined') return
-    const result = await Notification.requestPermission()
-    setPermission(result)
-    trackEvent('notification_permission_requested', { result })
-  }
-  return { permission, request }
-}
+type PermissionState = NotificationPermissionState
 
 function RowLink({
   href,

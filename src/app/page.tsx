@@ -16,10 +16,12 @@ import { MapView } from '@/components/map/map-view'
 import { DocumentsTab } from '@/components/documents/documents-tab'
 import { ImageCacheProvider } from '@/components/image-cache-provider'
 import { ReminderScheduler } from '@/components/settings/reminder-scheduler'
+import { NativeHosts } from '@/components/native/native-hosts'
 import { AppIcon } from '@/components/app-icon'
 import { usePwaInstall } from '@/components/pwa-install-provider'
 import { useAnalytics } from '@/hooks/use-analytics'
 import { trackEvent } from '@/lib/analytics/client'
+import { isInsideNativeApp } from '@/lib/native-app'
 
 function TabContent() {
   const { tab } = useAppNav()
@@ -102,9 +104,11 @@ function HomePageContent() {
     if (isLoading || appOpenedRef.current) return
     appOpenedRef.current = true
     trackEvent('app_opened', {
-      display_mode: window.matchMedia('(display-mode: standalone)').matches
-        ? 'standalone'
-        : 'browser',
+      display_mode: isInsideNativeApp()
+        ? 'native'
+        : window.matchMedia('(display-mode: standalone)').matches
+          ? 'standalone'
+          : 'browser',
       has_trip: hasData,
       is_demo: isDemo,
     })
@@ -133,6 +137,7 @@ function HomePageContent() {
       )}
       {/* Partage reçu par l'URL : rendu des deux côtés de l'onboarding. */}
       <IncomingShareGate />
+      <NativeHosts />
     </>
   )
 }

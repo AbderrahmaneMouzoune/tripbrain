@@ -85,7 +85,7 @@ export const analyticsEvents = {
     description:
       "Ouverture de l'application : installée ou dans le navigateur, avec ou sans voyage chargé.",
     properties: {
-      display_mode: choice('browser', 'standalone'),
+      display_mode: choice('browser', 'standalone', 'native'),
       has_trip: flag(),
       is_demo: flag(),
     },

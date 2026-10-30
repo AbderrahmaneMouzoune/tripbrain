@@ -24,7 +24,22 @@
  *   notifications/sync  { reminders }                → notifications/state { permission, scheduled }
  *   calendar/add        { events }                   → calendar/result     { outcome, count }
  *   app/openSettings    {}                           → (aucune)
+ *   app/ready           { capabilities }             → (aucune)            v2
+ *   ui/statusBar        { style: light|dark }        → (aucune)            v2
+ *   maps/open           { mode, name?, address?, coordinates?, url } → (aucune) v2
+ *   keepAwake/set       { active }                   → (aucune)            v2
+ *   app/requestReview   {}                           → (aucune)            v2
  *   (spontané)                                       ← file/import         { name, mimeType?, base64 }
+ *   (spontané)                                       ← app/navigate        { path }   v2
+ *   (spontané)                                       ← app/resume          {}         v2
+ *
+ * v2 : le natif injecte `capabilities` (types de requête qu'il sait traiter)
+ * dans `window.TripBrainNative`. Un build sans cette liste ne connaît que les
+ * types v1 : toute requête v2 passe par `hasNativeCapability()` avant d'être
+ * envoyée, sinon le natif l'ignorerait et le bouton ne ferait rien. En retour,
+ * la page annonce par `app/ready` ce qu'elle sait recevoir (`navigate` :
+ * ouvrir un chemin sans recharger) ; sans cette annonce, le natif garde son
+ * comportement v1 (rechargement de la page).
  */
 
 const NATIVE_RESPONSE_EVENT = 'tripbrain:native-response'
@@ -81,6 +96,36 @@ export interface NativeCalendarEvent {
 export interface NativeAppInfo {
   platform: 'ios' | 'android' | string
   appVersion: string
+  /** Types de requête traités par le natif ; absent avant la v2. */
+  capabilities?: string[]
+}
+
+/** Ce que tout build natif sait faire, liste `capabilities` ou non. */
+const V1_CAPABILITIES: readonly string[] = [
+  'share/link',
+  'file/share',
+  'haptic/trigger',
+  'qr/scan',
+  'notifications/sync',
+  'calendar/add',
+  'app/openSettings',
+]
+
+/** Ce que la page sait recevoir du natif, annoncé par `app/ready`. */
+const WEB_CAPABILITIES: readonly string[] = ['navigate']
+
+export type NativeStatusBarStyle = 'light' | 'dark'
+
+/** Destination à ouvrir dans l'app de cartes du téléphone. */
+export interface NativeMapsTarget {
+  /** `directions` : itinéraire jusqu'au lieu ; `search` : le lieu sur la carte. */
+  mode: 'directions' | 'search'
+  name?: string
+  address?: string
+  /** `[latitude, longitude]` */
+  coordinates?: [number, number]
+  /** Lien web équivalent : repli du natif si aucune app ne s'ouvre. */
+  url: string
 }
 
 interface NativeFilePayload {
@@ -97,6 +142,11 @@ type NativeRequestType =
   | 'notifications/sync'
   | 'calendar/add'
   | 'app/openSettings'
+  | 'app/ready'
+  | 'ui/statusBar'
+  | 'maps/open'
+  | 'keepAwake/set'
+  | 'app/requestReview'
 
 interface NativeResponse {
   id?: string
@@ -108,8 +158,22 @@ declare global {
   interface Window {
     TripBrainNative?: NativeAppInfo
     ReactNativeWebView?: { postMessage: (message: string) => void }
+    /** Événements natifs arrivés avant l'hydratation (script de `layout.tsx`). */
+    __tbNativeEvents?: NativeResponse[]
   }
 }
+
+/** Suffixe user-agent ajouté par l'app native. */
+const NATIVE_USER_AGENT_PATTERN = /\bTripBrainApp\/\d/
+
+/**
+ * Script du `<head>`, exécuté avant tout rendu :
+ * - pose `data-native` sur `<html>` dans l'app, pour que le CSS (`native:`)
+ *   s'applique dès la première peinture, sans attendre l'hydratation ;
+ * - garde de côté les événements spontanés du natif (fichier ouvert avec
+ *   TripBrain, lien à ouvrir) arrivés avant que React n'écoute.
+ */
+export const NATIVE_BOOT_SCRIPT = `(function(){try{var n=window.TripBrainNative;if(n||/\\bTripBrainApp\\/\\d/.test(navigator.userAgent)){document.documentElement.setAttribute('data-native',(n&&n.platform)||'app')}window.__tbNativeEvents=window.__tbNativeEvents||[];window.addEventListener('${NATIVE_RESPONSE_EVENT}',function(e){var d=e.detail;if(d&&!d.id&&(d.type==='file/import'||d.type==='app/navigate'))window.__tbNativeEvents.push(d)})}catch(_){}})()`
 
 /**
  * Description de l'app native qui héberge la page, ou `null` dans un
@@ -129,6 +193,33 @@ export function getNativeApp(): NativeAppInfo | null {
 
 export function isNativeApp(): boolean {
   return getNativeApp() !== null
+}
+
+/**
+ * La page tourne-t-elle dans l'app native ? Pour les décisions d'interface
+ * seulement (masquer l'installation PWA, adapter un texte) : en plus du global
+ * injecté, accepte le suffixe user-agent, présent même si l'injection a raté.
+ * Les appels au bridge passent, eux, par `isNativeApp()`.
+ */
+export function isInsideNativeApp(): boolean {
+  if (typeof window === 'undefined') return false
+  return (
+    getNativeApp() !== null ||
+    NATIVE_USER_AGENT_PATTERN.test(window.navigator.userAgent)
+  )
+}
+
+/**
+ * Le natif sait-il traiter ce type de requête ? Un build antérieur à la liste
+ * `capabilities` ne connaît que les types v1.
+ */
+export function hasNativeCapability(type: string): boolean {
+  const app = getNativeApp()
+  if (!app) return false
+  const capabilities = Array.isArray(app.capabilities)
+    ? app.capabilities
+    : V1_CAPABILITIES
+  return capabilities.includes(type)
 }
 
 /** Compare deux versions `x.y.z` : négatif si `a` précède `b`. */
@@ -278,8 +369,8 @@ export function triggerHaptic(kind: NativeHapticKind): void {
 
 /**
  * Ouvre l'écran de scan natif. Résout la valeur lue, ou `null` si l'écran a
- * été fermé sans rien scanner. Un QR code TripBrain est un lien : le natif
- * navigue alors de lui-même, la page n'a rien à faire de plus.
+ * été fermé sans rien scanner. La page traite la valeur elle-même ; un natif
+ * v1 ouvrait en plus la WebView sur le lien lu (rechargement de la page).
  */
 export async function scanQrNatively(): Promise<string | null> {
   const result = await requestNative<{ value: string | null }>(
@@ -334,9 +425,33 @@ export function getNativeNotificationPermission(): NativeNotificationPermission 
  * ne la demande que s'il a quelque chose à planifier.
  */
 export function requestNativeNotifications(): Promise<NativeNotificationPermission | null> {
+  markNativeNotificationsAsked()
   return syncNativeReminders(lastSyncedReminders).then(
     (state) => state?.permission ?? null,
   )
+}
+
+const NOTIFICATIONS_ASKED_KEY = 'tripbrain:native-notifications-asked'
+
+/**
+ * L'utilisateur a-t-il déjà demandé les rappels (bouton « Autoriser », « Ouvrir
+ * mon voyage ») ? Tant que non, la page ne synchronise pas de rappels : le
+ * natif demanderait l'autorisation au lancement, sans contexte.
+ */
+export function hasAskedNativeNotifications(): boolean {
+  try {
+    return localStorage.getItem(NOTIFICATIONS_ASKED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function markNativeNotificationsAsked(): void {
+  try {
+    localStorage.setItem(NOTIFICATIONS_ASKED_KEY, '1')
+  } catch {
+    // Stockage bloqué : la demande sera reposée au prochain geste.
+  }
 }
 
 /** Écrit des journées dans le calendrier du téléphone. */
@@ -352,18 +467,52 @@ export function openNativeSettings(): void {
   postNative('app/openSettings', {})
 }
 
+// ── Événements spontanés du natif ─────────────────────────────────────────────
+
+/**
+ * Appelle `handler` pour chaque événement spontané `type` du natif, y compris
+ * ceux arrivés avant l'abonnement (gardés par `NATIVE_BOOT_SCRIPT`). Retourne
+ * la fonction de désabonnement.
+ */
+export function onNativeEvent(
+  type: 'file/import' | 'app/navigate' | 'app/resume',
+  handler: (payload: unknown) => void,
+): () => void {
+  if (typeof window === 'undefined') return () => {}
+
+  const consume = (detail: NativeResponse) => {
+    const queue = window.__tbNativeEvents
+    if (queue) {
+      const index = queue.indexOf(detail)
+      if (index !== -1) queue.splice(index, 1)
+    }
+    handler(detail.payload)
+  }
+
+  const pending = (window.__tbNativeEvents ?? []).filter(
+    (detail) => detail.type === type,
+  )
+  for (const detail of pending) consume(detail)
+
+  const listener = (event: Event) => {
+    const detail = (event as CustomEvent<NativeResponse>).detail
+    if (!detail || detail.id || detail.type !== type) return
+    consume(detail)
+  }
+  window.addEventListener(NATIVE_RESPONSE_EVENT, listener)
+  return () => window.removeEventListener(NATIVE_RESPONSE_EVENT, listener)
+}
+
 // ── Fichiers ouverts avec TripBrain ───────────────────────────────────────────
 
 /**
  * Appelle `handler` quand l'app native remet un fichier ouvert « avec
- * TripBrain » (Mail, Fichiers, AirDrop). Retourne la fonction de désabonnement.
+ * TripBrain » (Mail, Fichiers, AirDrop), y compris pendant le démarrage.
+ * Retourne la fonction de désabonnement.
  */
 export function onNativeFileImport(handler: (file: File) => void): () => void {
-  if (typeof window === 'undefined') return () => {}
-  const listener = (event: Event) => {
-    const detail = (event as CustomEvent<NativeResponse>).detail
-    if (detail?.type !== 'file/import') return
-    const payload = detail.payload as Partial<NativeFilePayload> | undefined
+  return onNativeEvent('file/import', (raw) => {
+    const payload = raw as Partial<NativeFilePayload> | undefined
     if (
       !payload ||
       typeof payload.name !== 'string' ||
@@ -376,7 +525,50 @@ export function onNativeFileImport(handler: (file: File) => void): () => void {
     } catch (error) {
       console.warn('Fichier reçu de l’app illisible', error)
     }
-  }
-  window.addEventListener(NATIVE_RESPONSE_EVENT, listener)
-  return () => window.removeEventListener(NATIVE_RESPONSE_EVENT, listener)
+  })
+}
+
+// ── v2 : cycle de vie, système, cartes ────────────────────────────────────────
+
+let readySent = false
+
+/**
+ * Signale au natif que la page est prête : il retire le splash et peut
+ * désormais ouvrir un chemin sans recharger (`app/navigate`). Une seule fois.
+ */
+export function notifyNativeReady(): void {
+  if (readySent || !hasNativeCapability('app/ready')) return
+  readySent = true
+  postNative('app/ready', { capabilities: WEB_CAPABILITIES })
+}
+
+/** Couleur des icônes de la barre d'état : `light` sur fond sombre. */
+export function setNativeStatusBarStyle(style: NativeStatusBarStyle): void {
+  if (!hasNativeCapability('ui/statusBar')) return
+  postNative('ui/statusBar', { style })
+}
+
+/**
+ * Confie la destination à l'app de cartes du téléphone (choix Plans, Google
+ * Maps, Waze…). Retourne `false` si le natif ne sait pas le faire : le lien
+ * web garde alors la main.
+ */
+export function openMapsNatively(target: NativeMapsTarget): boolean {
+  if (!hasNativeCapability('maps/open')) return false
+  return postNative('maps/open', target)
+}
+
+/** Garde l'écran allumé (mode conduite, génération en cours). */
+export function setNativeKeepAwake(active: boolean): void {
+  if (!hasNativeCapability('keepAwake/set')) return
+  postNative('keepAwake/set', { active })
+}
+
+/**
+ * Propose de noter l'app sur le store. Le système décide seul d'afficher ou
+ * non la demande, et la limite à quelques fois par an.
+ */
+export function requestNativeReview(): void {
+  if (!hasNativeCapability('app/requestReview')) return
+  postNative('app/requestReview', {})
 }
