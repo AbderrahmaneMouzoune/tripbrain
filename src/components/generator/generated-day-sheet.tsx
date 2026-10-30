@@ -55,6 +55,7 @@ export function GeneratedDaySheet({
               size="lg2"
               className="flex-1 border-[1.5px]"
               disabled={position === 0}
+              haptic="selection"
               onClick={() => onIndexChange(position - 1)}
             >
               <IconChevronLeft aria-hidden />
@@ -65,6 +66,7 @@ export function GeneratedDaySheet({
               size="lg2"
               className="flex-1 border-[1.5px]"
               disabled={position >= days.length - 1}
+              haptic="selection"
               onClick={() => onIndexChange(position + 1)}
             >
               Jour {position + 2}
@@ -183,7 +185,7 @@ function DayDetail({
       )}
 
       {day.notes && (
-        <p className="bg-muted text-foreground rounded-[14px] px-3.5 py-3 text-sm leading-relaxed">
+        <p className="bg-muted text-foreground rounded-[14px] px-3.5 py-3 text-sm leading-relaxed select-text">
           {day.notes}
         </p>
       )}
@@ -209,7 +211,9 @@ function ActivityItem({
     <li className="flex gap-3">
       <ActivityNumber index={index} activity={activity} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="text-[15px] leading-snug font-black">{activity.name}</p>
+        <p className="text-[15px] leading-snug font-black select-text">
+          {activity.name}
+        </p>
         <p className="text-muted-foreground text-xs font-bold">
           {meta.join(' · ')}
         </p>
@@ -217,7 +221,7 @@ function ActivityItem({
           <p className="text-sm leading-snug">{activity.description}</p>
         )}
         {activity.address && (
-          <p className="text-muted-foreground flex items-start gap-1 text-xs">
+          <p className="text-muted-foreground flex items-start gap-1 text-xs select-text">
             <IconMapPin className="mt-px size-3.5 shrink-0" aria-hidden />
             {activity.address}
           </p>

@@ -10,6 +10,7 @@ import { Slot } from '@radix-ui/react-slot'
 import { cn } from '@/lib/utils'
 import { useLongPress } from '@/hooks/use-long-press'
 import { trackEvent } from '@/lib/analytics/client'
+import { triggerHaptic } from '@/lib/native-app'
 import { readPreferences, writePreferences } from '@/lib/preferences'
 import type {
   QuickAction,
@@ -192,9 +193,13 @@ export function QuickActionsSheet({
 
   const runAction = (action: QuickAction) => {
     if (action.confirm && confirming !== action.id) {
+      // Premier appui sur une action fâcheuse : on prévient avant le second.
+      triggerHaptic('warning')
       setConfirming(action.id)
       return
     }
+    // Les statuts et la copie ont leur propre retour, là où le résultat est connu.
+    if (action.destructive) triggerHaptic('impact')
     trackEvent('quick_action_used', { entity, action: action.kind })
     close()
     action.run?.()
@@ -216,7 +221,6 @@ export function QuickActionsSheet({
       title={title}
       description={description ?? 'Que faire de cette information ?'}
       hideHeader
-      className="pb-[var(--safe-bottom)]"
     >
       <div className="mt-1 flex items-center gap-3">
         {HeaderIcon && (

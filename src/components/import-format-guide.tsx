@@ -32,8 +32,11 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react'
+import { strToU8, zipSync } from 'fflate'
 import { trackEvent } from '@/lib/analytics/client'
 import { getGeneratorUrl } from '@/lib/site-links'
+import { isNativeApp } from '@/lib/native-app'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 import { saveFile } from '@/lib/save-file'
 
 /**
@@ -63,7 +66,9 @@ function GeneratorBanner() {
   if (!visible) return null
 
   return (
-    <div className="border-primary/20 bg-primary/5 mx-5 mt-4 mb-1 flex shrink-0 items-start gap-3 rounded-xl border p-3">
+    // Dans l'app, le lien partirait vers le site dans le navigateur : l'app a
+    // son propre générateur, accessible depuis l'accueil et le menu.
+    <div className="border-primary/20 bg-primary/5 native:hidden mx-5 mt-4 mb-1 flex shrink-0 items-start gap-3 rounded-xl border p-3">
       <span className="bg-primary/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
         <Sparkles className="text-primary h-4 w-4" />
       </span>
@@ -797,6 +802,19 @@ function downloadText(filename: string, content: string) {
   saveFile(blob, filename)
 }
 
+/**
+ * Les trois modèles CSV en une seule archive : dans l'app, chaque fichier
+ * ouvrirait sa propre feuille de partage, et le système n'en montre qu'une.
+ */
+function saveCsvTemplatesZip() {
+  const files: Record<string, Uint8Array> = {}
+  for (const { name, headers, rows } of CSV_TEMPLATES) {
+    files[name] = strToU8(makeCsv(headers, rows))
+  }
+  const blob = new Blob([zipSync(files)], { type: 'application/zip' })
+  saveFile(blob, 'tripbrain-modeles-csv.zip')
+}
+
 /** Modèle Excel à remplir (3 onglets), aussi proposé depuis l’écran d’import. */
 export async function downloadXlsxTemplate() {
   const { Workbook } = await import('exceljs')
@@ -1194,6 +1212,8 @@ const CSV_TEMPLATES: {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function ImportFormatGuideContent() {
+  // Dans l'app, « télécharger » ouvre la feuille de partage du système.
+  const native = useIsNativeApp()
   const [activeTab, setActiveTab] = useState<'xlsx' | 'csv' | 'json'>('xlsx')
   const [xlsxLoading, setXlsxLoading] = useState(false)
   const [xlsxError, setXlsxError] = useState(false)
@@ -1218,8 +1238,12 @@ export function ImportFormatGuideContent() {
     setAllLoading(true)
     setAllError(false)
     try {
-      for (const { name, headers, rows } of CSV_TEMPLATES) {
-        downloadText(name, makeCsv(headers, rows))
+      if (isNativeApp()) {
+        saveCsvTemplatesZip()
+      } else {
+        for (const { name, headers, rows } of CSV_TEMPLATES) {
+          downloadText(name, makeCsv(headers, rows))
+        }
       }
     } catch {
       setAllError(true)
@@ -2335,7 +2359,9 @@ export function ImportFormatGuideContent() {
               ? 'Génération…'
               : xlsxError
                 ? 'Erreur — réessayer'
-                : 'Télécharger le modèle Excel (.xlsx)'}
+                : native
+                  ? 'Enregistrer le modèle Excel (.xlsx)'
+                  : 'Télécharger le modèle Excel (.xlsx)'}
           </Button>
         )}
         {activeTab === 'csv' && (
@@ -2361,10 +2387,14 @@ export function ImportFormatGuideContent() {
             >
               <Download className="h-4 w-4" />
               {allLoading
-                ? 'Téléchargement…'
+                ? native
+                  ? 'Préparation…'
+                  : 'Téléchargement…'
                 : allError
                   ? 'Erreur — réessayer'
-                  : `Tout télécharger (${CSV_TEMPLATES.length} csv)`}
+                  : native
+                    ? `Tout enregistrer (${CSV_TEMPLATES.length} csv, en .zip)`
+                    : `Tout télécharger (${CSV_TEMPLATES.length} csv)`}
             </Button>
           </>
         )}
@@ -2379,7 +2409,9 @@ export function ImportFormatGuideContent() {
               ? 'Génération…'
               : jsonError
                 ? 'Erreur — réessayer'
-                : 'Télécharger le modèle JSON (.json)'}
+                : native
+                  ? 'Enregistrer le modèle JSON (.json)'
+                  : 'Télécharger le modèle JSON (.json)'}
           </Button>
         )}
       </div>

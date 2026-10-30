@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import {
   Backpack,
   Check,
@@ -10,10 +9,13 @@ import {
   Plane,
   RotateCcw,
 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { daysUntil } from '@/lib/trips'
 import { cn } from '@/lib/utils'
 import { useDocuments } from '@/hooks/use-documents'
 import { usePreferences } from '@/hooks/use-preferences'
+import { useNotificationPermission } from '@/hooks/use-notification-permission'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 import { useTrip } from '@/components/app/trip-provider'
 import { useAppNav } from '@/components/app/navigation'
 import { useImageCacheContext } from '@/components/image-cache-provider'
@@ -27,7 +29,6 @@ import {
   splitPlace,
   tripRecap,
   type DepartureChecklistId,
-  type DepartureChecklistInput,
 } from '@/components/day/day-logic'
 import { Pill } from '@/components/day/day-ui'
 import { GroupSyncPill } from '@/components/share/group-sync-button'
@@ -65,17 +66,6 @@ function BookendHeader({ title }: { title: string }) {
   )
 }
 
-/** État des notifications, lu après le montage (absent côté serveur). */
-function useNotificationPermission(): DepartureChecklistInput['notifications'] {
-  const [permission, setPermission] =
-    useState<DepartureChecklistInput['notifications']>('unsupported')
-  useEffect(() => {
-    if (!('Notification' in window)) return
-    setPermission(Notification.permission)
-  }, [])
-  return permission
-}
-
 /** Avant le départ : compte à rebours, premier jour, préparation, bagages. */
 export function BeforeTrip({ now }: { now: Date }) {
   const { itinerary, activeTrip } = useTrip()
@@ -83,7 +73,14 @@ export function BeforeTrip({ now }: { now: Date }) {
   const { stats } = useImageCacheContext()
   const { files } = useDocuments()
   const { preferences } = usePreferences()
-  const notifications = useNotificationPermission()
+  // Autorisation de l'app native dans l'app, du navigateur ailleurs.
+  const { permission } = useNotificationPermission()
+  const native = useIsNativeApp()
+  // Le hook démarre à « default » : sans ce garde, « Activer les rappels »
+  // s'afficherait au premier rendu puis disparaîtrait là où l'API manque.
+  const [permissionRead, setPermissionRead] = useState(false)
+  useEffect(() => setPermissionRead(true), [])
+  const notifications = permissionRead ? permission : 'unsupported'
 
   const first = itinerary[0]
   const countdown = Math.max(daysUntil(first.date, now), 0)
@@ -93,6 +90,7 @@ export function BeforeTrip({ now }: { now: Date }) {
     dayCount: itinerary.length,
     offline: { total: stats.total, cached: stats.cached },
     notifications,
+    native,
     remindersEnabled:
       preferences.notifyTransportEve ||
       preferences.notifyMorning ||

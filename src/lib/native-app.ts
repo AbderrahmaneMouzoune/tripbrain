@@ -410,6 +410,16 @@ export const NATIVE_PERMISSION_EVENT =
   'tripbrain:native-notification-permission'
 
 let lastSyncedReminders: NativeReminder[] = []
+let pendingNativeReminders: NativeReminder[] | null = null
+
+/**
+ * Liste complète des rappels, même quand la page n'en synchronise encore
+ * aucun (autorisation jamais demandée) : `requestNativeNotifications()` la
+ * synchronise, et c'est elle qui fait apparaître la demande du système.
+ */
+export function setPendingNativeReminders(reminders: NativeReminder[]): void {
+  pendingNativeReminders = reminders
+}
 let nativeNotificationPermission: NativeNotificationPermission | null = null
 
 /**
@@ -426,9 +436,9 @@ export function getNativeNotificationPermission(): NativeNotificationPermission 
  */
 export function requestNativeNotifications(): Promise<NativeNotificationPermission | null> {
   markNativeNotificationsAsked()
-  return syncNativeReminders(lastSyncedReminders).then(
-    (state) => state?.permission ?? null,
-  )
+  return syncNativeReminders(
+    pendingNativeReminders ?? lastSyncedReminders,
+  ).then((state) => state?.permission ?? null)
 }
 
 const NOTIFICATIONS_ASKED_KEY = 'tripbrain:native-notifications-asked'
@@ -530,16 +540,24 @@ export function onNativeFileImport(handler: (file: File) => void): () => void {
 
 // ── v2 : cycle de vie, système, cartes ────────────────────────────────────────
 
-let readySent = false
-
 /**
  * Signale au natif que la page est prête : il retire le splash et peut
- * désormais ouvrir un chemin sans recharger (`app/navigate`). Une seule fois.
+ * désormais ouvrir un chemin sans recharger (`app/navigate`). Appelé par
+ * l'accueil à chaque montage ; le natif accepte les annonces répétées.
  */
 export function notifyNativeReady(): void {
-  if (readySent || !hasNativeCapability('app/ready')) return
-  readySent = true
+  if (!hasNativeCapability('app/ready')) return
   postNative('app/ready', { capabilities: WEB_CAPABILITIES })
+}
+
+/**
+ * Retire l'annonce de `notifyNativeReady` quand l'accueil n'est plus affiché
+ * (guide, pages légales via un lien interne) : plus personne n'y écoute
+ * `app/navigate`, le natif ouvrira donc ses liens en changeant d'adresse.
+ */
+export function withdrawNativeReady(): void {
+  if (!hasNativeCapability('app/ready')) return
+  postNative('app/ready', { capabilities: [] })
 }
 
 /** Couleur des icônes de la barre d'état : `light` sur fond sombre. */
@@ -558,10 +576,19 @@ export function openMapsNatively(target: NativeMapsTarget): boolean {
   return postNative('maps/open', target)
 }
 
-/** Garde l'écran allumé (mode conduite, génération en cours). */
+let keepAwakeCount = 0
+
+/**
+ * Garde l'écran allumé (mode conduite, génération en cours). Le natif n'a
+ * qu'un seul verrou pour la page : chaque demandeur appelle `true` puis
+ * `false`, et le verrou n'est rendu qu'au départ du dernier.
+ */
 export function setNativeKeepAwake(active: boolean): void {
   if (!hasNativeCapability('keepAwake/set')) return
-  postNative('keepAwake/set', { active })
+  const previous = keepAwakeCount
+  keepAwakeCount = Math.max(0, keepAwakeCount + (active ? 1 : -1))
+  if ((previous === 0) === (keepAwakeCount === 0)) return
+  postNative('keepAwake/set', { active: keepAwakeCount > 0 })
 }
 
 /**

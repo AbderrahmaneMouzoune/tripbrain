@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { BottomSheet } from '@/components/mobile/bottom-sheet'
 import { Chip } from '@/components/mobile/chip'
+import { triggerHaptic } from '@/lib/native-app'
 import { trackEvent } from '@/lib/analytics/client'
 import {
   GeneratorRequestError,
@@ -204,6 +205,7 @@ export function RefineSheet({
       changes_count: proposal.count,
     })
     if (applied) {
+      triggerHaptic('success')
       replaceGeneratedItinerary(proposal.itinerary)
       close()
     } else {

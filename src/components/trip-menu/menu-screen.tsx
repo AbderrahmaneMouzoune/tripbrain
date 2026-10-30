@@ -46,7 +46,8 @@ import { trackEvent } from '@/lib/analytics/client'
 export function MenuScreen({ onClose }: ScreenProps<'menu'>) {
   const { push, selectedDay } = useAppNav()
   const { activeTrip, activeTripId, trips, itinerary, exportData } = useTrip()
-  // L'installation n'apparaît que là où elle est possible, et jamais une fois installée.
+  // L'installation n'apparaît que là où elle est possible, jamais une fois
+  // installée ni dans l'app native (le provider s'en charge).
   const { canInstall, open: openInstallPrompt } = usePwaInstall()
 
   // Héritier du panneau « Partager & données » : même mesure d'ouverture.
@@ -258,6 +259,8 @@ export function MenuScreen({ onClose }: ScreenProps<'menu'>) {
             label="Installer l’application"
             description="Sur l’écran d’accueil, en plein écran et hors ligne"
             onClick={() => openInstallPrompt('manual')}
+            // Jamais dans l'app native, pas même la frame avant l'hydratation.
+            className="native:hidden"
           />
         )}
         <Link

@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react'
+import { getNativeApp } from '@/lib/native-app'
 
 interface UseSwipeOptions {
   onSwipeLeft?: () => void
@@ -17,6 +18,20 @@ interface SwipeHandlers {
  * de photos) : un geste qui y commence leur appartient.
  */
 const SWIPE_IGNORE_SELECTOR = '[data-swipe-ignore]'
+
+/**
+ * Bande du bord gauche réservée, dans l'app iOS, au geste retour du système :
+ * un balayage qui y commence ferme l'écran au lieu de changer de journée.
+ */
+export const IOS_BACK_EDGE_PX = 24
+
+/** Le geste commence-t-il dans la zone du retour système (app iOS seulement) ? */
+export function startsInBackEdge(
+  clientX: number,
+  platform: string | undefined,
+): boolean {
+  return platform === 'ios' && clientX < IOS_BACK_EDGE_PX
+}
 
 /**
  * Détecte un balayage horizontal. Un geste plus vertical qu'horizontal est un
@@ -40,8 +55,14 @@ export function useSwipe({
       touchStartY.current = null
       return
     }
-    touchStartX.current = e.touches[0].clientX
-    touchStartY.current = e.touches[0].clientY
+    const touch = e.touches[0]
+    if (startsInBackEdge(touch.clientX, getNativeApp()?.platform)) {
+      touchStartX.current = null
+      touchStartY.current = null
+      return
+    }
+    touchStartX.current = touch.clientX
+    touchStartY.current = touch.clientY
   }, [])
 
   const onTouchEnd = useCallback(

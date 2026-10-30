@@ -8,6 +8,13 @@ import {
   Navigation,
 } from 'lucide-react'
 import { trackEvent } from '@/lib/analytics/client'
+import {
+  getNativeApp,
+  isInsideNativeApp,
+  isNativeApp,
+  openNativeSettings,
+  triggerHaptic,
+} from '@/lib/native-app'
 import { useTrip } from '@/components/app/trip-provider'
 import { useAppNav } from '@/components/app/navigation'
 import { Button } from '@/components/ui/button'
@@ -20,11 +27,7 @@ import {
   formatDuration,
   longDate,
 } from '@/components/day/day-logic'
-import {
-  Pill,
-  trackDirections,
-  useApplePlatform,
-} from '@/components/day/day-ui'
+import { Pill, openDirections, useApplePlatform } from '@/components/day/day-ui'
 // Leaflet lui-même n'est chargé que dans le navigateur, par `TripLeaflet`,
 // à l'ouverture de la carte (import dynamique dans un effet).
 import {
@@ -67,7 +70,11 @@ export function MapView(_props: {}) {
   const [position, setPosition] = useState<[number, number] | null>(null)
   const [recenterToken, setRecenterToken] = useState(0)
   const [locating, setLocating] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  const [message, setMessage] = useState<{
+    text: string
+    /** App native : bouton vers les réglages, seuls à rendre la position. */
+    settings?: boolean
+  } | null>(null)
   const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const placed = placedActivities(day)
@@ -101,10 +108,14 @@ export function MapView(_props: {}) {
 
   if (!day) return null
 
-  const showMessage = (text: string) => {
+  const showMessage = (text: string, settings = false) => {
     if (messageTimer.current) clearTimeout(messageTimer.current)
-    setMessage(text)
-    messageTimer.current = setTimeout(() => setMessage(null), 4000)
+    setMessage({ text, settings })
+    // Le temps de lire, et de viser le bouton quand il y en a un.
+    messageTimer.current = setTimeout(
+      () => setMessage(null),
+      settings ? 7000 : 4000,
+    )
   }
 
   const locate = () => {
@@ -127,11 +138,19 @@ export function MapView(_props: {}) {
         trackEvent('location_requested', {
           outcome: denied ? 'denied' : 'unavailable',
         })
-        showMessage(
-          denied
-            ? 'Accès à la position refusé dans le navigateur'
-            : 'Position introuvable pour le moment',
-        )
+        if (!denied) {
+          showMessage('Position introuvable pour le moment')
+        } else if (isInsideNativeApp()) {
+          // Dans l'app, l'autorisation se rend dans les réglages du téléphone.
+          showMessage(
+            getNativeApp()?.platform === 'ios'
+              ? 'Autorisez la localisation dans Réglages → TripBrain'
+              : 'Autorisez la localisation dans les réglages de TripBrain',
+            isNativeApp(),
+          )
+        } else {
+          showMessage('Accès à la position refusé dans le navigateur')
+        }
       },
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 60_000 },
     )
@@ -227,7 +246,11 @@ export function MapView(_props: {}) {
                 type="button"
                 role="radio"
                 aria-checked={active}
-                onClick={() => setScope(option.value)}
+                onClick={() => {
+                  if (active) return
+                  triggerHaptic('selection')
+                  setScope(option.value)
+                }}
                 className={
                   active
                     ? 'bg-card text-primary-strong pressable h-9 rounded-[11px] px-4 text-sm font-black shadow-[0_1px_3px_rgb(14_26_58/0.16)]'
@@ -243,12 +266,28 @@ export function MapView(_props: {}) {
 
       <div className="pointer-events-none absolute inset-x-3 bottom-3 z-[1000] mx-auto flex max-w-xl flex-col gap-2">
         {message && (
-          <p
+          <div
             role="status"
-            className="bg-ink text-ink-foreground animate-pop self-center rounded-full px-4 py-2 text-sm font-extrabold"
+            className={
+              message.settings
+                ? 'bg-ink text-ink-foreground animate-pop pointer-events-auto flex items-center gap-2 self-center rounded-[20px] py-1.5 pr-1.5 pl-4 text-sm font-extrabold'
+                : 'bg-ink text-ink-foreground animate-pop self-center rounded-full px-4 py-2 text-sm font-extrabold'
+            }
           >
-            {message}
-          </p>
+            <span>{message.text}</span>
+            {message.settings && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMessage(null)
+                  openNativeSettings()
+                }}
+                className="bg-ink-foreground text-ink pressable min-h-9 shrink-0 rounded-full px-3 text-[13px] font-black"
+              >
+                Ouvrir les réglages
+              </button>
+            )}
+          </div>
         )}
         <div className="flex items-end justify-between">
           <a
@@ -323,7 +362,9 @@ export function MapView(_props: {}) {
                   href={directionsUrl(selected.activity, apple) ?? undefined}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={() => trackDirections('activity', 'map')}
+                  onClick={(event) =>
+                    openDirections(event, 'activity', 'map', selected.activity)
+                  }
                 >
                   <Navigation className="size-[18px]" aria-hidden />Y aller
                 </a>

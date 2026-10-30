@@ -50,6 +50,7 @@ import {
 } from '@/components/day/day-logic'
 import { Pill, TRANSPORT_ICONS } from '@/components/day/day-ui'
 import { DayOverviewStrip, SwapDaySheet } from '@/components/day/day-overview'
+import { PhoneText } from '@/components/phone-text'
 
 const headerButton = 'border-border bg-card shrink-0 shadow-none'
 
@@ -398,7 +399,7 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
 
         {day.notes && (
           <p className="border-secondary text-muted-foreground mx-5 mt-3 border-l-[3px] pl-3 text-[15px] leading-[21px] font-semibold">
-            {day.notes}
+            <PhoneText text={day.notes} />
           </p>
         )}
 

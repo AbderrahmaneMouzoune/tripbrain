@@ -4,6 +4,7 @@ import * as React from 'react'
 import * as AlertDialogPrimitive from '@radix-ui/react-alert-dialog'
 import type { VariantProps } from 'class-variance-authority'
 
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 import { buttonVariants } from '@/components/ui/button'
 
@@ -47,6 +48,7 @@ function AlertDialogOverlay({
 
 function AlertDialogContent({
   className,
+  onOpenAutoFocus,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
   return (
@@ -59,6 +61,11 @@ function AlertDialogContent({
           className,
         )}
         {...props}
+        onOpenAutoFocus={(event) => {
+          onOpenAutoFocus?.(event)
+          // Les AlertDialog servent aux actions irréversibles : on prévient.
+          triggerHaptic('warning')
+        }}
       />
     </AlertDialogPortal>
   )

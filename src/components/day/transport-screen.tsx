@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   Bell,
@@ -21,6 +20,8 @@ import { MobileScreen } from '@/components/mobile/mobile-screen'
 import { Button } from '@/components/ui/button'
 import { useDocuments } from '@/hooks/use-documents'
 import { usePreferences } from '@/hooks/use-preferences'
+import { useNotificationPermission } from '@/hooks/use-notification-permission'
+import { triggerHaptic } from '@/lib/native-app'
 import { setTransport } from '@/lib/itinerary-edit'
 import { cn } from '@/lib/utils'
 import { useDayEditor } from '@/components/day/use-day-editor'
@@ -38,9 +39,10 @@ import {
 } from '@/components/day/day-logic'
 import {
   TRANSPORT_ICONS,
-  trackDirections,
+  openDirections,
   useApplePlatform,
 } from '@/components/day/day-ui'
+import { PhoneText } from '@/components/phone-text'
 
 const PLACE_WORDS = {
   plane: 'l’aéroport',
@@ -60,12 +62,9 @@ export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
   const day = editor.day
   const transport = day?.transport
 
-  const [notificationsGranted, setNotificationsGranted] = useState(false)
-  useEffect(() => {
-    setNotificationsGranted(
-      'Notification' in window && Notification.permission === 'granted',
-    )
-  }, [])
+  // Autorisation de l'app native dans l'app, du navigateur ailleurs.
+  const { permission } = useNotificationPermission()
+  const notificationsGranted = permission === 'granted'
 
   if (!day || !transport) {
     return (
@@ -86,14 +85,10 @@ export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
     formatPrice(transport.price, transport.currency),
   ].filter(Boolean)
   const isCar = transport.type === 'car'
-  const directions = directionsUrl(
-    {
-      address: isCar
-        ? transport.to
-        : (transport.departureAddress ?? transport.from),
-    },
-    apple,
-  )
+  const directionsAddress = isCar
+    ? transport.to
+    : (transport.departureAddress ?? transport.from)
+  const directions = directionsUrl({ address: directionsAddress }, apple)
   const ticket = files.find(
     (file) =>
       (!file.tripId || !activeTrip || file.tripId === activeTrip.id) &&
@@ -279,7 +274,7 @@ export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
                     {transport.type === 'plane' ? 'N° DE VOL' : 'N° DE TRAJET'}
                   </p>
                   {number ? (
-                    <p className="mt-0.5 truncate font-mono text-lg font-semibold tracking-[0.04em]">
+                    <p className="mt-0.5 truncate font-mono text-lg font-semibold tracking-[0.04em] select-text">
                       {number}
                     </p>
                   ) : (
@@ -304,7 +299,7 @@ export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
                     RÉFÉRENCE
                   </p>
                   {transport.bookingReference ? (
-                    <p className="mt-0.5 truncate font-mono text-base font-semibold">
+                    <p className="mt-0.5 truncate font-mono text-base font-semibold select-text">
                       {transport.bookingReference}
                     </p>
                   ) : (
@@ -345,9 +340,11 @@ export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
                 type="button"
                 role="radio"
                 aria-checked={active}
-                onClick={() =>
+                onClick={() => {
+                  if (active) return
+                  triggerHaptic('selection')
                   editor.save(setTransport(day, { ...transport, status: step }))
-                }
+                }}
                 className={cn(
                   'pressable flex h-9 flex-1 items-center justify-center gap-1 rounded-[11px] px-1 text-[13px] outline-none',
                   'focus-visible:ring-ring/50 focus-visible:ring-[3px]',
@@ -375,8 +372,8 @@ export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
         )}
 
         {transport.notes && (
-          <p className="text-muted-foreground mx-5 mt-3 text-[13px] leading-relaxed">
-            {transport.notes}
+          <p className="text-muted-foreground mx-5 mt-3 text-[13px] leading-relaxed select-text">
+            <PhoneText text={transport.notes} />
           </p>
         )}
 
@@ -388,7 +385,11 @@ export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
               href={directions}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => trackDirections('transport', 'transport')}
+              onClick={(event) =>
+                openDirections(event, 'transport', 'transport', {
+                  address: directionsAddress,
+                })
+              }
               className="border-border-strong bg-card pressable flex h-[52px] items-center justify-center gap-2 rounded-[14px] border-[1.5px] px-2.5 text-left text-sm leading-[17px] font-extrabold"
             >
               <Navigation className="size-5 shrink-0" aria-hidden />

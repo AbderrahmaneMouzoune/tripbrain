@@ -12,7 +12,7 @@ import {
   readSentReminders,
   type Reminder,
 } from '@/lib/reminders'
-import { isNativeApp, syncNativeReminders } from '@/lib/native-app'
+import { isNativeApp } from '@/lib/native-app'
 
 /** Le plan est refait régulièrement : veille de l'appareil, horloge qui saute… */
 const REPLAN_INTERVAL_MS = 30 * 60 * 1000
@@ -94,23 +94,8 @@ export function ReminderScheduler() {
     if (activeTripId) migrateSentReminders(activeTripId)
   }, [activeTripId])
 
-  // Dans l'app native, le téléphone planifie lui-même les rappels : ils
-  // partent même app fermée. Chaque changement remplace toute la liste.
-  useEffect(() => {
-    if (!isNativeApp()) return
-    const now = Date.now()
-    void syncNativeReminders(
-      reminders
-        .filter((reminder) => reminder.at > now)
-        .map((reminder) => ({
-          id: reminder.id,
-          title: reminder.title,
-          body: reminder.body,
-          at: new Date(reminder.at).toISOString(),
-          path: '/',
-        })),
-    )
-  }, [reminders])
+  // Dans l'app native, le téléphone planifie lui-même les rappels : c'est
+  // `NativeReminderSync`, monté même sans voyage, qui les lui confie.
 
   useEffect(() => {
     if (isNativeApp()) return

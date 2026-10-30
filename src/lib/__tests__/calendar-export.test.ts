@@ -7,6 +7,8 @@ import {
   hasScheduledTransport,
   transportSummary,
   transportTimeRange,
+  toNativeCalendarEvents,
+  nativeCalendarSignature,
 } from '../calendar-export'
 import { type DayItinerary } from '../itinerary-data'
 
@@ -517,5 +519,75 @@ describe('includeTransports', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// toNativeCalendarEvents (calendrier du téléphone, app native)
+// ---------------------------------------------------------------------------
+
+describe('toNativeCalendarEvents', () => {
+  it('maps each day to an all-day event with an exclusive end date', () => {
+    expect(toNativeCalendarEvents([minimalDay])).toEqual([
+      {
+        title: 'Jour 1 – Arrivée à Tachkent',
+        date: '2026-05-10',
+        endDate: '2026-05-11',
+        location: 'Tachkent',
+      },
+    ])
+  })
+
+  it('crosses month and year boundaries for the end date', () => {
+    const [event] = toNativeCalendarEvents([
+      { ...minimalDay, date: '2026-12-31' },
+    ])
+    expect(event.endDate).toBe('2027-01-01')
+  })
+
+  it('reuses the .ics description as notes', () => {
+    const [event] = toNativeCalendarEvents([fullDay])
+    expect(event.notes).toContain('Activités : Régistan, Bibi-Khanym')
+    expect(event.notes).toContain('Hébergement : Hôtel Registan Plaza')
+    expect(event.location).toBe('Samarcande')
+  })
+
+  it('adds the transport schedule to the notes', () => {
+    const flight: DayItinerary = {
+      ...minimalDay,
+      transport: {
+        id: 'tr',
+        type: 'plane',
+        from: 'PKX',
+        to: 'XIY',
+        departureTime: '13:00',
+        arrivalTime: '15:10',
+        bookingReference: 'ABC123',
+      },
+    }
+    const [event] = toNativeCalendarEvents([flight])
+    expect(event.notes).toContain(
+      'Horaires : Vol PKX → XIY, 13:00–15:10 (réservation ABC123)',
+    )
+  })
+
+  it('omits empty location and notes, and skips invalid dates', () => {
+    const events = toNativeCalendarEvents([
+      { ...minimalDay, city: '  ' },
+      { ...minimalDay, id: 'bad', date: '' },
+    ])
+    expect(events).toHaveLength(1)
+    expect(events[0]).not.toHaveProperty('location')
+    expect(events[0]).not.toHaveProperty('notes')
+  })
+})
+
+describe('nativeCalendarSignature', () => {
+  it('is stable for the same days and differs otherwise', () => {
+    const a = toNativeCalendarEvents([minimalDay, fullDay])
+    const b = toNativeCalendarEvents([minimalDay, fullDay])
+    const c = toNativeCalendarEvents([minimalDay])
+    expect(nativeCalendarSignature(a)).toBe(nativeCalendarSignature(b))
+    expect(nativeCalendarSignature(a)).not.toBe(nativeCalendarSignature(c))
   })
 })

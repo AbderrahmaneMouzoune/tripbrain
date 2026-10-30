@@ -9,17 +9,11 @@ import type { ScreenProps } from '@/components/app/screen-props'
 import { useAppNav } from '@/components/app/navigation'
 import { useTrip } from '@/components/app/trip-provider'
 import { usePreferences } from '@/hooks/use-preferences'
+import { useIsNativeApp } from '@/hooks/use-native-app'
+import { useNotificationPermission } from '@/hooks/use-notification-permission'
 import { ToggleSwitch } from '@/components/mobile/toggle-switch'
 import { useOfflineImageProgress } from '@/components/onboarding/use-offline-progress'
-
-type NotificationState = 'unsupported' | NotificationPermission
-
-function readNotificationState(): NotificationState {
-  if (typeof window === 'undefined' || !('Notification' in window)) {
-    return 'unsupported'
-  }
-  return Notification.permission
-}
+import { FIRST_TRIP_OPENED_EVENT } from '@/components/analytics/analytics-provider'
 
 /** Suit l'état du réseau : une photo ne se télécharge pas hors connexion. */
 function useOnline(): boolean {
@@ -47,16 +41,22 @@ export function TripReadyScreen(_props: ScreenProps<'trip-ready'>) {
   const { preferences, update } = usePreferences()
   const photos = useOfflineImageProgress(itinerary)
   const online = useOnline()
-  const [notification, setNotification] =
-    useState<NotificationState>('unsupported')
+  // Autorisation de l'app native dans l'app, du navigateur ailleurs.
+  const { permission, request } = useNotificationPermission()
+  const native = useIsNativeApp()
+  // Le hook part de « default » : rien n'est affiché avant la vraie lecture.
+  const [checked, setChecked] = useState(false)
   const [opening, setOpening] = useState(false)
 
   useEffect(() => {
-    setNotification(readNotificationState())
+    setChecked(true)
   }, [])
 
+  const notification = checked ? permission : null
   const remindersOn =
-    preferences.notifyTransportEve || preferences.notifyMorning
+    preferences.notifyTransportEve ||
+    preferences.notifyMorning ||
+    preferences.notifyCheckIn
   const willAsk = remindersOn && notification === 'default'
 
   const percent =
@@ -68,11 +68,13 @@ export function TripReadyScreen(_props: ScreenProps<'trip-ready'>) {
     // seulement si un rappel est voulu : jamais au chargement.
     if (willAsk) {
       try {
-        setNotification(await Notification.requestPermission())
+        await request()
       } catch {
         // Ancien Safari (rappel par callback) ou refus du navigateur : on passe.
       }
     }
+    // L'app native attendait ce moment pour demander le consentement.
+    window.dispatchEvent(new Event(FIRST_TRIP_OPENED_EVENT))
     // `setTab` referme aussi tous les écrans empilés : appeler `closeAll`
     // en plus reculerait deux fois dans l'historique.
     setTab('today')
@@ -97,12 +99,25 @@ export function TripReadyScreen(_props: ScreenProps<'trip-ready'>) {
               notifications.
             </p>
           )}
-          {remindersOn && notification === 'denied' && (
-            <p className="text-muted-foreground text-center text-xs leading-relaxed">
-              Les notifications sont bloquées pour ce site : autorisez-les dans
-              les réglages du navigateur pour recevoir les rappels.
-            </p>
-          )}
+          {remindersOn &&
+            notification === 'denied' &&
+            (native ? (
+              <div className="flex flex-col items-center gap-1">
+                <p className="text-muted-foreground text-center text-xs leading-relaxed">
+                  Les notifications sont désactivées pour TripBrain.
+                  Réactivez-les dans les réglages du téléphone (TripBrain →
+                  Notifications) pour recevoir les rappels.
+                </p>
+                <Button variant="link" size="sm" onClick={() => void request()}>
+                  Ouvrir les réglages
+                </Button>
+              </div>
+            ) : (
+              <p className="text-muted-foreground text-center text-xs leading-relaxed">
+                Les notifications sont bloquées pour ce site : autorisez-les
+                dans les réglages du navigateur pour recevoir les rappels.
+              </p>
+            ))}
         </>
       }
     >
@@ -210,7 +225,8 @@ export function TripReadyScreen(_props: ScreenProps<'trip-ready'>) {
           checked={preferences.notifyMorning}
           onChange={(value) => update({ notifyMorning: value })}
         />
-        {notification === 'unsupported' && remindersOn && (
+        {/* Dans l'app, « unsupported » ne vient que du simulateur. */}
+        {notification === 'unsupported' && remindersOn && !native && (
           <p className="text-muted-foreground text-xs leading-relaxed">
             Ce navigateur n’affiche pas de notifications : installez l’app sur
             l’écran d’accueil pour recevoir les rappels.

@@ -18,6 +18,7 @@ import {
   PackageOpen,
   Plus,
   Search,
+  Share2,
   Ticket,
   Trash2,
   X,
@@ -38,6 +39,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useDocuments, type StoredFile } from '@/hooks/use-documents'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 import { trackEvent } from '@/lib/analytics/client'
 import { documentKind, documentKindOf } from '@/lib/analytics/metrics'
 import {
@@ -480,7 +482,7 @@ function DocumentList({ files }: { files: StoredFile[] }) {
       <div
         role="group"
         aria-label="Filtrer par type"
-        className="mt-3 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none]"
+        className="mt-3 flex gap-2 overflow-x-auto overscroll-x-contain px-5 pb-1 [scrollbar-width:none]"
       >
         <Chip
           pressed={category === null}
@@ -697,6 +699,8 @@ interface DocumentItemProps {
 }
 
 function DocumentMenu({ file, onOpen, onLink, onDelete }: DocumentItemProps) {
+  // Dans l'app, « télécharger » ouvre la feuille de partage du système.
+  const native = useIsNativeApp()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -717,8 +721,8 @@ function DocumentMenu({ file, onOpen, onLink, onDelete }: DocumentItemProps) {
           className="min-h-11"
           onSelect={() => downloadDocument(file)}
         >
-          <Download aria-hidden />
-          Télécharger
+          {native ? <Share2 aria-hidden /> : <Download aria-hidden />}
+          {native ? 'Enregistrer ou partager…' : 'Télécharger'}
         </DropdownMenuItem>
         <DropdownMenuItem className="min-h-11" onSelect={onLink}>
           <Link2 aria-hidden />

@@ -34,7 +34,7 @@ import {
   ActivityNumber,
   Pill,
   TRANSPORT_ICONS,
-  trackDirections,
+  openDirections,
   useApplePlatform,
 } from '@/components/day/day-ui'
 
@@ -360,7 +360,12 @@ export function StayCard({
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => trackDirections('accommodation', surface)}
+            onClick={(event) =>
+              openDirections(event, 'accommodation', surface, {
+                name: accommodation.name,
+                address: accommodation.address,
+              })
+            }
             className="border-border-strong bg-card pressable flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border-[1.5px] text-sm font-extrabold"
           >
             <Navigation className="size-4" aria-hidden />
@@ -399,7 +404,7 @@ export function FoodList({
       </h2>
       <ul
         data-swipe-ignore
-        className="flex snap-x scroll-px-5 gap-2.5 overflow-x-auto px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x scroll-px-5 gap-2.5 overflow-x-auto overscroll-x-contain px-5 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item, index) => {
           const food = parseFood(item)

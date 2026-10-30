@@ -8,6 +8,8 @@ import {
   type SVGProps,
 } from 'react'
 import * as RadioGroupPrimitive from '@radix-ui/react-radio-group'
+import { triggerHaptic } from '@/lib/native-app'
+import { mapsSearchUrl } from '@/lib/quick-actions'
 import { cn } from '@/lib/utils'
 import {
   CURRENCY_SUGGESTIONS,
@@ -293,7 +295,7 @@ export function EditFieldControl({
           />
           {text.trim() && (
             <a
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(text)}`}
+              href={mapsSearchUrl(text)}
               target="_blank"
               rel="noopener noreferrer"
               className={SHELL_ACTION_CLASS}
@@ -385,7 +387,10 @@ function SwitchRow({
         role="switch"
         aria-checked={checked}
         aria-describedby={describedBy}
-        onClick={() => onChange(!checked)}
+        onClick={() => {
+          triggerHaptic('selection')
+          onChange(!checked)
+        }}
         className={cn(
           'focus-visible:ring-ring/50 relative h-8 w-[52px] shrink-0 rounded-full transition-colors outline-none focus-visible:ring-[3px]',
           checked ? 'bg-primary' : 'bg-border-strong',
@@ -435,7 +440,10 @@ function IconChoiceControl({
   return (
     <RadioGroupPrimitive.Root
       value={value}
-      onValueChange={onChange}
+      onValueChange={(next) => {
+        triggerHaptic('selection')
+        onChange(next)
+      }}
       aria-labelledby={labelId}
       className={cn(
         'flex flex-col gap-2 rounded-2xl',
@@ -520,7 +528,10 @@ function StatusSegments({
   return (
     <RadioGroupPrimitive.Root
       value={value}
-      onValueChange={onChange}
+      onValueChange={(next) => {
+        triggerHaptic('selection')
+        onChange(next)
+      }}
       aria-labelledby={labelId}
       orientation="horizontal"
       className="bg-muted flex gap-1 rounded-[14px] p-1"
@@ -940,7 +951,10 @@ function RatingControl({ labelId, value, onChange }: RatingControlProps) {
           <button
             key={star}
             type="button"
-            onClick={() => onChange(rounded === star ? '' : String(star))}
+            onClick={() => {
+              triggerHaptic('selection')
+              onChange(rounded === star ? '' : String(star))
+            }}
             aria-label={`${star} sur 5`}
             aria-pressed={rounded === star}
             className="focus-visible:ring-ring/50 flex size-11 items-center justify-center rounded-xl transition-transform outline-none hover:scale-110 focus-visible:ring-[3px]"
@@ -1035,6 +1049,7 @@ function PriceControl({
           <RadioGroupPrimitive.Root
             value={currency}
             onValueChange={(next) => {
+              triggerHaptic('selection')
               setTypingCurrency(false)
               onCurrencyChange(next)
             }}
@@ -1147,7 +1162,7 @@ function CoordinatesControl({
   const inputsId = useId()
   const showInputs = editing || invalid
   const mapUrl = hasValue
-    ? `https://www.google.com/maps?q=${latitude.trim()},${longitude.trim()}`
+    ? mapsSearchUrl(`${latitude.trim()},${longitude.trim()}`)
     : null
 
   const handlePaste = (clipboard: string): boolean => {

@@ -81,8 +81,8 @@ export default function LegalNoticePage() {
         <p>
           {product.name} est un compagnon de voyage qui fonctionne sur ton
           appareil : l’itinéraire, les documents et les images sont stockés dans
-          le navigateur et restent accessibles hors ligne. L’accès est gratuit
-          et ne demande aucun compte.
+          le navigateur ou dans l’application mobile, et restent accessibles
+          hors ligne. L’accès est gratuit et ne demande aucun compte.
         </p>
         <p>
           Le service est fourni en l’état. Les itinéraires, horaires, adresses
@@ -131,9 +131,9 @@ export default function LegalNoticePage() {
       <LegalSection title="Responsabilité">
         <p>
           Tes données de voyage vivant sur ton appareil, leur conservation
-          dépend de ton navigateur : vider les données du site, désinstaller
-          l’application ou changer d’appareil les supprime. Pense à exporter ton
-          voyage si tu veux le garder.
+          dépend de ton navigateur ou de l’application : vider les données du
+          site, désinstaller l’application ou changer d’appareil les supprime.
+          Pense à exporter ton voyage si tu veux le garder.
         </p>
         <p>
           L’éditeur ne peut être tenu responsable des dommages liés à

@@ -4,10 +4,12 @@ import * as React from 'react'
 import * as RadioGroupPrimitive from '@radix-ui/react-radio-group'
 import { CircleIcon } from 'lucide-react'
 
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 function RadioGroup({
   className,
+  onValueChange,
   ...props
 }: React.ComponentProps<typeof RadioGroupPrimitive.Root>) {
   return (
@@ -15,6 +17,10 @@ function RadioGroup({
       data-slot="radio-group"
       className={cn('grid gap-3', className)}
       {...props}
+      onValueChange={(value) => {
+        triggerHaptic('selection')
+        onValueChange?.(value)
+      }}
     />
   )
 }

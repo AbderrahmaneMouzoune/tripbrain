@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import { notifyNativeReady } from '@/lib/native-app'
+import { notifyNativeReady, withdrawNativeReady } from '@/lib/native-app'
 import { NativeFileImportHost } from './native-file-import-host'
 import { NativeNavigationHost } from './native-navigation-host'
 
@@ -14,9 +14,12 @@ import { NativeNavigationHost } from './native-navigation-host'
  */
 export function NativeHosts() {
   // Les écouteurs ci-dessous sont posés pendant ce même commit : le natif peut
-  // retirer le splash et envoyer ses événements.
+  // retirer le splash et envoyer ses événements. Au démontage (lien interne
+  // vers le guide ou une page légale), on retire l'annonce : personne d'autre
+  // n'écoute `app/navigate`.
   useEffect(() => {
     notifyNativeReady()
+    return () => withdrawNativeReady()
   }, [])
 
   return (

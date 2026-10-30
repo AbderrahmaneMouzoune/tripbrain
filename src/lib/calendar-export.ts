@@ -1,4 +1,5 @@
 import { type DayItinerary, type Transport } from './itinerary-data'
+import type { NativeCalendarEvent } from './native-app'
 import { saveFile } from './save-file'
 
 /** Ce que l'export vers le calendrier peut ajouter aux journées elles-mêmes. */
@@ -99,7 +100,7 @@ function foldICSLine(line: string): string {
   return chunks.join('\r\n')
 }
 
-function buildEventDescription(day: DayItinerary): string {
+export function buildEventDescription(day: DayItinerary): string {
   const parts: string[] = []
 
   const visitable = day.activities.filter((a) => a.type !== 'transport')
@@ -291,6 +292,63 @@ export function downloadICS(
   const content = generateICSContent(days, options)
   const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' })
   saveFile(blob, filename)
+}
+
+/** Date `AAAA-MM-JJ` décalée de `days` jours, sans dépendre du fuseau. */
+function addDaysIso(dateString: string, days: number): string {
+  const [year, month, day] = dateString.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day + days))
+    .toISOString()
+    .slice(0, 10)
+}
+
+/**
+ * Journées à écrire dans le calendrier du téléphone (app native) : les mêmes
+ * événements « toute la journée » que le fichier .ics, fin exclusive. Le bridge
+ * ne sait pas encore écrire d'événement horodaté : l'horaire d'un trajet
+ * rejoint donc les notes de sa journée.
+ */
+export function toNativeCalendarEvents(
+  days: DayItinerary[],
+): NativeCalendarEvent[] {
+  return days
+    .filter((day) => /^\d{4}-\d{2}-\d{2}$/.test(day.date))
+    .map((day) => {
+      const time = day.transport ? transportTimeRange(day.transport) : null
+      const notes = [
+        buildEventDescription(day),
+        day.transport && time
+          ? `Horaires : ${transportSummary(day.transport)}, ${time}${
+              day.transport.bookingReference
+                ? ` (réservation ${day.transport.bookingReference})`
+                : ''
+            }`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n')
+      return {
+        title: `Jour ${day.dayNumber} – ${day.title}`,
+        date: day.date,
+        endDate: addDaysIso(day.date, 1),
+        ...(day.city.trim() ? { location: day.city.trim() } : {}),
+        ...(notes ? { notes } : {}),
+      }
+    })
+}
+
+/**
+ * Empreinte d'un lot de journées écrit dans le calendrier du téléphone : le
+ * natif ne dédoublonne pas, l'écran prévient donc avant un second ajout.
+ */
+export function nativeCalendarSignature(events: NativeCalendarEvent[]): string {
+  const text = events.map((event) => `${event.date}|${event.title}`).join('\n')
+  // djb2 : court à stocker, assez distinctif pour quelques voyages.
+  let hash = 5381
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0
+  }
+  return `${events.length}-${(hash >>> 0).toString(36)}`
 }
 
 export function getGoogleCalendarUrl(day: DayItinerary): string {

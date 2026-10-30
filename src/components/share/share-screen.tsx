@@ -92,7 +92,10 @@ export function ShareScreen({ onClose }: ScreenProps<'share'>) {
   const [revision, setRevision] = useState(0)
   /** Message du repli quand le serveur de partage ne répond pas. */
   const [fallbackNotice, setFallbackNotice] = useState<string | null>(null)
-  const [linkNotice, setLinkNotice] = useState<string | null>(null)
+  const [linkNotice, setLinkNotice] = useState<{
+    text: string
+    ok: boolean
+  } | null>(null)
   // Décidé après le montage : `navigator.share` n'existe pas au rendu serveur.
   const [hasNativeShare, setHasNativeShare] = useState(false)
 
@@ -222,8 +225,17 @@ export function ShareScreen({ onClose }: ScreenProps<'share'>) {
     trackEvent('share_link_sent', { outcome })
     if (outcome === 'unavailable') {
       setHasNativeShare(false)
-      await linkClipboard.copy(url)
-      setLinkNotice('Lien copié : collez-le dans un message.')
+      // Pas de « copié » si le presse-papier a refusé : on le dit, et on
+      // oriente vers le QR code, à scanner sans passer par le presse-papier.
+      const copied = await linkClipboard.copy(url)
+      setLinkNotice(
+        copied
+          ? { text: 'Lien copié : collez-le dans un message.', ok: true }
+          : {
+              text: 'Copie impossible : touchez « Montrer un QR code » pour transmettre le voyage.',
+              ok: false,
+            },
+      )
     }
   }
 
@@ -509,10 +521,17 @@ export function ShareScreen({ onClose }: ScreenProps<'share'>) {
           {linkNotice && (
             <p
               role="status"
-              className="text-success flex items-center gap-2 px-1 text-sm font-extrabold"
+              className={cn(
+                'flex items-center gap-2 px-1 text-sm font-extrabold',
+                linkNotice.ok ? 'text-success' : 'text-destructive',
+              )}
             >
-              <Check className="size-4" aria-hidden />
-              {linkNotice}
+              {linkNotice.ok ? (
+                <Check className="size-4 shrink-0" aria-hidden />
+              ) : (
+                <AlertTriangle className="size-4 shrink-0" aria-hidden />
+              )}
+              {linkNotice.text}
             </p>
           )}
           <OptionCard

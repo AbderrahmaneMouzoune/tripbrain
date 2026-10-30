@@ -40,7 +40,8 @@ export function ProgramView(_props: {}) {
   const rows = buildProgramRows(itinerary)
 
   const openDay = (index: number) => {
-    selectDay(index, 'timeline')
+    // Ouvrir une journée est une navigation, pas un changement sur place.
+    selectDay(index, 'timeline', { silent: true })
     push({ kind: 'day', dayIndex: index })
   }
 

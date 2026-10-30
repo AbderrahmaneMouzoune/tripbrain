@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import type { Activity } from '@/lib/itinerary-data'
 import { cn } from '@/lib/utils'
+import { triggerHaptic } from '@/lib/native-app'
 import {
   ACTIVITY_TYPE_LABELS,
   formatDuration,
@@ -22,6 +23,8 @@ import { ACTIVITY_STATUS_LABELS, ActivityNumber } from '@/components/day/day-ui'
 const ROW_GAP = 2
 /** Au-delà de ce déplacement, l'appui sur la poignée devient un glisser. */
 const DRAG_THRESHOLD = 6
+/** Écart minimal entre deux retours haptiques de changement de place (ms). */
+const SLOT_HAPTIC_MS = 60
 
 function ordinal(n: number) {
   return n === 1 ? '1er' : `${n}e`
@@ -65,6 +68,7 @@ export function ReorderableActivities({
     target: number
     active: boolean
     pointerId: number
+    lastHapticAt: number
   } | null>(null)
   const suppressClick = useRef(false)
   const [drag, setDrag] = useState<DragState | null>(null)
@@ -95,6 +99,7 @@ export function ReorderableActivities({
     if (target < 0 || target >= activities.length) return
     onMove(activity.id, target)
     announce(activity, target)
+    triggerHaptic('selection')
   }
 
   const onPointerDown = (
@@ -117,6 +122,7 @@ export function ReorderableActivities({
       target: index,
       active: false,
       pointerId: event.pointerId,
+      lastHapticAt: 0,
     }
     event.currentTarget.setPointerCapture(event.pointerId)
   }
@@ -126,13 +132,25 @@ export function ReorderableActivities({
     if (!state || state.pointerId !== event.pointerId) return
     const dy = event.clientY - state.startY
     if (!state.active && Math.abs(dy) < DRAG_THRESHOLD) return
-    state.active = true
+    if (!state.active) {
+      // La ligne se soulève.
+      state.active = true
+      triggerHaptic('impact')
+    }
     event.preventDefault()
     const target = reorderTarget(
       state.mids,
       state.from,
       state.mids[state.from] + dy,
     )
+    if (target !== state.target) {
+      // Un cran par changement de place, sans mitrailler si le doigt file.
+      const now = performance.now()
+      if (now - state.lastHapticAt >= SLOT_HAPTIC_MS) {
+        state.lastHapticAt = now
+        triggerHaptic('selection')
+      }
+    }
     state.target = target
     setDrag({ id: state.id, from: state.from, target, dy, shift: state.shift })
   }
@@ -147,6 +165,8 @@ export function ReorderableActivities({
     if (!state.active) return
     suppressClick.current = true
     setDrag(null)
+    // La ligne se pose.
+    if (commit) triggerHaptic('impact')
     if (commit && state.target !== state.from) {
       const activity = activities[state.from]
       onMove(state.id, state.target)
@@ -331,7 +351,10 @@ export function ReorderableActivities({
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setConfirmDelete(activity.id)}
+                      onClick={() => {
+                        setConfirmDelete(activity.id)
+                        triggerHaptic('warning')
+                      }}
                       aria-label={`Supprimer ${name}`}
                       className="text-destructive pressable flex size-11 items-center justify-center rounded-xl"
                     >

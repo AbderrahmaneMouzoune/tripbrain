@@ -3,10 +3,12 @@
 import * as React from 'react'
 import * as SwitchPrimitive from '@radix-ui/react-switch'
 
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 function Switch({
   className,
+  onCheckedChange,
   ...props
 }: React.ComponentProps<typeof SwitchPrimitive.Root>) {
   return (
@@ -17,6 +19,10 @@ function Switch({
         className,
       )}
       {...props}
+      onCheckedChange={(checked) => {
+        triggerHaptic('selection')
+        onCheckedChange?.(checked)
+      }}
     >
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"

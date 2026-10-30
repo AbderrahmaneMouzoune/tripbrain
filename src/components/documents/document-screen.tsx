@@ -32,6 +32,9 @@ import {
   fileFormatLabel,
   formatFileSize,
 } from '@/lib/document-organize'
+import { isNativeApp, shareFileNatively, triggerHaptic } from '@/lib/native-app'
+import { saveFile } from '@/lib/save-file'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 import { cn } from '@/lib/utils'
 import { DocumentThumb } from './document-thumb'
 import {
@@ -39,6 +42,7 @@ import {
   LinkDocumentSheet,
   downloadDocument,
 } from './document-actions'
+import { PhoneText } from '@/components/phone-text'
 
 type PreviewKind = 'image' | 'pdf' | 'text' | 'none'
 
@@ -66,10 +70,18 @@ function canEmbedPdf(): boolean {
 
 /**
  * Partage le fichier vers une autre app (messagerie, e-mail, fichiers) quand
- * le navigateur sait partager des fichiers ; sinon, le télécharge.
+ * le navigateur sait partager des fichiers ; sinon, le télécharge. Dans l'app
+ * native, la feuille de partage du système fait les deux.
  */
 async function shareDocument(file: StoredFile): Promise<void> {
   const kind = documentKind(file.type)
+  if (isNativeApp()) {
+    const outcome = await shareFileNatively(file.blob, file.name)
+    // Comme sur le web : un partage annulé ne compte pas.
+    if (outcome === 'shared')
+      trackEvent('document_shared', { kind, method: 'share' })
+    if (outcome !== 'unavailable') return
+  }
   const shared = new File([file.blob], file.name, {
     type: file.type || 'application/octet-stream',
   })
@@ -94,6 +106,7 @@ async function shareDocument(file: StoredFile): Promise<void> {
 /** Aperçu plein écran d'un document, sur fond de nuit. */
 export function DocumentScreen({ screen, onClose }: ScreenProps<'document'>) {
   const { itinerary } = useTrip()
+  const native = useIsNativeApp()
   const { files, loading } = useDocuments()
   const file = files.find((item) => item.id === screen.documentId) ?? null
   const [linkOpen, setLinkOpen] = useState(false)
@@ -159,19 +172,24 @@ export function DocumentScreen({ screen, onClose }: ScreenProps<'document'>) {
       >
         <ActionButton
           icon={sharing ? Loader2 : Share2}
-          label="Partager"
+          // Dans l'app, la feuille du système enregistre aussi (Fichiers, Drive) :
+          // un seul bouton, plutôt que deux qui ouvrent la même feuille.
+          label={native ? 'Partager ou enregistrer' : 'Partager'}
           spinning={sharing}
           onClick={async () => {
+            if (sharing) return
             setSharing(true)
             await shareDocument(file)
             setSharing(false)
           }}
         />
-        <ActionButton
-          icon={Download}
-          label="Télécharger"
-          onClick={() => downloadDocument(file)}
-        />
+        {!native && (
+          <ActionButton
+            icon={Download}
+            label="Télécharger"
+            onClick={() => downloadDocument(file)}
+          />
+        )}
         <ActionButton
           icon={Link2}
           highlight
@@ -253,6 +271,7 @@ function ActionButton({
 }
 
 function Preview({ file, kind }: { file: StoredFile; kind: PreviewKind }) {
+  const native = useIsNativeApp()
   const [url, setUrl] = useState<string | null>(null)
   const [text, setText] = useState<string | null>(null)
   const [embedPdf, setEmbedPdf] = useState(false)
@@ -300,14 +319,41 @@ function Preview({ file, kind }: { file: StoredFile; kind: PreviewKind }) {
 
   if (kind === 'text') {
     return (
-      <pre className="text-foreground h-full w-full overflow-auto rounded-md bg-white p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap shadow-[0_24px_60px_rgba(0,0,0,0.55)]">
-        {text ?? ''}
+      <pre className="text-foreground h-full w-full overflow-auto rounded-md bg-white p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap shadow-[0_24px_60px_rgba(0,0,0,0.55)] select-text">
+        <PhoneText text={text ?? ''} />
       </pre>
     )
   }
 
   // PDF que le navigateur n'affiche pas dans la page, ou format inconnu :
-  // on le confie au lecteur du téléphone.
+  // on le confie au lecteur du téléphone. Dans l'app, un lien `blob:` prendrait
+  // la place de la page sans rien afficher : le fichier part par la feuille du
+  // système (« Ouvrir dans… », Fichiers, lecteur PDF).
+  if (native) {
+    return (
+      <div className="flex flex-col items-center gap-5 text-center">
+        <div className="h-48 w-36">
+          <DocumentThumb file={file} size="lg" />
+        </div>
+        <p className="text-ink-foreground/80 max-w-64 text-sm">
+          Aperçu indisponible ici.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            triggerHaptic('selection')
+            trackEvent('document_opened', { kind: documentKind(file.type) })
+            saveFile(file.blob, file.name)
+          }}
+          className="bg-primary text-primary-foreground pressable focus-visible:ring-ring/60 flex min-h-12 items-center gap-2 rounded-2xl px-5 text-[15px] font-extrabold outline-none focus-visible:ring-[3px]"
+        >
+          <ExternalLink aria-hidden className="size-4" />
+          Ouvrir dans…
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col items-center gap-5 text-center">
       <div className="h-48 w-36">

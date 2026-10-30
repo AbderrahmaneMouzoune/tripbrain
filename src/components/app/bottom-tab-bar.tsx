@@ -8,6 +8,7 @@ import {
   type AppTab,
 } from '@/components/app/navigation'
 import { useEditSession } from '@/components/app/edit-session'
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 const TABS: {
@@ -62,6 +63,13 @@ export function BottomTabBar() {
   // édition et on change d'onglet ; avec des modifications, le récapitulatif
   // s'ouvre d'abord pour enregistrer ou annuler — rien ne se perd en route.
   const goTo = (id: AppTab) => {
+    triggerHaptic('selection')
+    // Onglet déjà affiché sans écran par-dessus : retour en haut, comme les
+    // barres d'onglets natives.
+    if (id === tab && stack.length === 0 && !isEditing) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
     if (isEditing) {
       if (pendingChanges > 0) {
         setPendingTab(id)

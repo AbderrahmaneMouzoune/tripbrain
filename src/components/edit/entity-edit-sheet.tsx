@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 import type { EditField, EditFormSchema, EditSection } from '@/lib/edit-fields'
 import {
@@ -191,6 +192,7 @@ export function EntityEditSheet<T extends object>({
         ),
       }))
       // Annoncé aux lecteurs d'écran, puis focus sur le premier champ fautif.
+      triggerHaptic('error')
       setAnnouncement(
         `${invalidFields.length} champ${invalidFields.length > 1 ? 's' : ''} à corriger. ${firstInvalid.label} : ${nextErrors[firstInvalid.key]}`,
       )
@@ -207,6 +209,7 @@ export function EntityEditSheet<T extends object>({
       return
     }
 
+    triggerHaptic('success')
     onSubmit(fromDraft(value, schema.fields, draft))
     onOpenChange(false)
   }
@@ -324,7 +327,7 @@ export function EntityEditSheet<T extends object>({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Content
           ref={content}
-          className="bg-background text-foreground animate-screen fixed inset-0 z-50 flex flex-col outline-none"
+          className="bg-background text-foreground animate-screen native:bottom-[var(--keyboard-inset,0px)] fixed inset-0 z-50 flex flex-col outline-none"
           onOpenAutoFocus={(event) => {
             // Le focus automatique sur le premier champ ouvre le clavier mobile
             // et masque le formulaire : on se contente du panneau lui-même, qui
@@ -442,6 +445,7 @@ export function EntityEditSheet<T extends object>({
                             size="lg2"
                             className="flex-1"
                             onClick={() => {
+                              triggerHaptic('impact')
                               onDelete()
                               onOpenChange(false)
                             }}
@@ -454,7 +458,10 @@ export function EntityEditSheet<T extends object>({
                     ) : (
                       <button
                         type="button"
-                        onClick={() => setConfirmingDelete(true)}
+                        onClick={() => {
+                          triggerHaptic('warning')
+                          setConfirmingDelete(true)
+                        }}
                         className="pressable bg-destructive-soft text-destructive focus-visible:ring-destructive/40 flex min-h-12 items-center gap-2 rounded-[14px] px-5 text-[15px] font-extrabold outline-none focus-visible:ring-[3px]"
                       >
                         <Trash2 aria-hidden className="size-[18px]" />

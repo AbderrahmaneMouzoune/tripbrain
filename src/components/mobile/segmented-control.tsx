@@ -1,5 +1,6 @@
 'use client'
 
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 export interface SegmentOption<T extends string> {
@@ -39,7 +40,11 @@ export function SegmentedControl<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
-            onClick={() => onChange(option.value)}
+            onClick={() => {
+              // Pas de retour sur le segment déjà choisi : rien ne change.
+              if (!active) triggerHaptic('selection')
+              onChange(option.value)
+            }}
             className={cn(
               'pressable h-10 rounded-[10px] px-2 text-sm font-extrabold outline-none',
               'focus-visible:ring-ring/50 focus-visible:ring-[3px]',

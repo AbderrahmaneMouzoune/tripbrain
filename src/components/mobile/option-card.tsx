@@ -3,6 +3,7 @@
 import type { ComponentType, ReactNode, SVGProps } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { IconBadge, type BadgeTone } from '@/components/mobile/icon-badge'
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 export interface OptionCardProps {
@@ -43,7 +44,10 @@ export function OptionCard({
       type="button"
       role={role}
       aria-checked={role === 'radio' ? Boolean(selected) : undefined}
-      onClick={onClick}
+      onClick={() => {
+        if (role === 'radio' && !selected) triggerHaptic('selection')
+        onClick?.()
+      }}
       disabled={disabled}
       className={cn(
         'pressable bg-card flex w-full items-center gap-3.5 rounded-[20px] p-4 text-left outline-none',

@@ -37,6 +37,8 @@ import {
   type GenerateRequest,
 } from '@/lib/generator/requests'
 import type { TripBrief } from '@/lib/generator/trip-brief'
+import { triggerHaptic } from '@/lib/native-app'
+import { recordHappyMoment } from '@/lib/review-prompt'
 
 /**
  * Où en est le parcours, côté écran. La génération, elle, vit dans le
@@ -131,9 +133,12 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
           0,
         ),
       })
+      triggerHaptic('success')
+      recordHappyMoment()
       resetGeneration()
       replace({ kind: 'trip-ready' })
     } catch {
+      triggerHaptic('error')
       setSaveError('L’enregistrement a échoué. Réessayez.')
       setSaving(false)
     }

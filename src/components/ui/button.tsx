@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Slot } from '@radix-ui/react-slot'
 import { cva, type VariantProps } from 'class-variance-authority'
 
+import { triggerHaptic, type NativeHapticKind } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 const buttonVariants = cva(
@@ -49,18 +50,31 @@ function Button({
   variant,
   size,
   asChild = false,
+  haptic,
   ...props
 }: React.ComponentProps<'button'> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    /** Retour haptique au tap, dans l'app seulement. Pas de défaut : un bouton ordinaire ne vibre pas sur iOS. */
+    haptic?: NativeHapticKind
   }) {
   const Comp = asChild ? Slot : 'button'
+  const { onClick } = props
 
   return (
     <Comp
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
+      // Gestionnaire ajouté seulement si demandé : Button reste utilisable côté serveur.
+      onClick={
+        haptic
+          ? (event: React.MouseEvent<HTMLButtonElement>) => {
+              triggerHaptic(haptic)
+              onClick?.(event)
+            }
+          : onClick
+      }
     />
   )
 }

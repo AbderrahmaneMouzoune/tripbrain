@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/drawer'
 import { usePwaInstall } from '@/components/pwa-install-provider'
 import { useClipboard } from '@/hooks/use-clipboard'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 import { cn } from '@/lib/utils'
 import type { InstallGuide } from '@/lib/pwa-install'
 import {
@@ -203,6 +204,10 @@ export function PwaInstallPrompt() {
     promptNativeInstall,
   } = usePwaInstall()
   const [isPrompting, setIsPrompting] = useState(false)
+  const native = useIsNativeApp()
+
+  // Dans l'app native, le tiroir n'est même pas monté.
+  if (native) return null
 
   const handleNativeInstall = async () => {
     setIsPrompting(true)
@@ -321,8 +326,9 @@ export function PwaInstallEntry({
   onSelect?: () => void
 }) {
   const { canInstall, open } = usePwaInstall()
+  const native = useIsNativeApp()
 
-  if (!canInstall) return null
+  if (native || !canInstall) return null
 
   return (
     <Button
@@ -332,7 +338,8 @@ export function PwaInstallEntry({
         onSelect?.()
         open('manual')
       }}
-      className={cn('text-muted-foreground', className)}
+      // `native:hidden` : invisible dès la première peinture dans l'app.
+      className={cn('text-muted-foreground native:hidden', className)}
     >
       <IconDeviceMobilePlus className="mr-1.5 h-4 w-4" />
       Installer l’app sur mon téléphone

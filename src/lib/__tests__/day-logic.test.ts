@@ -12,6 +12,7 @@ import {
   formatDateRange,
   formatDuration,
   isApplePlatform,
+  isDayCompleted,
   moveActivityTo,
   moveItem,
   parseFood,
@@ -188,8 +189,22 @@ describe('préparation du départ', () => {
       done: false,
       detail: '4 sur 10 photos enregistrées',
     })
-    expect(items.find((i) => i.id === 'notifications')?.done).toBe(false)
+    expect(items.find((i) => i.id === 'notifications')).toMatchObject({
+      done: false,
+      detail: 'Notifications refusées dans le navigateur',
+    })
     expect(items.some((i) => i.id === 'tickets')).toBe(false)
+  })
+
+  it('renvoie aux réglages du téléphone dans l’app native', () => {
+    const items = buildDepartureChecklist({
+      ...base,
+      notifications: 'denied',
+      native: true,
+    })
+    const detail = items.find((i) => i.id === 'notifications')?.detail
+    expect(detail).toBe('Notifications refusées dans les réglages du téléphone')
+    expect(detail).not.toMatch(/navigateur/)
   })
 
   it('omet les rappels là où le navigateur ne les connaît pas', () => {
@@ -331,6 +346,22 @@ describe('réordonnancement', () => {
       'b',
     ])
     expect(moveActivityTo(d, 'zz', 0)).toBe(d)
+  })
+
+  it('ne tient une journée pour bouclée qu’avec au moins une étape faite', () => {
+    const withStatuses = (...statuses: ('planned' | 'done' | 'skipped')[]) =>
+      day(0, {
+        activities: statuses.map((status, i) => ({
+          id: `a${i}`,
+          name: `A${i}`,
+          type: 'visit' as const,
+          status,
+        })),
+      })
+    expect(isDayCompleted(day(0))).toBe(false)
+    expect(isDayCompleted(withStatuses('done', 'planned'))).toBe(false)
+    expect(isDayCompleted(withStatuses('skipped', 'skipped'))).toBe(false)
+    expect(isDayCompleted(withStatuses('done', 'skipped'))).toBe(true)
   })
 })
 

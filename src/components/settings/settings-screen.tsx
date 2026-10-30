@@ -1,6 +1,12 @@
 'use client'
 
-import { useState, type ComponentType, type SVGProps } from 'react'
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ComponentType,
+  type SVGProps,
+} from 'react'
 import Link from 'next/link'
 import {
   BarChart3,
@@ -10,7 +16,10 @@ import {
   CloudDownload,
   Lightbulb,
   Mail,
+  RefreshCw,
   ShieldCheck,
+  Smartphone,
+  Star,
   Sunrise,
   TrainFront,
 } from 'lucide-react'
@@ -30,7 +39,17 @@ import { formatFileSize } from '@/lib/document-organize'
 import { legalConfig } from '@/lib/legal-config'
 import type { Preferences } from '@/lib/preferences'
 import { REMINDER_TIMES } from '@/lib/reminders'
-import { isNativeApp } from '@/lib/native-app'
+import {
+  NATIVE_PERMISSION_EVENT,
+  getNativeApp,
+  getNativeNotificationPermission,
+  hasNativeCapability,
+  isNativeAppOutdated,
+  openNativeSettings,
+  requestNativeReview,
+  type NativeAppInfo,
+} from '@/lib/native-app'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 import {
   useNotificationPermission,
   type NotificationPermissionState,
@@ -87,6 +106,51 @@ const NOTIFICATIONS: {
 
 type PermissionState = NotificationPermissionState
 
+/** Fiches de l'app sur les stores : mise à jour et avis. */
+const STORE_URLS = {
+  ios: 'https://apps.apple.com/app/id6828478079',
+  android: 'https://play.google.com/store/apps/details?id=fr.tripbrain.mobile',
+} as const
+
+function storeUrl(platform: string): string | null {
+  return platform === 'ios' || platform === 'android'
+    ? STORE_URLS[platform]
+    : null
+}
+
+function platformLabel(platform: string): string {
+  if (platform === 'ios') return 'iOS'
+  if (platform === 'android') return 'Android'
+  return platform
+}
+
+const noSubscribe = () => () => {}
+
+/**
+ * L'app native qui héberge la page, lue après l'hydratation (`null` au rendu
+ * serveur et dans un navigateur) : de quoi afficher sa version et ses gestes.
+ */
+function useNativeAppInfo(): NativeAppInfo | null {
+  return useSyncExternalStore(noSubscribe, getNativeApp, () => null)
+}
+
+/**
+ * Dans l'app, l'autorisation n'est connue qu'après une première
+ * synchronisation des rappels : tant qu'elle ne l'est pas, mieux vaut ne rien
+ * afficher qu'un « Autoriser » qui disparaîtrait aussitôt.
+ */
+function useNativePermissionKnown(native: boolean): boolean {
+  const [known, setKnown] = useState(true)
+  useEffect(() => {
+    if (!native) return
+    const read = () => setKnown(getNativeNotificationPermission() !== null)
+    read()
+    window.addEventListener(NATIVE_PERMISSION_EVENT, read)
+    return () => window.removeEventListener(NATIVE_PERMISSION_EVENT, read)
+  }, [native])
+  return known
+}
+
 function RowLink({
   href,
   icon,
@@ -124,6 +188,31 @@ function RowLink({
   )
 }
 
+function RowButton({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: ComponentType<SVGProps<SVGSVGElement>>
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="focus-visible:ring-ring/50 flex min-h-14 w-full items-center gap-3 rounded-xl text-left outline-none focus-visible:ring-[3px]"
+    >
+      <Icon aria-hidden className="text-muted-foreground size-5 shrink-0" />
+      <span className="flex-1 text-[15px] font-extrabold">{label}</span>
+      <ChevronRight
+        aria-hidden
+        className="text-muted-foreground size-[18px] shrink-0"
+      />
+    </button>
+  )
+}
+
 /** Réglages de l'appareil : rappels, hors ligne, confidentialité. */
 export function SettingsScreen({ onClose }: ScreenProps<'settings'>) {
   const { push } = useAppNav()
@@ -133,6 +222,24 @@ export function SettingsScreen({ onClose }: ScreenProps<'settings'>) {
   const { stats, state } = useImageCacheStats()
   const { usage } = useStorageEstimate()
   const [tipsReset, setTipsReset] = useState(false)
+  const isNative = useIsNativeApp()
+  const nativeApp = useNativeAppInfo()
+  const permissionKnown = useNativePermissionKnown(nativeApp !== null)
+  const nativeStoreUrl = nativeApp ? storeUrl(nativeApp.platform) : null
+  const canRate = nativeApp !== null && hasNativeCapability('app/requestReview')
+  const nativeOutdated = nativeApp !== null && isNativeAppOutdated()
+
+  // Dans l'app, le message au support dit d'emblée sur quoi tourne TripBrain.
+  const contactHref = legalConfig.publisher.email
+    ? nativeApp
+      ? `mailto:${legalConfig.publisher.email}?${new URLSearchParams({
+          subject: 'TripBrain',
+          body: `\n\n—\nTripBrain ${packageInfo.version} · app ${nativeApp.appVersion} (${platformLabel(nativeApp.platform)})`,
+        })
+          .toString()
+          .replaceAll('+', '%20')}`
+      : `mailto:${legalConfig.publisher.email}`
+    : null
 
   const anyReminder =
     preferences.notifyTransportEve ||
@@ -154,6 +261,31 @@ export function SettingsScreen({ onClose }: ScreenProps<'settings'>) {
 
   return (
     <MobileScreen onBack={onClose} title="Réglages">
+      {nativeOutdated && nativeStoreUrl && (
+        <a
+          href={nativeStoreUrl}
+          className="pressable bg-primary-soft focus-visible:ring-ring/50 mb-5 flex items-center gap-3 rounded-[20px] px-4 py-3.5 outline-none focus-visible:ring-[3px]"
+        >
+          <IconBadge
+            icon={RefreshCw}
+            tone="primary"
+            className="size-9 rounded-[10px]"
+          />
+          <span className="min-w-0 flex-1">
+            <span className="text-primary-strong block text-[15px] font-extrabold">
+              Une mise à jour de l’app est disponible
+            </span>
+            <span className="text-primary-strong/80 block text-[13px] leading-snug font-bold">
+              Certaines fonctions en ont besoin.
+            </span>
+          </span>
+          <ChevronRight
+            aria-hidden
+            className="text-primary-strong size-[18px] shrink-0"
+          />
+        </a>
+      )}
+
       <SectionTitle className="mb-2">Notifications</SectionTitle>
       <ul className="bg-card border-border divide-border/70 divide-y rounded-[20px] border px-4">
         {NOTIFICATIONS.map(
@@ -195,11 +327,17 @@ export function SettingsScreen({ onClose }: ScreenProps<'settings'>) {
           ),
         )}
       </ul>
-      <NotificationPermissionNote
-        permission={permission}
-        anyReminder={anyReminder}
-        onRequest={request}
-      />
+      {permissionKnown && (
+        <NotificationPermissionNote
+          permission={permission}
+          anyReminder={anyReminder}
+          isNative={isNative}
+          canOpenSettings={
+            nativeApp !== null && hasNativeCapability('app/openSettings')
+          }
+          onRequest={request}
+        />
+      )}
 
       <SectionTitle className="mt-6 mb-2">Hors ligne</SectionTitle>
       <button
@@ -237,6 +375,32 @@ export function SettingsScreen({ onClose }: ScreenProps<'settings'>) {
           className="text-muted-foreground size-[18px] shrink-0"
         />
       </button>
+
+      {nativeApp && (
+        <>
+          <SectionTitle className="mt-6 mb-2">Application</SectionTitle>
+          <ul className="bg-card border-border divide-border/70 divide-y rounded-[20px] border px-4">
+            {hasNativeCapability('app/openSettings') && (
+              <li>
+                <RowButton
+                  icon={Smartphone}
+                  label="Autorisations du téléphone"
+                  onClick={openNativeSettings}
+                />
+              </li>
+            )}
+            {canRate && (
+              <li>
+                <RowButton
+                  icon={Star}
+                  label="Noter TripBrain"
+                  onClick={requestNativeReview}
+                />
+              </li>
+            )}
+          </ul>
+        </>
+      )}
 
       <SectionTitle className="mt-6 mb-2">Confidentialité</SectionTitle>
       <div className="bg-card border-border divide-border/70 divide-y rounded-[20px] border px-4">
@@ -328,10 +492,10 @@ export function SettingsScreen({ onClose }: ScreenProps<'settings'>) {
             </span>
           </button>
         </li>
-        {legalConfig.publisher.email && (
+        {contactHref && (
           <li>
             <RowLink
-              href={`mailto:${legalConfig.publisher.email}`}
+              href={contactHref}
               icon={Mail}
               label="Contacter"
               external
@@ -358,6 +522,15 @@ export function SettingsScreen({ onClose }: ScreenProps<'settings'>) {
         <p className="text-muted-foreground text-[13px] font-extrabold">
           TripBrain{' '}
           <span className="font-mono font-semibold">{packageInfo.version}</span>
+          {nativeApp && (
+            <>
+              {' · app '}
+              <span className="font-mono font-semibold">
+                {nativeApp.appVersion}
+              </span>{' '}
+              ({platformLabel(nativeApp.platform)})
+            </>
+          )}
         </p>
       </div>
     </MobileScreen>
@@ -367,17 +540,22 @@ export function SettingsScreen({ onClose }: ScreenProps<'settings'>) {
 function NotificationPermissionNote({
   permission,
   anyReminder,
+  isNative,
+  canOpenSettings,
   onRequest,
 }: {
   permission: PermissionState
   anyReminder: boolean
+  isNative: boolean
+  /** Le natif sait ouvrir la page Réglages de l'app. */
+  canOpenSettings: boolean
   onRequest: () => void
 }) {
   if (!anyReminder) return null
   if (permission === 'granted') {
     return (
       <p className="text-muted-foreground mx-1 mt-2 text-[13px] leading-snug">
-        {isNativeApp()
+        {isNative
           ? 'Le téléphone vous prévient à l’heure dite, même application fermée.'
           : 'Les rappels partent tant que TripBrain est ouvert ou utilisé depuis peu : sans application native, le téléphone ne réveille pas l’app.'}
       </p>
@@ -386,16 +564,34 @@ function NotificationPermissionNote({
   if (permission === 'unsupported') {
     return (
       <p className="text-muted-foreground mx-1 mt-2 text-[13px] leading-snug">
-        Ce navigateur n’affiche pas de notifications. Sur iPhone, ajoutez
-        TripBrain à l’écran d’accueil pour recevoir les rappels.
+        {isNative
+          ? 'Les rappels ne sont pas disponibles sur cet appareil.'
+          : 'Ce navigateur n’affiche pas de notifications. Sur iPhone, ajoutez TripBrain à l’écran d’accueil pour recevoir les rappels.'}
       </p>
     )
   }
   if (permission === 'denied') {
+    if (isNative && canOpenSettings) {
+      return (
+        <div className="bg-destructive-soft mt-2 flex items-center gap-3 rounded-2xl px-4 py-3">
+          <p className="text-destructive flex-1 text-[13px] leading-snug font-bold">
+            Les notifications sont désactivées pour TripBrain sur ce téléphone.
+          </p>
+          <Button
+            size="lg2"
+            variant="outline"
+            className="h-11 rounded-xl"
+            onClick={openNativeSettings}
+          >
+            Ouvrir les réglages
+          </Button>
+        </div>
+      )
+    }
     return (
       <p className="bg-destructive-soft text-destructive mt-2 rounded-2xl px-4 py-3 text-[13px] leading-snug font-bold">
-        {isNativeApp()
-          ? 'Les notifications sont bloquées pour TripBrain. Réactivez-les dans Réglages → TripBrain → Notifications.'
+        {isNative
+          ? 'Les notifications sont désactivées pour TripBrain. Réactivez-les dans les réglages du téléphone.'
           : 'Les notifications sont bloquées pour TripBrain. Réactivez-les dans les réglages du navigateur (cadenas à côté de l’adresse) ou du téléphone.'}
       </p>
     )

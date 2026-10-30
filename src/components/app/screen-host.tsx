@@ -1,13 +1,30 @@
 'use client'
 
-import { useEffect, type ComponentType, type CSSProperties } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type CSSProperties,
+} from 'react'
 import {
   SCREENS_WITH_TAB_BAR,
   useAppNav,
   type AppScreen,
   type AppScreenKind,
 } from '@/components/app/navigation'
-import type { ScreenProps } from '@/components/app/screen-props'
+import {
+  ScreenStatusBarContext,
+  type ScreenProps,
+  type ScreenStatusBarRequest,
+} from '@/components/app/screen-props'
+import { useTrip } from '@/components/app/trip-provider'
+import { useKeyboardInset } from '@/hooks/use-keyboard-inset'
+import {
+  setNativeStatusBarStyle,
+  type NativeStatusBarStyle,
+} from '@/lib/native-app'
 import { ImportFileScreen } from '@/components/onboarding/import-file-screen'
 import { ReceiveScreen } from '@/components/receive/receive-screen'
 import { TripReadyScreen } from '@/components/onboarding/trip-ready-screen'
@@ -129,6 +146,31 @@ const REGISTRY: { [K in AppScreenKind]: Entry<K> } = {
   },
 }
 
+/**
+ * Écrans au fond foncé de haut en bas : icônes claires dans la barre d'état.
+ * Un écran au fond variable le demande lui-même (`useScreenStatusBar`).
+ */
+const LIGHT_STATUS_BAR: ReadonlySet<AppScreenKind> = new Set(['document'])
+
+/**
+ * Écrans au haut d'écran uni et clair : un voile sous la barre d'état
+ * (app native) masque le contenu qui défile dessous. Les écrans à photo, à
+ * fond foncé ou à caméra n'en ont pas.
+ */
+const VEILED_SCREENS: ReadonlySet<AppScreenKind> = new Set([
+  'day',
+  'transport',
+  'menu',
+  'trips',
+  'share',
+  'group',
+  'settings',
+  'offline',
+])
+
+/** Défilement (px) au-delà duquel la barre d'état a quitté l'en-tête photo. */
+const STATUS_BAR_ALLOWANCE = 60
+
 function renderScreen(screen: AppScreen, onClose: () => void) {
   const entry = REGISTRY[screen.kind] as Entry<typeof screen.kind>
   const Component = entry.component as ComponentType<
@@ -143,7 +185,11 @@ function renderScreen(screen: AppScreen, onClose: () => void) {
  * visible et reçoit le focus.
  */
 export function ScreenHost() {
-  const { stack, pop } = useAppNav()
+  const { stack, pop, tab } = useAppNav()
+  const { hasData } = useTrip()
+
+  // Clavier à l'écran (app native) : `--keyboard-inset` borne les écrans.
+  useKeyboardInset()
 
   // Le défilement de la page sous un écran plein est figé.
   const coversPage = stack.some(
@@ -158,24 +204,117 @@ export function ScreenHost() {
     }
   }, [coversPage])
 
-  if (stack.length === 0) return null
+  // ── Barre d'état (app native) ──────────────────────────────────────────────
+  // Une feuille laisse voir l'écran du dessous : c'est lui qui décide.
+  const keyOf = (screen: AppScreen, index: number) => `${index}-${screen.kind}`
+  let topScreenIndex = -1
+  stack.forEach((screen, index) => {
+    if (REGISTRY[screen.kind].presentation === 'screen') topScreenIndex = index
+  })
+  const topScreen = topScreenIndex >= 0 ? stack[topScreenIndex] : undefined
+  const topScreenKey = topScreen ? keyOf(topScreen, topScreenIndex) : null
+
+  const [requests, setRequests] = useState<
+    Record<string, ScreenStatusBarRequest>
+  >({})
+  const setters = useRef(
+    new Map<string, (request: ScreenStatusBarRequest | null) => void>(),
+  )
+  const requestFor = (key: string) => {
+    let setter = setters.current.get(key)
+    if (!setter) {
+      setter = (request) =>
+        setRequests((previous) => {
+          const current = previous[key]
+          if (!request) {
+            if (!current) return previous
+            const next = { ...previous }
+            delete next[key]
+            return next
+          }
+          if (
+            current?.style === request.style &&
+            current.heroHeight === request.heroHeight
+          ) {
+            return previous
+          }
+          return { ...previous, [key]: request }
+        })
+      setters.current.set(key, setter)
+    }
+    return setter
+  }
+
+  // En-tête photo : la barre redevient sombre une fois la photo défilée.
+  const containers = useRef(new Map<string, HTMLDivElement>())
+  const heroHeight = topScreenKey
+    ? requests[topScreenKey]?.heroHeight
+    : undefined
+  const [pastHero, setPastHero] = useState(false)
+  const measureHero = useCallback(() => {
+    const container = topScreenKey
+      ? containers.current.get(topScreenKey)
+      : undefined
+    setPastHero(
+      Boolean(
+        container &&
+        heroHeight &&
+        container.scrollTop > heroHeight - STATUS_BAR_ALLOWANCE,
+      ),
+    )
+  }, [topScreenKey, heroHeight])
+  useEffect(measureHero, [measureHero])
+
+  let statusBar: NativeStatusBarStyle | null
+  if (!topScreen || !topScreenKey) {
+    // Onglets : fond clair. Sans voyage, l'onboarding gère sa propre barre.
+    statusBar = hasData ? 'dark' : null
+  } else {
+    const request = requests[topScreenKey]
+    statusBar = request
+      ? request.heroHeight && pastHero
+        ? 'dark'
+        : request.style
+      : LIGHT_STATUS_BAR.has(topScreen.kind)
+        ? 'light'
+        : 'dark'
+  }
+  // Sans voyage ni écran ouvert, rien n'est envoyé : `OnboardingFlow` règle
+  // sa barre selon son étape, et la réaffirme quand la pile se vide.
+  useEffect(() => {
+    if (statusBar) setNativeStatusBarStyle(statusBar)
+  }, [statusBar])
 
   return (
     <>
+      {/* Voile sous la barre d'état des onglets (sauf la carte, plein cadre). */}
+      {hasData && tab !== 'map' && (
+        <div
+          aria-hidden
+          className="bg-background/85 native:block pointer-events-none fixed inset-x-0 top-0 z-[39] hidden h-[var(--safe-top)] backdrop-blur-md"
+        />
+      )}
       {stack.map((screen, index) => {
         const isTop = index === stack.length - 1
-        const key = `${index}-${screen.kind}`
+        const key = keyOf(screen, index)
         if (REGISTRY[screen.kind].presentation === 'sheet') {
           return <div key={key}>{renderScreen(screen, pop)}</div>
         }
         return (
           <div
             key={key}
+            ref={(node) => {
+              if (node) containers.current.set(key, node)
+              else containers.current.delete(key)
+            }}
             role="dialog"
             aria-label={REGISTRY[screen.kind].label}
             aria-modal={isTop}
             aria-hidden={!isTop}
-            className="bg-background animate-screen fixed inset-0 overflow-y-auto overscroll-contain"
+            onScroll={key === topScreenKey ? measureHero : undefined}
+            // Dans l'app, le clavier à l'écran raccourcit l'écran par le bas :
+            // champs et pieds collés restent visibles au-dessus.
+            className="bg-background animate-screen native:bottom-[var(--keyboard-inset,0px)] fixed inset-0 overflow-y-auto overscroll-contain"
             // Au-dessus de la barre d'onglets (z-40), sous les dialogues et feuilles (z-50).
             style={
               {
@@ -188,7 +327,15 @@ export function ScreenHost() {
               } as CSSProperties
             }
           >
-            {renderScreen(screen, pop)}
+            {VEILED_SCREENS.has(screen.kind) && (
+              <div
+                aria-hidden
+                className="bg-background/85 native:block pointer-events-none sticky top-0 z-30 -mb-[var(--safe-top)] hidden h-[var(--safe-top)] backdrop-blur-md"
+              />
+            )}
+            <ScreenStatusBarContext.Provider value={requestFor(key)}>
+              {renderScreen(screen, pop)}
+            </ScreenStatusBarContext.Provider>
             <div aria-hidden className="h-[var(--tab-bar-offset)]" />
           </div>
         )

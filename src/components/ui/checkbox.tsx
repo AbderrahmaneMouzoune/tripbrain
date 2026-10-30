@@ -4,10 +4,12 @@ import * as React from 'react'
 import * as CheckboxPrimitive from '@radix-ui/react-checkbox'
 import { CheckIcon } from 'lucide-react'
 
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 function Checkbox({
   className,
+  onCheckedChange,
   ...props
 }: React.ComponentProps<typeof CheckboxPrimitive.Root>) {
   return (
@@ -18,6 +20,10 @@ function Checkbox({
         className,
       )}
       {...props}
+      onCheckedChange={(checked) => {
+        triggerHaptic('selection')
+        onCheckedChange?.(checked)
+      }}
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"

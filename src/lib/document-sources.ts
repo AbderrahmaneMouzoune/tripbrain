@@ -38,7 +38,7 @@ export const SOURCE_CATEGORIES: SourceCategory[] = [
         letter: 'B',
         bgColor: 'bg-blue-700',
         deepLink: 'booking://',
-        fallback: 'https://booking.com',
+        fallback: 'https://www.booking.com',
         description: 'Télécharge ta confirmation PDF',
       },
       {
@@ -46,7 +46,7 @@ export const SOURCE_CATEGORIES: SourceCategory[] = [
         letter: 'A',
         bgColor: 'bg-rose-500',
         deepLink: 'airbnb://',
-        fallback: 'https://airbnb.com',
+        fallback: 'https://www.airbnb.com',
         description: 'Exporte ton itinéraire de réservation',
       },
     ],
