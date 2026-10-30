@@ -27,6 +27,7 @@ export function PhotoCarousel({
   const scroller = useRef<HTMLDivElement>(null)
   const [current, setCurrent] = useState(0)
   const [open, setOpen] = useState(false)
+  const [startIndex, setStartIndex] = useState(0)
 
   if (photos.length === 0) return null
 
@@ -50,17 +51,21 @@ export function PhotoCarousel({
         images={photos.map((photo) => ({ url: photo.url, alt: photo.caption }))}
         isOpen={open}
         onClose={() => setOpen(false)}
+        startIndex={startIndex}
       />
       <div
         ref={scroller}
         onScroll={onScroll}
-        className="flex snap-x snap-mandatory scroll-px-5 gap-2.5 overflow-x-auto px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x snap-mandatory scroll-px-5 gap-2.5 overflow-x-auto overscroll-x-contain px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {photos.map((photo, index) => (
           <button
             key={`${photo.url}-${index}`}
             type="button"
-            onClick={() => setOpen(true)}
+            onClick={() => {
+              setStartIndex(index)
+              setOpen(true)
+            }}
             aria-label={`Agrandir la photo ${index + 1} sur ${photos.length}${photo.caption ? ` : ${photo.caption}` : ''}`}
             className={cn(
               'bg-primary-soft relative aspect-[304/166] shrink-0 snap-start overflow-hidden rounded-[22px]',

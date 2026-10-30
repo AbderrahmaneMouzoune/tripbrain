@@ -1,6 +1,7 @@
 'use client'
 
 import type { ComponentType, ReactNode, SVGProps } from 'react'
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 /** Pastille à bascule (choix multiple, filtres, suggestions). */
@@ -22,7 +23,11 @@ export function Chip({
     <button
       type="button"
       aria-pressed={pressed}
-      onClick={onClick}
+      onClick={() => {
+        // Seules les pastilles à bascule vibrent ; une suggestion est un bouton.
+        if (pressed !== undefined) triggerHaptic('selection')
+        onClick?.()
+      }}
       className={cn(
         'pressable inline-flex min-h-10 items-center gap-1.5 rounded-full border-[1.5px] px-3.5 text-sm font-extrabold outline-none',
         'focus-visible:ring-ring/50 focus-visible:ring-[3px]',

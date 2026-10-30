@@ -26,6 +26,8 @@ import {
   type InstallPlatform,
   type InstallPromptState,
 } from '@/lib/pwa-install'
+import { isInsideNativeApp } from '@/lib/native-app'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 
 /** D'où vient l'ouverture : relance automatique ou geste explicite. */
 export type InstallPromptOrigin = 'auto' | 'manual'
@@ -80,6 +82,9 @@ function readStoredState(): InstallPromptState {
 }
 
 function detectStandalone(): boolean {
+  // L'app native est déjà « installée » : rien à proposer. Le suffixe
+  // user-agent compte aussi, au cas où le global injecté manquerait.
+  if (isInsideNativeApp()) return true
   const matchesDisplayMode = STANDALONE_QUERIES.some(
     (query) => window.matchMedia(query).matches,
   )
@@ -105,6 +110,8 @@ export function PwaInstallProvider({
   const [origin, setOrigin] = useState<InstallPromptOrigin>('auto')
   const [justInstalled, setJustInstalled] = useState(false)
   const [isEngaged, setIsEngaged] = useState(false)
+  // Dans l'app native, l'installation PWA n'a aucun sens : tout est coupé.
+  const native = useIsNativeApp()
 
   // Une seule relance automatique par session, même si l'utilisateur change de jour.
   const autoPromptDoneRef = useRef(false)
@@ -204,7 +211,7 @@ export function PwaInstallProvider({
   // ── Relance automatique ───────────────────────────────────────────────────
 
   useEffect(() => {
-    if (autoPromptDoneRef.current) return
+    if (native || autoPromptDoneRef.current) return
 
     const eligible = canAutoPrompt({
       state,
@@ -221,22 +228,24 @@ export function PwaInstallProvider({
     const timer = window.setTimeout(() => {
       // L'utilisateur peut avoir basculé sur un autre onglet entre-temps.
       if (document.visibilityState !== 'visible') return
+      if (isInsideNativeApp()) return
       autoPromptDoneRef.current = true
       setOrigin('auto')
       setIsOpen(true)
     }, AUTO_PROMPT_DELAY_MS)
 
     return () => window.clearTimeout(timer)
-  }, [state, isMobile, isStandalone, platform, nativePrompt, isEngaged])
+  }, [native, state, isMobile, isStandalone, platform, nativePrompt, isEngaged])
 
   // L'app passe en mode installé pendant la session : plus rien à proposer.
   useEffect(() => {
-    if (isStandalone) setIsOpen(false)
-  }, [isStandalone])
+    if (isStandalone || native) setIsOpen(false)
+  }, [isStandalone, native])
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
   const open = useCallback((nextOrigin: InstallPromptOrigin = 'manual') => {
+    if (isInsideNativeApp()) return
     setOrigin(nextOrigin)
     setJustInstalled(false)
     setIsOpen(true)
@@ -299,10 +308,10 @@ export function PwaInstallProvider({
     return {
       platform,
       guide: resolveInstallGuide(platform, hasNativePrompt),
-      isStandalone,
+      isStandalone: native || isStandalone,
       isMobile,
       hasNativePrompt,
-      canInstall: !isStandalone && !state.installed,
+      canInstall: !native && !isStandalone && !state.installed,
       justInstalled,
       isOpen,
       origin,
@@ -314,6 +323,7 @@ export function PwaInstallProvider({
       armAutoPrompt,
     }
   }, [
+    native,
     platform,
     isStandalone,
     isMobile,

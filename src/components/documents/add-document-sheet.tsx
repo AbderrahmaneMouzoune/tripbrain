@@ -19,6 +19,7 @@ import { IconBadge, type BadgeTone } from '@/components/mobile/icon-badge'
 import { Button } from '@/components/ui/button'
 import { useDocuments } from '@/hooks/use-documents'
 import { trackEvent } from '@/lib/analytics/client'
+import { triggerHaptic } from '@/lib/native-app'
 import { documentKindOf } from '@/lib/analytics/metrics'
 import { SOURCE_CATEGORIES } from '@/lib/document-sources'
 import {
@@ -118,8 +119,10 @@ export function AddDocumentSheet({
         count: files.length,
         kind: documentKindOf(files.map((file) => file.type)),
       })
+      triggerHaptic('success')
       onClose()
     } catch {
+      triggerHaptic('error')
       setError('Le document n’a pas pu être enregistré sur ce téléphone.')
       setBusy(null)
     }
@@ -135,8 +138,10 @@ export function AddDocumentSheet({
       if (imported > 0) {
         trackEvent('document_added', { count: imported, kind: 'mixed' })
       }
+      triggerHaptic('success')
       onClose()
     } catch (err) {
+      triggerHaptic('error')
       setError(
         err instanceof Error && err.message
           ? `Archive illisible : ${err.message.toLowerCase()}.`
@@ -229,7 +234,7 @@ export function AddDocumentSheet({
       <h3 className="text-muted-foreground mt-4 mb-2 text-xs font-black tracking-[0.08em] uppercase">
         Récupérer une confirmation dans
       </h3>
-      <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1">
+      <div className="-mx-5 flex gap-2 overflow-x-auto overscroll-x-contain px-5 pb-1">
         {sources.map((source, index) => (
           <a
             key={source.name}

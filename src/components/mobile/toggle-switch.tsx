@@ -1,5 +1,6 @@
 'use client'
 
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 /**
@@ -29,7 +30,10 @@ export function ToggleSwitch({
       aria-labelledby={labelledBy}
       aria-label={labelledBy ? undefined : label}
       disabled={disabled}
-      onClick={() => onCheckedChange(!checked)}
+      onClick={() => {
+        triggerHaptic('selection')
+        onCheckedChange(!checked)
+      }}
       className={cn(
         // Cible tactile de 44 px autour d'un rail de 32 px.
         'relative flex h-11 w-[52px] shrink-0 items-center outline-none disabled:opacity-50',

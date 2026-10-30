@@ -26,6 +26,7 @@ import {
   type PanelTab,
 } from '@/components/generator/journey/journey-panel'
 import { BUDGETS, type TripBrief } from '@/lib/generator/trip-brief'
+import { triggerHaptic } from '@/lib/native-app'
 import {
   answerLabel,
   applyExpress,
@@ -564,7 +565,7 @@ export function TripJourney(props: TripJourneyProps) {
         {/* En-tête : où l'on est, la jauge, et la sortie vers le billet. */}
         <div
           className={`border-border flex items-center gap-3 border-b bg-white px-4 pb-3 sm:px-6 ${
-            isScreen ? 'pt-[calc(env(safe-area-inset-top)+12px)]' : 'pt-4'
+            isScreen ? 'pt-[calc(var(--safe-top)+12px)]' : 'pt-4'
           }`}
         >
           {back ? (
@@ -743,7 +744,10 @@ export function TripJourney(props: TripJourneyProps) {
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setConfirmReset(true)}
+                      onClick={() => {
+                        triggerHaptic('warning')
+                        setConfirmReset(true)
+                      }}
                       className="text-muted-foreground hover:text-foreground min-h-11 cursor-pointer px-3 text-[13px] font-extrabold underline-offset-4 hover:underline"
                     >
                       Recommencer à zéro
@@ -777,7 +781,7 @@ export function TripJourney(props: TripJourneyProps) {
           <div
             className={`flex flex-col items-center gap-1.5 px-5 pt-3 sm:px-8 ${
               isScreen
-                ? 'bg-background/95 sticky bottom-0 z-10 pb-[calc(env(safe-area-inset-bottom)+16px)] backdrop-blur'
+                ? 'bg-background/95 sticky bottom-0 z-10 pb-[calc(var(--safe-bottom)+16px)] backdrop-blur'
                 : 'pb-6'
             }`}
           >
@@ -1080,9 +1084,10 @@ function QuestionScreen({
                   role="radio"
                   aria-checked={on}
                   tabIndex={tabbable ? 0 : -1}
-                  onClick={(event) =>
+                  onClick={(event) => {
+                    if (!on) triggerHaptic('selection')
                     onPickSingle(option.id, event.detail === 0)
-                  }
+                  }}
                   onMouseEnter={() => onPeek(option.id)}
                   onMouseLeave={() => onPeek(null)}
                   onFocus={() => onPeek(option.id)}
@@ -1212,7 +1217,10 @@ function Chip({
     <button
       type="button"
       aria-pressed={on}
-      onClick={onClick}
+      onClick={() => {
+        triggerHaptic('selection')
+        onClick()
+      }}
       className={`inline-flex cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] font-extrabold transition-[transform,background-color,border-color] duration-150 hover:-translate-y-0.5 active:scale-95 ${
         small ? 'min-h-[34px] px-3 text-[13px]' : 'min-h-10 px-3.5 text-sm'
       } ${on ? 'bg-primary-soft border-primary text-primary-strong' : 'border-border-strong text-foreground bg-white'}`}
@@ -1252,7 +1260,10 @@ function Counter({
           type="button"
           aria-label={`Moins : ${label}`}
           disabled={value <= min}
-          onClick={() => onChange(Math.max(min, value - 1))}
+          onClick={() => {
+            triggerHaptic('selection')
+            onChange(Math.max(min, value - 1))
+          }}
           className="border-border-strong flex size-10 cursor-pointer items-center justify-center rounded-full border-[1.5px] bg-white disabled:opacity-40"
         >
           <IconMinus className="size-4" stroke={3} />
@@ -1270,7 +1281,10 @@ function Counter({
           type="button"
           aria-label={`Plus : ${label}`}
           disabled={value >= max}
-          onClick={() => onChange(Math.min(max, value + 1))}
+          onClick={() => {
+            triggerHaptic('selection')
+            onChange(Math.min(max, value + 1))
+          }}
           className="bg-primary flex size-10 cursor-pointer items-center justify-center rounded-full text-white disabled:opacity-40"
         >
           <IconPlus className="size-4" stroke={3} />
@@ -1335,7 +1349,10 @@ function WhenControls({
             type="button"
             aria-label="Un jour de moins"
             disabled={days <= 1}
-            onClick={() => onDaysChange(Math.max(1, days - 1))}
+            onClick={() => {
+              triggerHaptic('selection')
+              onDaysChange(Math.max(1, days - 1))
+            }}
             className="border-border-strong flex size-11 cursor-pointer items-center justify-center rounded-full border-[1.5px] bg-white disabled:opacity-40"
           >
             <IconMinus className="size-5" stroke={3} />
@@ -1350,7 +1367,10 @@ function WhenControls({
             type="button"
             aria-label="Un jour de plus"
             disabled={days >= maxDays}
-            onClick={() => onDaysChange(Math.min(maxDays, days + 1))}
+            onClick={() => {
+              triggerHaptic('selection')
+              onDaysChange(Math.min(maxDays, days + 1))
+            }}
             className="bg-primary flex size-11 cursor-pointer items-center justify-center rounded-full text-white disabled:opacity-40"
           >
             <IconPlus className="size-5" stroke={3} />
@@ -1411,7 +1431,10 @@ function MultiControls({
                   key={pack.label}
                   type="button"
                   aria-pressed={on}
-                  onClick={() => onSet(togglePack(value, pack))}
+                  onClick={() => {
+                    triggerHaptic('selection')
+                    onSet(togglePack(value, pack))
+                  }}
                   className={`flex cursor-pointer flex-col gap-1 rounded-2xl border-[1.5px] px-3 py-[11px] text-left transition-[transform,background-color,border-color] duration-150 hover:-translate-y-0.5 active:scale-[0.96] ${
                     on
                       ? 'bg-primary-soft border-primary'
@@ -1457,7 +1480,10 @@ function MultiControls({
               key={option.id}
               type="button"
               aria-pressed={on}
-              onClick={() => onToggle(option.id)}
+              onClick={() => {
+                triggerHaptic('selection')
+                onToggle(option.id)
+              }}
               className={`inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] px-3.5 text-sm font-extrabold transition-[transform,background-color,border-color] duration-150 hover:-translate-y-0.5 active:scale-95 ${
                 on
                   ? 'bg-primary-soft border-primary text-primary-strong'

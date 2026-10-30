@@ -12,16 +12,22 @@ import { MobileScreen } from '@/components/mobile/mobile-screen'
 import type { GenerationState } from '@/lib/generator/generation-store'
 import { formatTripRange } from '@/lib/generator/review'
 import type { GeneratedDay } from '@/lib/generator/itinerary-schema'
+import { isInsideNativeApp } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 /** Nombre maximal de squelettes après la journée en cours. */
 const SKELETONS_AHEAD = 3
 
-/** La permission de notifier, lue sans la demander. */
+/**
+ * La permission de notifier, lue sans la demander. Toujours fausse dans l'app
+ * native : sa WebView ne peut pas afficher l'avis « voyage prêt », et l'app
+ * passée en arrière-plan coupe de toute façon la génération.
+ */
 function useNotificationsGranted(): boolean {
   return useSyncExternalStore(
     () => () => {},
     () =>
+      !isInsideNativeApp() &&
       typeof Notification !== 'undefined' &&
       Notification.permission === 'granted',
     () => false,

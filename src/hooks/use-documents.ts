@@ -22,6 +22,7 @@ import {
   type DocumentLink,
 } from '@/lib/document-organize'
 import { useTrip } from '@/components/app/trip-provider'
+import { saveFile } from '@/lib/save-file'
 
 export type { StoredFile }
 
@@ -56,13 +57,7 @@ function waitFor(tx: IDBTransaction): Promise<void> {
 
 /** Enregistre le document dans les téléchargements de l'appareil. */
 export function downloadStoredFile(file: StoredFile): void {
-  const url = URL.createObjectURL(file.blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = file.name
-  a.click()
-  // Laisser au navigateur le temps de lancer le téléchargement.
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  saveFile(file.blob, file.name)
 }
 
 /** Applique un rattachement à un enregistrement (champs vides retirés). */

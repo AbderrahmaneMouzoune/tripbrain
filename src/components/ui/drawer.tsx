@@ -3,12 +3,24 @@
 import * as React from 'react'
 import { Drawer as DrawerPrimitive } from 'vaul'
 
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 function Drawer({
+  onRelease,
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
-  return <DrawerPrimitive.Root data-slot="drawer" {...props} />
+  return (
+    <DrawerPrimitive.Root
+      data-slot="drawer"
+      {...props}
+      onRelease={(event, open) => {
+        // Feuille lâchée assez bas pour se fermer : léger retour, comme iOS.
+        if (!open) triggerHaptic('selection')
+        onRelease?.(event, open)
+      }}
+    />
+  )
 }
 
 function DrawerTrigger({

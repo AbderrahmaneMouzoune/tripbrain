@@ -31,6 +31,7 @@ import {
 import { useImageCacheContext } from '@/components/image-cache-provider'
 import { useDocuments } from '@/hooks/use-documents'
 import { usePreferences } from '@/hooks/use-preferences'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 import { cacheState, type CacheState } from '@/hooks/use-image-cache'
 import { trackEvent } from '@/lib/analytics/client'
 import { formatFileSize, missingDocuments } from '@/lib/document-organize'
@@ -150,6 +151,8 @@ export function OfflineScreen({ onClose }: ScreenProps<'offline'>) {
   } = useImageCacheContext()
   const { usage, refresh } = useStorageEstimate()
   const [confirmClear, setConfirmClear] = useState(false)
+  // Dans l'app, il n'y a pas de « navigateur » à qui s'en prendre.
+  const isNative = useIsNativeApp()
 
   const state = cacheState(stats)
   const copy = STATE_COPY[state]
@@ -329,7 +332,9 @@ export function OfflineScreen({ onClose }: ScreenProps<'offline'>) {
           <span className="text-muted-foreground block text-[13px] leading-snug">
             {connectionTypeKnown
               ? 'Évite d’utiliser vos données mobiles à l’étranger'
-              : 'Ce navigateur ne dit pas quel réseau est utilisé : le réglage reste sans effet ici.'}
+              : isNative
+                ? 'Le téléphone ne dit pas quel réseau est utilisé : le réglage reste sans effet ici.'
+                : 'Ce navigateur ne dit pas quel réseau est utilisé : le réglage reste sans effet ici.'}
           </span>
         </span>
         <ToggleSwitch
@@ -356,7 +361,9 @@ export function OfflineScreen({ onClose }: ScreenProps<'offline'>) {
               {usage === undefined
                 ? '…'
                 : usage === null
-                  ? 'Non communiqué par ce navigateur'
+                  ? isNative
+                    ? 'Non communiqué par le téléphone'
+                    : 'Non communiqué par ce navigateur'
                   : `${formatFileSize(usage)} sur ce téléphone`}
             </span>
           </span>

@@ -37,6 +37,7 @@ import {
   writeActiveTripId,
   writeTrip,
 } from '@/lib/trips-db'
+import { saveFile } from '@/lib/save-file'
 
 /** Titre du voyage d'exemple, qui couvre la Chine et Taïwan. */
 export const DEMO_TRIP_TITLE = 'Chine & Taïwan'
@@ -557,12 +558,7 @@ export function useTripData() {
     const data = { title: activeTrip?.title, itinerary }
     const json = JSON.stringify(data, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'tripbrain-data.json'
-    a.click()
-    URL.revokeObjectURL(url)
+    saveFile(blob, 'tripbrain-data.json')
   }, [activeTrip, itinerary])
 
   /** Supprime le voyage consulté (ancien « Réinitialiser » à un seul voyage). */

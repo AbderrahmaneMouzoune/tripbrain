@@ -19,6 +19,7 @@ import { SectionTitle } from '@/components/mobile/section-title'
 import { Button } from '@/components/ui/button'
 import type { ScreenProps } from '@/components/app/screen-props'
 import { useAppNav } from '@/components/app/navigation'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 import { trackEvent } from '@/lib/analytics/client'
 import { importFailureReason } from '@/lib/analytics/metrics'
 import { cn } from '@/lib/utils'
@@ -86,6 +87,7 @@ export function ImportFilePanel({
   progress?: { step: number; total: number }
   onParsed: (received: ReceivedTrip) => void
 }) {
+  const native = useIsNativeApp()
   const inputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<ImportError | null>(null)
   const [reading, setReading] = useState(false)
@@ -185,7 +187,9 @@ export function ImportFilePanel({
             <Download aria-hidden />
             {templateState === 'loading'
               ? 'Préparation du modèle…'
-              : 'Télécharger un modèle Excel'}
+              : native
+                ? 'Enregistrer un modèle Excel'
+                : 'Télécharger un modèle Excel'}
           </Button>
           {templateState === 'error' && (
             <p role="alert" className="text-destructive text-center text-xs">

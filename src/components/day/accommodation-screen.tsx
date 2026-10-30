@@ -13,7 +13,10 @@ import {
   Pencil,
   Plus,
 } from 'lucide-react'
-import type { ScreenProps } from '@/components/app/screen-props'
+import {
+  useScreenStatusBar,
+  type ScreenProps,
+} from '@/components/app/screen-props'
 import { useAppNav } from '@/components/app/navigation'
 import { MobileScreen } from '@/components/mobile/mobile-screen'
 import { Button } from '@/components/ui/button'
@@ -28,7 +31,7 @@ import {
   formatPrice,
   shortDate,
 } from '@/components/day/day-logic'
-import { trackDirections, useApplePlatform } from '@/components/day/day-ui'
+import { openDirections, useApplePlatform } from '@/components/day/day-ui'
 
 /** « Hôtel (Succursale) » → le nom et sa précision entre parenthèses. */
 function splitName(name: string): { title: string; subtitle?: string } {
@@ -36,6 +39,9 @@ function splitName(name: string): { title: string; subtitle?: string } {
   if (!match || !match[1]) return { title: name }
   return { title: match[1], subtitle: match[2] }
 }
+
+/** Hauteur des photos en tête de fiche (px). */
+const HERO_HEIGHT = 200
 
 /** Fiche de l'hébergement du soir. */
 export function AccommodationScreen({
@@ -48,6 +54,10 @@ export function AccommodationScreen({
   const day = editor.day
   const stay = editor.stay
   const [galleryOpen, setGalleryOpen] = useState(false)
+  const [galleryStart, setGalleryStart] = useState(0)
+  const hasPhotos = (stay?.accommodation.images?.length ?? 0) > 0
+  // Photos sous la barre d'état : icônes claires jusqu'à ce qu'elles défilent.
+  useScreenStatusBar(hasPhotos ? 'light' : null, HERO_HEIGHT)
 
   if (!day || !stay) {
     return (
@@ -108,7 +118,7 @@ export function AccommodationScreen({
 
   return (
     <div className="bg-background text-foreground flex min-h-dvh flex-col">
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(env(safe-area-inset-bottom)+24px)]">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(var(--safe-bottom)+24px)]">
         {images.length > 0 ? (
           <section
             aria-label="Photos de l’hébergement"
@@ -121,12 +131,16 @@ export function AccommodationScreen({
               }))}
               isOpen={galleryOpen}
               onClose={() => setGalleryOpen(false)}
+              startIndex={galleryStart}
             />
             {images.slice(0, 3).map((url, index) => (
               <button
                 key={`${url}-${index}`}
                 type="button"
-                onClick={() => setGalleryOpen(true)}
+                onClick={() => {
+                  setGalleryStart(index)
+                  setGalleryOpen(true)
+                }}
                 aria-label={
                   index === 2 || images.length === 1
                     ? 'Voir la galerie'
@@ -152,15 +166,20 @@ export function AccommodationScreen({
                 )}
               </button>
             ))}
-            <div className="absolute top-[calc(env(safe-area-inset-top)+12px)] left-4">
+            {/* App native : les icônes claires de la barre d'état restent lisibles. */}
+            <span
+              aria-hidden
+              className="native:block pointer-events-none absolute inset-x-0 top-0 hidden h-[calc(var(--safe-top)+56px)] bg-linear-to-b from-black/45 to-transparent"
+            />
+            <div className="absolute top-[calc(var(--safe-top)+12px)] left-4">
               {backButton}
             </div>
-            <div className="absolute top-[calc(env(safe-area-inset-top)+12px)] right-4">
+            <div className="absolute top-[calc(var(--safe-top)+12px)] right-4">
               {editButton}
             </div>
           </section>
         ) : (
-          <div className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+12px)]">
+          <div className="flex items-center justify-between px-5 pt-[calc(var(--safe-top)+12px)]">
             {backButton}
             {editButton}
           </div>
@@ -196,7 +215,7 @@ export function AccommodationScreen({
           {accommodation.address && (
             <p className="text-muted-foreground mt-2 flex gap-1.5 text-[13px] leading-[18px]">
               <MapPin className="mt-px size-4 shrink-0" aria-hidden />
-              <span>{accommodation.address}</span>
+              <span className="select-text">{accommodation.address}</span>
             </p>
           )}
         </div>
@@ -288,7 +307,7 @@ export function AccommodationScreen({
             </span>
             {accommodation.bookingReference ? (
               <>
-                <span className="font-mono text-sm font-semibold">
+                <span className="font-mono text-sm font-semibold select-text">
                   {accommodation.bookingReference}
                 </span>
                 <button
@@ -327,8 +346,11 @@ export function AccommodationScreen({
                 href={directions}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() =>
-                  trackDirections('accommodation', 'accommodation')
+                onClick={(event) =>
+                  openDirections(event, 'accommodation', 'accommodation', {
+                    name: accommodation.name,
+                    address: accommodation.address,
+                  })
                 }
                 className="border-border-strong bg-card pressable flex h-[52px] items-center justify-center gap-2 rounded-[14px] border-[1.5px] px-2.5 text-left text-sm leading-[17px] font-extrabold"
               >

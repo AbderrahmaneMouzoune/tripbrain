@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isNativeApp, triggerHaptic } from '@/lib/native-app'
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
@@ -77,7 +78,10 @@ export function useLongPress({
     stop()
     triggered.current = true
     // Retour haptique là où il existe : l'appui long n'a aucun autre signal.
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    // Dans l'app, le vrai retour du système ; sur le web, la vibration.
+    if (isNativeApp()) {
+      triggerHaptic('impact')
+    } else if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       navigator.vibrate(12)
     }
     onLongPress()

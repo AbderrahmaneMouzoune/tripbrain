@@ -19,7 +19,7 @@
 
 export const legalConfig = {
   /** Date de dernière mise à jour des textes légaux, au format ISO. */
-  updatedAt: '2026-09-04',
+  updatedAt: '2026-10-30',
 
   product: {
     name: 'TripBrain',

@@ -16,7 +16,10 @@ import {
   X,
   Clock,
 } from 'lucide-react'
-import type { ScreenProps } from '@/components/app/screen-props'
+import {
+  useScreenStatusBar,
+  type ScreenProps,
+} from '@/components/app/screen-props'
 import { useTrip } from '@/components/app/trip-provider'
 import { useAppNav } from '@/components/app/navigation'
 import { MobileScreen } from '@/components/mobile/mobile-screen'
@@ -36,10 +39,11 @@ import {
 import {
   ACTIVITY_ICONS,
   Pill,
-  trackDirections,
+  openDirections,
   useApplePlatform,
 } from '@/components/day/day-ui'
 import { focusActivityOnMap } from '@/components/map/map-view'
+import { PhoneText } from '@/components/phone-text'
 
 const STATUS_OPTIONS: {
   value: ActivityStatus
@@ -51,6 +55,9 @@ const STATUS_OPTIONS: {
   { value: 'skipped', label: 'Annulé', icon: X },
 ]
 
+/** Hauteur de la photo en tête de fiche (px). */
+const HERO_HEIGHT = 206
+
 /** Fiche d'une activité : tout ce qu'on sait, et y aller. */
 export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
   const { itinerary } = useTrip()
@@ -61,6 +68,9 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
   const index =
     day?.activities.findIndex((a) => a.id === screen.activityId) ?? -1
   const activity = index >= 0 ? day?.activities[index] : undefined
+  const photo = activity?.images?.[0]
+  // Photo sous la barre d'état : icônes claires jusqu'à ce qu'elle défile.
+  useScreenStatusBar(photo ? 'light' : null, HERO_HEIGHT)
 
   if (!day || !activity) {
     return (
@@ -76,7 +86,6 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
   const Icon = ACTIVITY_ICONS[activity.type]
   const url = directionsUrl(activity, apple)
   const host = bookingHost(activity.bookingUrl)
-  const photo = activity.images?.[0]
   const facts = [
     { label: 'DURÉE', value: formatDuration(activity.duration) },
     { label: 'HORAIRES', value: activity.openAt },
@@ -97,12 +106,19 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
       <div className="mx-auto flex w-full max-w-xl flex-1 flex-col">
         <div className="bg-primary-soft relative h-[206px] shrink-0 overflow-hidden">
           {photo ? (
-            <CachedImage
-              src={photo}
-              alt={activity.name}
-              className="h-full w-full object-cover"
-              fallbackClassName="h-full w-full"
-            />
+            <>
+              <CachedImage
+                src={photo}
+                alt={activity.name}
+                className="h-full w-full object-cover"
+                fallbackClassName="h-full w-full"
+              />
+              {/* App native : les icônes claires de la barre d'état restent lisibles. */}
+              <span
+                aria-hidden
+                className="native:block pointer-events-none absolute inset-x-0 top-0 hidden h-[calc(var(--safe-top)+56px)] bg-linear-to-b from-black/45 to-transparent"
+              />
+            </>
           ) : (
             <span
               aria-hidden
@@ -116,7 +132,7 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
             size="icon-round"
             onClick={onClose}
             aria-label={`Retour au jour ${screen.dayIndex + 1}`}
-            className="border-border bg-card absolute top-[calc(env(safe-area-inset-top)+12px)] left-4 shadow-none"
+            className="border-border bg-card absolute top-[calc(var(--safe-top)+12px)] left-4 shadow-none"
           >
             <ArrowLeft />
           </Button>
@@ -125,13 +141,13 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
             size="icon-round"
             onClick={() => editor.editActivity(activity)}
             aria-label="Modifier l’activité"
-            className="border-border bg-card absolute top-[calc(env(safe-area-inset-top)+12px)] right-4 shadow-none"
+            className="border-border bg-card absolute top-[calc(var(--safe-top)+12px)] right-4 shadow-none"
           >
             <Pencil />
           </Button>
         </div>
 
-        <div className="bg-background relative -mt-[22px] flex flex-1 flex-col rounded-t-[26px] px-5 pt-[18px] pb-[calc(env(safe-area-inset-bottom)+24px)]">
+        <div className="bg-background relative -mt-[22px] flex flex-1 flex-col rounded-t-[26px] px-5 pt-[18px] pb-[calc(var(--safe-bottom)+24px)]">
           <p className="text-secondary-strong text-xs leading-4 font-black tracking-[0.08em]">
             {[
               ACTIVITY_TYPE_LABELS[activity.type],
@@ -168,7 +184,7 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
 
           {activity.description && (
             <p className="text-muted-foreground mt-2.5 text-[15px] leading-[21px]">
-              {activity.description}
+              <PhoneText text={activity.description} />
             </p>
           )}
 
@@ -264,7 +280,7 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
                   >
                     <MapPin className="size-[18px]" />
                   </span>
-                  <span className="flex-1 text-sm leading-[19px] font-bold">
+                  <span className="flex-1 text-sm leading-[19px] font-bold select-text">
                     {activity.address}
                   </span>
                 </div>
@@ -278,7 +294,7 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
                     <Lightbulb className="size-[18px]" />
                   </span>
                   <span className="flex-1 text-sm leading-[19px] font-bold">
-                    {activity.tips}
+                    <PhoneText text={activity.tips} />
                   </span>
                 </div>
               )}
@@ -295,7 +311,9 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
                     href={url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={() => trackDirections('activity', 'activity')}
+                    onClick={(event) =>
+                      openDirections(event, 'activity', 'activity', activity)
+                    }
                   >
                     <Navigation />Y aller
                   </a>

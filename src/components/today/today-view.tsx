@@ -36,7 +36,7 @@ import {
   ActivityNumber,
   Pill,
   TRANSPORT_ICONS,
-  trackDirections,
+  openDirections,
   useApplePlatform,
 } from '@/components/day/day-ui'
 import { DayStrip } from '@/components/today/day-strip'
@@ -136,7 +136,9 @@ function NextStepCard({
               href={url}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => trackDirections('activity', 'today')}
+              onClick={(event) =>
+                openDirections(event, 'activity', 'today', activity)
+              }
               className="bg-card text-primary-strong pressable flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl text-[15px] font-extrabold"
             >
               <Navigation className="size-[18px]" aria-hidden />Y aller
@@ -249,7 +251,7 @@ function TodayDay({ now }: { now: Date }) {
       onTouchStart={swipe.onTouchStart}
       onTouchEnd={swipe.onTouchEnd}
     >
-      <header className="flex items-start gap-3 px-5 pt-[calc(env(safe-area-inset-top)+20px)]">
+      <header className="flex items-start gap-3 px-5 pt-[calc(var(--safe-top)+20px)]">
         <div className="min-w-0 flex-1">
           <p className="text-secondary-strong text-xs font-black tracking-[0.08em]">
             {dayEyebrow(day, index, itinerary.length)}

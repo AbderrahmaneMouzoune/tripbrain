@@ -48,9 +48,10 @@ export const DEFAULT_PROMPT_STATE: InstallPromptState = {
 /**
  * Script injecté très tôt dans le document : `beforeinstallprompt` peut se
  * déclencher avant l'hydratation React, il faut donc le capturer côté HTML puis
- * le relire depuis le provider.
+ * le relire depuis le provider. Rien à capturer dans l'app native (suffixe
+ * user-agent `TripBrainApp/`) : elle est déjà installée.
  */
-export const INSTALL_EVENT_CAPTURE_SCRIPT = `(function(){window.__tbInstallPrompt=window.__tbInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__tbInstallPrompt=e;window.dispatchEvent(new Event('tb:install-available'))});window.addEventListener('appinstalled',function(){window.__tbInstallPrompt=null})})()`
+export const INSTALL_EVENT_CAPTURE_SCRIPT = `(function(){if(/\\bTripBrainApp\\/\\d/.test(navigator.userAgent))return;window.__tbInstallPrompt=window.__tbInstallPrompt||null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();window.__tbInstallPrompt=e;window.dispatchEvent(new Event('tb:install-available'))});window.addEventListener('appinstalled',function(){window.__tbInstallPrompt=null})})()`
 
 /** Événement d'installation Chromium (absent des lib DOM standard). */
 export interface BeforeInstallPromptEvent extends Event {
@@ -68,6 +69,14 @@ declare global {
   }
 }
 
+/** Suffixe user-agent ajouté par l'app native TripBrain (iOS et Android). */
+const NATIVE_APP_USER_AGENT_PATTERN = /\bTripBrainApp\/\d/
+
+/** La page tourne-t-elle dans l'app native, d'après le seul user-agent ? */
+export function isNativeAppUserAgent(userAgent: string): boolean {
+  return NATIVE_APP_USER_AGENT_PATTERN.test(userAgent || '')
+}
+
 /** Navigateurs iOS qui ne savent pas ajouter à l'écran d'accueil (WebViews incluses). */
 const IOS_NON_SAFARI_TOKENS = [
   'CriOS', // Chrome
@@ -82,6 +91,7 @@ const IOS_NON_SAFARI_TOKENS = [
   'Instagram',
   'Line/',
   'MicroMessenger', // WeChat
+  'TripBrainApp/', // WKWebView de l'app native : déjà installée
 ]
 
 /**

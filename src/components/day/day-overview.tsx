@@ -124,7 +124,7 @@ export function DayOverviewStrip({
       <div
         ref={scroller}
         data-swipe-ignore
-        className="flex snap-x scroll-pl-5 gap-2 overflow-x-auto px-5 pt-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x scroll-pl-5 gap-2 overflow-x-auto overscroll-x-contain px-5 pt-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {itinerary.map((day, index) => {
           const isCurrent = index === current

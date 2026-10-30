@@ -1,6 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from 'react'
 import { createPortal } from 'react-dom'
 import {
   Bus,
@@ -18,6 +24,11 @@ import {
 import type { Activity, Transport } from '@/lib/itinerary-data'
 import { useClipboard } from '@/hooks/use-clipboard'
 import { trackEvent } from '@/lib/analytics/client'
+import {
+  isInsideNativeApp,
+  openMapsNatively,
+  type NativeMapsTarget,
+} from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 import { isApplePlatform } from '@/components/day/day-logic'
 
@@ -39,21 +50,67 @@ export const TRANSPORT_ICONS: Record<Transport['type'], LucideIcon> = {
 /**
  * Plans d'Apple sur iPhone et iPad, Google Maps ailleurs. Lu après le montage :
  * le premier rendu ne connaît pas l'appareil.
+ *
+ * Dans l'app native, toujours le lien Google : c'est la forme que le natif
+ * sait lire, et c'est lui qui choisit l'app de cartes installée.
  */
 export function useApplePlatform(): boolean {
   const [apple, setApple] = useState(false)
   useEffect(() => {
-    setApple(isApplePlatform(navigator.userAgent, navigator.maxTouchPoints))
+    setApple(
+      !isInsideNativeApp() &&
+        isApplePlatform(navigator.userAgent, navigator.maxTouchPoints),
+    )
   }, [])
   return apple
 }
 
+type DirectionsTarget = 'activity' | 'transport' | 'accommodation' | 'city'
+type DirectionsSurface =
+  | 'today'
+  | 'day'
+  | 'activity'
+  | 'transport'
+  | 'accommodation'
+  | 'map'
+
 /** Mesure d'usage d'un « Y aller » : le type de lieu, jamais le lieu. */
 export function trackDirections(
-  target: 'activity' | 'transport' | 'accommodation' | 'city',
-  surface: 'today' | 'day' | 'activity' | 'transport' | 'accommodation' | 'map',
+  target: DirectionsTarget,
+  surface: DirectionsSurface,
 ) {
   trackEvent('directions_opened', { target, surface })
+}
+
+/**
+ * Clic sur un lien d'itinéraire : mesuré, puis confié à l'app de cartes du
+ * téléphone quand l'app native sait le faire (nom et coordonnées compris).
+ * Sinon — navigateur, ancienne version de l'app — le lien suit son cours.
+ */
+export function openDirections(
+  event: MouseEvent<HTMLAnchorElement>,
+  target: DirectionsTarget,
+  surface: DirectionsSurface,
+  place: {
+    name?: string
+    address?: string
+    coordinates?: readonly [number, number]
+  },
+  mode: NativeMapsTarget['mode'] = 'directions',
+) {
+  trackDirections(target, surface)
+  const url = event.currentTarget.href
+  if (!url) return
+  const handled = openMapsNatively({
+    mode,
+    name: place.name?.trim() || undefined,
+    address: place.address?.trim() || undefined,
+    coordinates: place.coordinates
+      ? [place.coordinates[0], place.coordinates[1]]
+      : undefined,
+    url,
+  })
+  if (handled) event.preventDefault()
 }
 
 /**
@@ -64,6 +121,7 @@ export function trackDirections(
 export function useCopyToast() {
   const { copy } = useClipboard()
   const [message, setMessage] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(
@@ -75,9 +133,13 @@ export function useCopyToast() {
 
   const copyText = useCallback(
     async (text: string, confirmation = 'Copié') => {
-      await copy(text)
+      // Le presse-papiers peut refuser (WebView sans geste, permission) : on
+      // ne confirme que ce qui a vraiment été copié. L'haptique vient de
+      // `useClipboard`.
+      const copied = await copy(text)
       if (timer.current) clearTimeout(timer.current)
-      setMessage(confirmation)
+      setFailed(!copied)
+      setMessage(copied ? confirmation : 'Copie impossible')
       timer.current = setTimeout(() => setMessage(null), 1800)
     },
     [copy],
@@ -90,11 +152,15 @@ export function useCopyToast() {
           <div
             role="status"
             aria-live="polite"
-            className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+104px)] z-[70] flex justify-center px-4"
+            className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--safe-bottom)+104px)] z-[70] flex justify-center px-4"
           >
             {message && (
               <span className="bg-ink text-ink-foreground animate-pop flex items-center gap-2 rounded-full px-4 py-2.5 text-sm font-extrabold shadow-lg">
-                <Check className="size-4" aria-hidden />
+                {failed ? (
+                  <X className="size-4" aria-hidden />
+                ) : (
+                  <Check className="size-4" aria-hidden />
+                )}
                 {message}
               </span>
             )}

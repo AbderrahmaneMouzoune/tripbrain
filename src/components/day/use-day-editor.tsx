@@ -36,11 +36,18 @@ import {
   type QuickAction,
 } from '@/lib/quick-actions'
 import { trackEvent } from '@/lib/analytics/client'
+import { triggerHaptic } from '@/lib/native-app'
+import { recordHappyMoment } from '@/lib/review-prompt'
 import { useTrip } from '@/components/app/trip-provider'
 import { useEditSession } from '@/components/app/edit-session'
 import { EntityEditSheet } from '@/components/edit/entity-edit-sheet'
 import { useCopyToast } from '@/components/day/day-ui'
-import { findStay, moveActivityTo, type Stay } from '@/components/day/day-logic'
+import {
+  findStay,
+  isDayCompleted,
+  moveActivityTo,
+  type Stay,
+} from '@/components/day/day-logic'
 
 type EditorKind = 'day' | 'activity' | 'transport' | 'accommodation'
 
@@ -113,7 +120,13 @@ export function useDayEditor(dayIndex: number) {
 
   const setStatus = (activityId: string, status: ActivityStatus) => {
     if (!day) return
-    save(setActivityStatus(day, activityId, status))
+    const current = day.activities.find((a) => a.id === activityId)
+    if (!current || (current.status ?? 'planned') === status) return
+    const next = setActivityStatus(day, activityId, status)
+    // Dans l'app : un « fait » se sent, un autre statut se sélectionne.
+    triggerHaptic(status === 'done' ? 'success' : 'selection')
+    if (!isDayCompleted(day) && isDayCompleted(next)) recordHappyMoment()
+    save(next)
   }
   const deleteActivity = (activityId: string) => {
     if (!day) return

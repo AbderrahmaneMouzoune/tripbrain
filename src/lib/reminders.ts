@@ -28,8 +28,13 @@ export interface Reminder {
   id: string
   tripId: string
   kind: ReminderKind
-  /** Horodatage (ms) de l'envoi prévu. */
+  /** Horodatage (ms) de l'envoi prévu, dans le fuseau du calcul. */
   at: number
+  /**
+   * Même échéance en heure murale, sans fuseau (`AAAA-MM-JJTHH:mm:00`) : c'est
+   * elle que l'app native planifie, dans le fuseau où se trouve le téléphone.
+   */
+  localAt: string
   dayIndex: number
   title: string
   body: string
@@ -51,6 +56,76 @@ function at(iso: string, hour: number, minute: number, dayOffset = 0): number {
   date.setDate(date.getDate() + dayOffset)
   date.setHours(hour, minute, 0, 0)
   return date.getTime()
+}
+
+const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/
+
+/**
+ * `AAAA-MM-JJTHH:mm:00` du jour `iso` décalé de `dayOffset`, sans passer par
+ * le fuseau de l'appareil : une heure murale. Le calcul du jour passe par
+ * l'UTC, où un jour dure toujours 24 h (pas de changement d'heure).
+ */
+export function localDateTime(
+  iso: string,
+  hour: number,
+  minute: number,
+  dayOffset = 0,
+): string {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  const match = iso.match(ISO_DAY)
+  const day = match
+    ? new Date(Date.UTC(+match[1], +match[2] - 1, +match[3] + dayOffset))
+    : null
+  if (!day || Number.isNaN(day.getTime())) {
+    // Date libre : on retombe sur la lecture locale de `parseDayDate`.
+    const local = new Date(at(iso, hour, minute, dayOffset))
+    return `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}T${pad(hour)}:${pad(minute)}:00`
+  }
+  return `${day.getUTCFullYear()}-${pad(day.getUTCMonth() + 1)}-${pad(day.getUTCDate())}T${pad(hour)}:${pad(minute)}:00`
+}
+
+/**
+ * Chemin ouvert au toucher du rappel : le bon voyage, la bonne journée et
+ * l'écran qui va avec (lu par `NativeNavigationHost`).
+ */
+export function reminderPath(
+  reminder: Pick<Reminder, 'tripId' | 'dayIndex' | 'kind'>,
+): string {
+  const params = new URLSearchParams({
+    trip: reminder.tripId,
+    day: String(reminder.dayIndex),
+    open: reminder.kind,
+  })
+  return `/?${params.toString()}`
+}
+
+/** Rappel tel que l'app native le planifie (voir `syncNativeReminders`). */
+export interface NativeReminderPayload {
+  id: string
+  title: string
+  body: string
+  at: string
+  path: string
+}
+
+/**
+ * Rappels à confier au téléphone : seulement ceux à venir, en heure murale.
+ * « À venir » se juge sur l'heure murale relue dans le fuseau actuel : après
+ * un changement de pays, c'est elle qui compte, pas l'instant du calcul.
+ */
+export function toNativeReminders(
+  reminders: readonly Reminder[],
+  now: number,
+): NativeReminderPayload[] {
+  return reminders
+    .filter((reminder) => new Date(reminder.localAt).getTime() > now)
+    .map((reminder) => ({
+      id: reminder.id,
+      title: reminder.title,
+      body: reminder.body,
+      at: reminder.localAt,
+      path: reminderPath(reminder),
+    }))
 }
 
 /** « 07:53 » si l'heure est lisible, sinon rien. */
@@ -97,6 +172,7 @@ export function computeReminders(
         tripId,
         kind: 'transport-eve',
         at: at(day.date, hour, minute, -1),
+        localAt: localDateTime(day.date, hour, minute, -1),
         dayIndex,
         title: `Demain : ${lowerFirst(transportLabel(day.transport))}`,
         body: departure
@@ -113,6 +189,7 @@ export function computeReminders(
         tripId,
         kind: 'morning',
         at: at(day.date, hour, minute),
+        localAt: localDateTime(day.date, hour, minute),
         dayIndex,
         title: `Aujourd’hui : ${day.title || day.city}`,
         body:
@@ -136,6 +213,7 @@ export function computeReminders(
         tripId,
         kind: 'check-in',
         at: at(day.date, hour, minute),
+        localAt: localDateTime(day.date, hour, minute),
         dayIndex,
         title: `Check-in : ${stay.name}`,
         body: stay.address || 'L’adresse est dans la fiche de l’hébergement.',

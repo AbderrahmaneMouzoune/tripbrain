@@ -2,27 +2,40 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Copy, Sun, SunDim, X } from 'lucide-react'
-import type { ScreenProps } from '@/components/app/screen-props'
+import {
+  useScreenStatusBar,
+  type ScreenProps,
+} from '@/components/app/screen-props'
 import { useTrip } from '@/components/app/trip-provider'
 import { MobileScreen } from '@/components/mobile/mobile-screen'
 import { Button } from '@/components/ui/button'
 import { trackEvent } from '@/lib/analytics/client'
+import { hasNativeCapability, setNativeKeepAwake } from '@/lib/native-app'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 import { findStay } from '@/components/day/day-logic'
 import { useCopyToast } from '@/components/day/day-ui'
 
 type WakeLockState = 'pending' | 'active' | 'unavailable'
 
 /**
- * Garde l'écran allumé tant que le mode chauffeur est ouvert, là où le
- * navigateur le permet (API Wake Lock). Le verrou tombe tout seul quand la
- * page passe en arrière-plan : on le reprend au retour, et on le rend à la
- * fermeture.
+ * Garde l'écran allumé tant que le mode chauffeur est ouvert : par l'app
+ * native quand elle sait le faire, sinon là où le navigateur le permet (API
+ * Wake Lock). Le verrou du navigateur tombe tout seul quand la page passe en
+ * arrière-plan : on le reprend au retour, et on le rend à la fermeture.
  */
 function useScreenWakeLock(): WakeLockState {
   const [state, setState] = useState<WakeLockState>('pending')
   const sentinel = useRef<WakeLockSentinel | null>(null)
 
   useEffect(() => {
+    if (!hasNativeCapability('keepAwake/set')) return
+    setNativeKeepAwake(true)
+    setState('active')
+    return () => setNativeKeepAwake(false)
+  }, [])
+
+  useEffect(() => {
+    if (hasNativeCapability('keepAwake/set')) return
     let disposed = false
     const request = async () => {
       if (!('wakeLock' in navigator)) {
@@ -68,6 +81,7 @@ export function DriverScreen({ screen, onClose }: ScreenProps<'driver'>) {
   const { itinerary } = useTrip()
   const stay = findStay(itinerary, screen.dayIndex)
   const wakeLock = useScreenWakeLock()
+  const native = useIsNativeApp()
   const { copyText, toast } = useCopyToast()
 
   const tracked = useRef(false)
@@ -78,6 +92,8 @@ export function DriverScreen({ screen, onClose }: ScreenProps<'driver'>) {
   }, [wakeLock])
 
   const accommodation = stay?.accommodation
+  // Fond de nuit sous la barre d'état : icônes claires.
+  useScreenStatusBar(accommodation?.address ? 'light' : null)
   if (!accommodation?.address) {
     return (
       <MobileScreen onBack={onClose} backIcon="close" title="Pas d’adresse">
@@ -90,21 +106,24 @@ export function DriverScreen({ screen, onClose }: ScreenProps<'driver'>) {
 
   return (
     <div className="bg-ink text-ink-foreground flex min-h-dvh flex-col">
-      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(env(safe-area-inset-bottom)+24px)]">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(var(--safe-bottom)+24px)]">
         <p
           role="status"
-          className="flex items-center gap-2 px-5 pt-[calc(env(safe-area-inset-top)+20px)] text-[13px] font-extrabold opacity-75"
+          className="flex items-center gap-2 px-5 pt-[calc(var(--safe-top)+20px)] text-[13px] font-extrabold opacity-75"
         >
           {wakeLock === 'unavailable' ? (
             <>
               <SunDim className="size-5 shrink-0" aria-hidden />
-              Pensez à monter la luminosité : ce navigateur ne peut pas garder
-              l’écran allumé.
+              {native
+                ? 'Pensez à monter la luminosité : l’écran peut se mettre en veille.'
+                : 'Pensez à monter la luminosité : ce navigateur ne peut pas garder l’écran allumé.'}
             </>
           ) : (
             <>
               <Sun className="size-5 shrink-0" aria-hidden />
-              L’écran reste allumé tant que cette page est ouverte.
+              {native
+                ? 'L’écran reste allumé tant que cette fiche est ouverte.'
+                : 'L’écran reste allumé tant que cette page est ouverte.'}
             </>
           )}
         </p>
@@ -113,7 +132,7 @@ export function DriverScreen({ screen, onClose }: ScreenProps<'driver'>) {
           <p className="text-secondary-strong text-[13px] font-black tracking-[0.08em]">
             ADRESSE
           </p>
-          <p className="mt-2 text-[34px] leading-[1.15] font-black break-words">
+          <p className="mt-2 text-[34px] leading-[1.15] font-black break-words select-text">
             {accommodation.address}
           </p>
         </div>

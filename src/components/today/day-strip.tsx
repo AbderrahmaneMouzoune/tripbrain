@@ -42,7 +42,7 @@ export const DayStrip = forwardRef<
     <nav aria-label="Jours" ref={ref} data-swipe-ignore className="mt-3.5">
       <div
         ref={scroller}
-        className="flex snap-x gap-2 overflow-x-auto px-5 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x gap-2 overflow-x-auto overscroll-x-contain px-5 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {itinerary.map((day, index) => {
           const isSelected = index === selected

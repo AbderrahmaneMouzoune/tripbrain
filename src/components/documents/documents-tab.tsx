@@ -18,6 +18,7 @@ import {
   PackageOpen,
   Plus,
   Search,
+  Share2,
   Ticket,
   Trash2,
   X,
@@ -38,6 +39,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useDocuments, type StoredFile } from '@/hooks/use-documents'
+import { useIsNativeApp } from '@/hooks/use-native-app'
 import { trackEvent } from '@/lib/analytics/client'
 import { documentKind, documentKindOf } from '@/lib/analytics/metrics'
 import {
@@ -157,7 +159,7 @@ export function DocumentsTab(_props: {}) {
   }
 
   const header = (
-    <header className="flex items-start gap-3 px-5 pt-[calc(env(safe-area-inset-top)+20px)]">
+    <header className="flex items-start gap-3 px-5 pt-[calc(var(--safe-top)+20px)]">
       <div className="min-w-0 flex-1">
         <h1 className="font-display text-[30px] leading-[1.1]">Documents</h1>
         {files.length > 0 && (
@@ -240,7 +242,7 @@ export function DocumentsTab(_props: {}) {
         <button
           type="button"
           onClick={() => push({ kind: 'add-document' })}
-          className="bg-primary text-primary-foreground pressable animate-pop focus-visible:ring-ring/50 fixed right-5 bottom-[calc(100px+env(safe-area-inset-bottom))] z-30 flex h-14 items-center gap-2 rounded-full pr-[22px] pl-[18px] text-base font-extrabold shadow-[0_10px_24px_rgba(29,95,224,0.38)] outline-none focus-visible:ring-[3px]"
+          className="bg-primary text-primary-foreground pressable animate-pop focus-visible:ring-ring/50 fixed right-5 bottom-[calc(100px+var(--safe-bottom))] z-30 flex h-14 items-center gap-2 rounded-full pr-[22px] pl-[18px] text-base font-extrabold shadow-[0_10px_24px_rgba(29,95,224,0.38)] outline-none focus-visible:ring-[3px]"
         >
           <Plus aria-hidden className="size-5" strokeWidth={2.5} />
           Ajouter
@@ -480,7 +482,7 @@ function DocumentList({ files }: { files: StoredFile[] }) {
       <div
         role="group"
         aria-label="Filtrer par type"
-        className="mt-3 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none]"
+        className="mt-3 flex gap-2 overflow-x-auto overscroll-x-contain px-5 pb-1 [scrollbar-width:none]"
       >
         <Chip
           pressed={category === null}
@@ -697,6 +699,8 @@ interface DocumentItemProps {
 }
 
 function DocumentMenu({ file, onOpen, onLink, onDelete }: DocumentItemProps) {
+  // Dans l'app, « télécharger » ouvre la feuille de partage du système.
+  const native = useIsNativeApp()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -717,8 +721,8 @@ function DocumentMenu({ file, onOpen, onLink, onDelete }: DocumentItemProps) {
           className="min-h-11"
           onSelect={() => downloadDocument(file)}
         >
-          <Download aria-hidden />
-          Télécharger
+          {native ? <Share2 aria-hidden /> : <Download aria-hidden />}
+          {native ? 'Enregistrer ou partager…' : 'Télécharger'}
         </DropdownMenuItem>
         <DropdownMenuItem className="min-h-11" onSelect={onLink}>
           <Link2 aria-hidden />

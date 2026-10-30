@@ -8,6 +8,7 @@ import {
   type AppTab,
 } from '@/components/app/navigation'
 import { useEditSession } from '@/components/app/edit-session'
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 const TABS: {
@@ -22,8 +23,7 @@ const TABS: {
 ]
 
 /** Hauteur réservée en bas des onglets pour ne rien cacher sous la barre. */
-export const TAB_BAR_SPACER =
-  'h-[calc(84px+env(safe-area-inset-bottom))]' as const
+export const TAB_BAR_SPACER = 'h-[calc(84px+var(--safe-bottom))]' as const
 
 /**
  * La barre passe-t-elle au-dessus de l'écran empilé du dessus ? Oui pour les
@@ -63,6 +63,13 @@ export function BottomTabBar() {
   // édition et on change d'onglet ; avec des modifications, le récapitulatif
   // s'ouvre d'abord pour enregistrer ou annuler — rien ne se perd en route.
   const goTo = (id: AppTab) => {
+    triggerHaptic('selection')
+    // Onglet déjà affiché sans écran par-dessus : retour en haut, comme les
+    // barres d'onglets natives.
+    if (id === tab && stack.length === 0 && !isEditing) {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
     if (isEditing) {
       if (pendingChanges > 0) {
         setPendingTab(id)
@@ -87,7 +94,7 @@ export function BottomTabBar() {
         overScreens ? 'z-[49]' : 'z-40',
       )}
     >
-      <div className="mx-auto flex max-w-xl px-2 pt-2 pb-[calc(env(safe-area-inset-bottom)+10px)]">
+      <div className="mx-auto flex max-w-xl px-2 pt-2 pb-[calc(var(--safe-bottom)+10px)]">
         {TABS.map(({ id, label, icon: Icon }) => {
           const active = tab === id
           return (

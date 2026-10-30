@@ -15,12 +15,20 @@ import {
   FlashlightOff,
   KeyRound,
   Link2,
+  Settings,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SHARE_CODE_LENGTH, type IncomingShare } from '@/lib/share'
 import { cn } from '@/lib/utils'
 import { parseShareInput } from '@/components/receive/share-input'
+import {
+  isNativeApp,
+  openNativeSettings,
+  triggerHaptic,
+} from '@/lib/native-app'
+import { useIsNativeApp } from '@/hooks/use-native-app'
+import { useScreenStatusBar } from '@/components/app/screen-props'
 
 /** API de détection native (Chrome Android, Safari récent) : absente des types DOM. */
 interface NativeBarcodeDetector {
@@ -88,6 +96,11 @@ export function QrScanStep({
   const [pasteValue, setPasteValue] = useState('')
   const [pasteError, setPasteError] = useState<string | null>(null)
   const pasteInputId = useId()
+  // Dans l'app, la caméra se règle dans les réglages du téléphone, pas du navigateur.
+  const native = useIsNativeApp()
+  // Fond noir de la caméra : icônes claires dans la barre d'état. L'étape est
+  // démontée quand on la quitte, ce qui rend la main au style par défaut.
+  useScreenStatusBar('light')
 
   // Le dernier `onResult` reçu, sans relancer la caméra quand il change.
   const onResultRef = useRef(onResult)
@@ -106,6 +119,7 @@ export function QrScanStep({
       if (!incoming || doneRef.current) return false
       doneRef.current = true
       stopCamera()
+      if (via === 'scan') triggerHaptic('success')
       onResultRef.current(incoming, via)
       return true
     },
@@ -261,7 +275,7 @@ export function QrScanStep({
       />
       <div aria-hidden className="absolute inset-0 bg-black/30" />
 
-      <div className="relative z-10 mx-auto flex w-full max-w-xl items-center justify-between px-4 pt-[calc(env(safe-area-inset-top)+12px)]">
+      <div className="relative z-10 mx-auto flex w-full max-w-xl items-center justify-between px-4 pt-[calc(var(--safe-top)+12px)]">
         <button
           type="button"
           onClick={onBack}
@@ -309,9 +323,24 @@ export function QrScanStep({
             </p>
             <p className="text-sm leading-relaxed text-white/80">
               {camera === 'denied'
-                ? 'Autorisez la caméra pour ce site dans les réglages du navigateur, ou saisissez le code affiché sous le QR code.'
-                : 'Ce navigateur ne peut pas utiliser la caméra ici. Saisissez plutôt le code affiché sous le QR code.'}
+                ? native
+                  ? 'Autorisez la caméra pour TripBrain dans les réglages du téléphone, ou saisissez le code affiché sous le QR code.'
+                  : 'Autorisez la caméra pour ce site dans les réglages du navigateur, ou saisissez le code affiché sous le QR code.'
+                : native
+                  ? 'La caméra n’est pas disponible ici. Saisissez plutôt le code affiché sous le QR code.'
+                  : 'Ce navigateur ne peut pas utiliser la caméra ici. Saisissez plutôt le code affiché sous le QR code.'}
             </p>
+            {camera === 'denied' && native && isNativeApp() && (
+              <Button
+                size="lg2"
+                variant="ghost"
+                className="mt-1 text-white hover:bg-white/10 hover:text-white"
+                onClick={openNativeSettings}
+              >
+                <Settings aria-hidden />
+                Ouvrir les réglages
+              </Button>
+            )}
             <Button
               size="lg2"
               className="mt-1 bg-white text-black hover:bg-white/90"
@@ -345,7 +374,7 @@ export function QrScanStep({
         )}
       </div>
 
-      <div className="bg-background text-foreground animate-sheet relative z-10 mx-auto flex w-full max-w-xl flex-col gap-2.5 rounded-t-[28px] px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+24px)]">
+      <div className="bg-background text-foreground animate-sheet relative z-10 mx-auto flex w-full max-w-xl flex-col gap-2.5 rounded-t-[28px] px-5 pt-5 pb-[calc(var(--safe-bottom)+24px)]">
         <p className="text-muted-foreground mb-1 text-[13px] font-extrabold">
           Pas de QR code sous la main ?
         </p>

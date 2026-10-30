@@ -55,9 +55,17 @@ export function BottomSheet({
             <DrawerDescription className="sr-only">{title}</DrawerDescription>
           )}
         </DrawerHeader>
-        <div className="stagger overflow-y-auto px-5 pb-4">{children}</div>
+        <div
+          className={cn(
+            'stagger overflow-y-auto px-5',
+            // Sans pied, le contenu touche le bas : on dégage le home indicator.
+            footer ? 'pb-4' : 'pb-[calc(var(--safe-bottom)+16px)]',
+          )}
+        >
+          {children}
+        </div>
         {footer && (
-          <DrawerFooter className="px-5 pt-2 pb-[calc(env(safe-area-inset-bottom)+20px)]">
+          <DrawerFooter className="px-5 pt-2 pb-[calc(var(--safe-bottom)+20px)]">
             {footer}
           </DrawerFooter>
         )}

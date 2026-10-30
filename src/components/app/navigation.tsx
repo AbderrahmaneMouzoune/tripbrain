@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react'
 import { trackEvent } from '@/lib/analytics/client'
+import { triggerHaptic } from '@/lib/native-app'
 
 /** Les quatre onglets de la barre du bas. */
 export type AppTab = 'today' | 'program' | 'map' | 'documents'
@@ -82,7 +83,12 @@ interface NavigationValue {
   setTab: (tab: AppTab) => void
   /** Journée consultée dans Aujourd'hui / Programme / Carte. */
   selectedDay: number
-  selectDay: (index: number, method?: DayChangeMethod) => void
+  /** `silent` : pas de retour haptique (la journée s'ouvre dans un nouvel écran). */
+  selectDay: (
+    index: number,
+    method?: DayChangeMethod,
+    options?: { silent?: boolean },
+  ) => void
   /** Sens du dernier changement de journée, pour l'animation de glissement. */
   dayDirection: 'next' | 'previous' | null
   /** Pile des écrans ouverts au-dessus des onglets ; le dernier est visible. */
@@ -117,22 +123,44 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
     if (stackRef.current.length > 0) closeAllRef.current()
   }, [])
 
-  const selectDay = useCallback((index: number, method?: DayChangeMethod) => {
-    setSelectedDay((current) => {
-      if (current === index) return current
-      setDayDirection(index > current ? 'next' : 'previous')
-      if (method) {
-        const direction =
-          Math.abs(index - current) > 1
-            ? 'jump'
-            : index > current
-              ? 'next'
-              : 'previous'
-        trackEvent('day_changed', { method, direction })
+  // Journée affichée, lue hors du `setState` : un effet dans l'updater serait
+  // rejoué en double par le StrictMode.
+  const selectedDayRef = useRef(selectedDay)
+  selectedDayRef.current = selectedDay
+
+  const selectDay = useCallback(
+    (
+      index: number,
+      method?: DayChangeMethod,
+      options?: { silent?: boolean },
+    ) => {
+      // Retour haptique pour les gestes directs seulement (glisser, flèches,
+      // frise) ; pas pour la carte ni les changements faits par l'app.
+      if (
+        !options?.silent &&
+        index !== selectedDayRef.current &&
+        (method === 'swipe' || method === 'arrow' || method === 'timeline')
+      ) {
+        triggerHaptic('selection')
       }
-      return index
-    })
-  }, [])
+      selectedDayRef.current = index
+      setSelectedDay((current) => {
+        if (current === index) return current
+        setDayDirection(index > current ? 'next' : 'previous')
+        if (method) {
+          const direction =
+            Math.abs(index - current) > 1
+              ? 'jump'
+              : index > current
+                ? 'next'
+                : 'previous'
+          trackEvent('day_changed', { method, direction })
+        }
+        return index
+      })
+    },
+    [],
+  )
 
   // Chaque écran empilé ajoute une entrée d'historique : le bouton retour du
   // téléphone ferme l'écran du dessus au lieu de quitter l'application.

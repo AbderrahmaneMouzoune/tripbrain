@@ -25,6 +25,45 @@ import {
 } from '@/lib/analytics/consent'
 import type { AnalyticsEventName, TrackArgs } from '@/lib/analytics/events'
 import { ConsentBanner } from '@/components/analytics/consent-banner'
+import { isInsideNativeApp } from '@/lib/native-app'
+
+/**
+ * Fin de l'arrivée d'un premier voyage (écran « Voyage prêt » refermé) : dans
+ * l'app native, la première demande de consentement attend ce moment.
+ */
+export const FIRST_TRIP_OPENED_EVENT = 'tb:first-trip-opened'
+
+/** L'app native a déjà été lancée une fois sur cet appareil. */
+const NATIVE_LAUNCHED_KEY = 'tripbrain-native-launched'
+
+/**
+ * Dans l'app native, la toute première demande n'arrive pas par-dessus le
+ * premier écran : seulement une fois un voyage ouvert, ou au lancement
+ * suivant. Rien n'est mesuré sans accord, le report ne change donc rien à la
+ * mesure. Le navigateur garde la bannière immédiate.
+ */
+function shouldDeferFirstAsk(): boolean {
+  // Décision prise une fois par chargement de page : le drapeau est écrit au
+  // premier appel, un remontage (StrictMode en dev) doit retrouver la même
+  // réponse au lieu de lire son propre drapeau.
+  if (deferDecision !== null) return deferDecision
+  deferDecision = computeDeferFirstAsk()
+  return deferDecision
+}
+
+let deferDecision: boolean | null = null
+
+function computeDeferFirstAsk(): boolean {
+  if (!isInsideNativeApp()) return false
+  try {
+    if (localStorage.getItem(NATIVE_LAUNCHED_KEY)) return false
+    localStorage.setItem(NATIVE_LAUNCHED_KEY, '1')
+    return true
+  } catch {
+    // Stockage indisponible : on ne saurait jamais qu'un lancement a eu lieu.
+    return false
+  }
+}
 
 /** D'où vient le choix : utile pour savoir si le réglage est trouvé. */
 export type ConsentSurface = 'banner' | 'settings' | 'privacy_page'
@@ -55,7 +94,20 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
   const [consent, setConsent] = useState<ConsentRecord | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [preferencesOpen, setPreferencesOpen] = useState(false)
+  const [deferred, setDeferred] = useState(false)
   const configured = isAnalyticsConfigured()
+
+  useEffect(() => {
+    if (!configured || readConsent() || !shouldDeferFirstAsk()) return
+    setDeferred(true)
+    const resume = () => {
+      // Le voyage est ouvert : un remontage ultérieur ne reporte plus.
+      deferDecision = false
+      setDeferred(false)
+    }
+    window.addEventListener(FIRST_TRIP_OPENED_EVENT, resume)
+    return () => window.removeEventListener(FIRST_TRIP_OPENED_EVENT, resume)
+  }, [configured])
 
   useEffect(() => {
     if (!configured) {
@@ -111,7 +163,8 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
     [configured, consent, decide, openPreferences],
   )
 
-  const showBanner = configured && isReady && (preferencesOpen || !consent)
+  const showBanner =
+    configured && isReady && (preferencesOpen || (!consent && !deferred))
 
   return (
     <AnalyticsContext.Provider value={value}>

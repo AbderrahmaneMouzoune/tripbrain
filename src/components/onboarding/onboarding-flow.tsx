@@ -18,6 +18,14 @@ import { MobileScreen } from '@/components/mobile/mobile-screen'
 import { Button } from '@/components/ui/button'
 import { useTrip } from '@/components/app/trip-provider'
 import { useAppNav } from '@/components/app/navigation'
+import {
+  ScreenStatusBarContext,
+  type ScreenStatusBarRequest,
+} from '@/components/app/screen-props'
+import {
+  setNativeStatusBarStyle,
+  type NativeStatusBarStyle,
+} from '@/lib/native-app'
 import { trackEvent } from '@/lib/analytics/client'
 import { itinerary as demoItinerary } from '@/lib/itinerary-data'
 import type { Transport } from '@/lib/itinerary-data'
@@ -55,8 +63,23 @@ const TRANSPORT_ICONS: Record<Transport['type'], typeof Plane> = {
  * prend le relais au-dessus des onglets.
  */
 export function OnboardingFlow(_props: {}) {
-  const { push } = useAppNav()
+  const { push, stack } = useAppNav()
   const [step, setStep] = useState<Step>({ kind: 'welcome' })
+  // Demande d'une étape enfant au fond particulier (caméra du scan) : même
+  // API que dans `ScreenHost`, l'onboarding n'étant pas un écran empilé.
+  const [childStatusBar, setChildStatusBar] =
+    useState<ScreenStatusBarRequest | null>(null)
+
+  // Barre d'état de l'app native : icônes claires sur le bleu de l'accueil,
+  // foncées sur les étapes à fond clair. Seule source de vérité tant qu'aucun
+  // écran n'est ouvert par-dessus (`ScreenHost` gère alors la sienne) : on la
+  // réaffirme quand la pile se vide.
+  const statusBar: NativeStatusBarStyle =
+    childStatusBar?.style ?? (step.kind === 'welcome' ? 'light' : 'dark')
+  const stackEmpty = stack.length === 0
+  useEffect(() => {
+    if (stackEmpty) setNativeStatusBarStyle(statusBar)
+  }, [statusBar, stackEmpty])
 
   // Première chose vue quand aucun voyage n'est enregistré : savoir combien de
   // visites s'arrêtent là dit si l'arrivée est assez claire.
@@ -67,53 +90,61 @@ export function OnboardingFlow(_props: {}) {
   const toIntention = () => setStep({ kind: 'intention' })
   const onSaved = () => push({ kind: 'trip-ready' })
 
-  switch (step.kind) {
-    case 'welcome':
-      return <WelcomeStep onStart={toIntention} />
-    case 'intention':
-      return (
-        <IntentionStep
-          onBack={() => setStep({ kind: 'welcome' })}
-          onChoose={(choice) => {
-            if (choice === 'generator') push({ kind: 'generator' })
-            else if (choice === 'file') setStep({ kind: 'file' })
-            else setStep({ kind: 'receive', start: { method: choice } })
-          }}
-          onUseClipboard={(incoming) =>
-            setStep({
-              kind: 'receive',
-              start: { incoming, via: 'clipboard' },
-            })
-          }
-        />
-      )
-    case 'receive':
-      return (
-        <ReceiveFlow
-          start={step.start}
-          presentation="onboarding"
-          onExit={toIntention}
-          onSaved={onSaved}
-        />
-      )
-    case 'file':
-      return (
-        <ImportFilePanel
-          onBack={toIntention}
-          progress={{ step: 2, total: 4 }}
-          onParsed={(received) => setStep({ kind: 'file-preview', received })}
-        />
-      )
-    case 'file-preview':
-      return (
-        <TripPreviewStep
-          received={step.received}
-          onBack={() => setStep({ kind: 'file' })}
-          progress={{ step: 3, total: 4 }}
-          onSaved={onSaved}
-        />
-      )
+  const renderStep = () => {
+    switch (step.kind) {
+      case 'welcome':
+        return <WelcomeStep onStart={toIntention} />
+      case 'intention':
+        return (
+          <IntentionStep
+            onBack={() => setStep({ kind: 'welcome' })}
+            onChoose={(choice) => {
+              if (choice === 'generator') push({ kind: 'generator' })
+              else if (choice === 'file') setStep({ kind: 'file' })
+              else setStep({ kind: 'receive', start: { method: choice } })
+            }}
+            onUseClipboard={(incoming) =>
+              setStep({
+                kind: 'receive',
+                start: { incoming, via: 'clipboard' },
+              })
+            }
+          />
+        )
+      case 'receive':
+        return (
+          <ReceiveFlow
+            start={step.start}
+            presentation="onboarding"
+            onExit={toIntention}
+            onSaved={onSaved}
+          />
+        )
+      case 'file':
+        return (
+          <ImportFilePanel
+            onBack={toIntention}
+            progress={{ step: 2, total: 4 }}
+            onParsed={(received) => setStep({ kind: 'file-preview', received })}
+          />
+        )
+      case 'file-preview':
+        return (
+          <TripPreviewStep
+            received={step.received}
+            onBack={() => setStep({ kind: 'file' })}
+            progress={{ step: 3, total: 4 }}
+            onSaved={onSaved}
+          />
+        )
+    }
   }
+
+  return (
+    <ScreenStatusBarContext.Provider value={setChildStatusBar}>
+      {renderStep()}
+    </ScreenStatusBarContext.Provider>
+  )
 }
 
 // ── Bienvenue ─────────────────────────────────────────────────────────────────
@@ -142,7 +173,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
   return (
     <div className="bg-primary relative flex min-h-dvh flex-col overflow-hidden">
       <div className="mx-auto flex w-full max-w-xl flex-col">
-        <div className="animate-rise flex items-center gap-2.5 px-6 pt-[calc(env(safe-area-inset-top)+16px)]">
+        <div className="animate-rise flex items-center gap-2.5 px-6 pt-[calc(var(--safe-top)+16px)]">
           <span className="bg-card text-primary flex size-10 items-center justify-center rounded-xl">
             <Route className="size-[22px]" aria-hidden />
           </span>
@@ -192,7 +223,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
         </div>
       </div>
 
-      <div className="bg-background text-foreground animate-sheet relative z-10 mx-auto flex w-full max-w-xl flex-1 flex-col gap-3.5 rounded-t-[28px] px-6 pt-8 pb-[calc(env(safe-area-inset-bottom)+28px)] [animation-delay:0.1s]">
+      <div className="bg-background text-foreground animate-sheet relative z-10 mx-auto flex w-full max-w-xl flex-1 flex-col gap-3.5 rounded-t-[28px] px-6 pt-8 pb-[calc(var(--safe-bottom)+28px)] [animation-delay:0.1s]">
         <h1 className="font-display text-[31px] leading-[1.12]">
           Tout votre voyage, même sans réseau.
         </h1>

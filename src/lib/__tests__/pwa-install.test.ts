@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_PROMPT_STATE,
+  INSTALL_EVENT_CAPTURE_SCRIPT,
   SNOOZE_DURATIONS_MS,
   canAutoPrompt,
   detectInstallPlatform,
+  isNativeAppUserAgent,
   markInstalledState,
   optOutPromptState,
   parsePromptState,
@@ -216,5 +218,53 @@ describe('resolveInstallGuide', () => {
     expect(resolveInstallGuide('ios-browser', false)).toBe('ios-browser')
     expect(resolveInstallGuide('android', false)).toBe('manual')
     expect(resolveInstallGuide('desktop', false)).toBe('manual')
+  })
+})
+
+describe('app native TripBrain (suffixe user-agent)', () => {
+  const IPHONE_APP =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 TripBrainApp/1.0.0'
+  const ANDROID_APP =
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/123.0.0.0 Mobile Safari/537.36 TripBrainApp/1.2.0'
+
+  it('recognises the app user agent', () => {
+    expect(isNativeAppUserAgent(IPHONE_APP)).toBe(true)
+    expect(isNativeAppUserAgent(ANDROID_APP)).toBe(true)
+    expect(isNativeAppUserAgent(IPHONE_SAFARI)).toBe(false)
+    expect(isNativeAppUserAgent(ANDROID_CHROME)).toBe(false)
+    expect(isNativeAppUserAgent('')).toBe(false)
+  })
+
+  it('never treats the app WKWebView as an installable Safari', () => {
+    const platform = detectInstallPlatform(IPHONE_APP)
+    expect(platform).not.toBe('ios-safari')
+    expect(
+      canAutoPrompt({
+        state: DEFAULT_PROMPT_STATE,
+        now: 1_700_000_000_000,
+        isMobile: true,
+        isStandalone: false,
+        platform,
+        hasNativePrompt: false,
+        isEngaged: true,
+      }),
+    ).toBe(false)
+  })
+
+  it('skips the install event capture inside the app', () => {
+    expect(INSTALL_EVENT_CAPTURE_SCRIPT).toContain('TripBrainApp')
+    const run = (userAgent: string) => {
+      const listeners: string[] = []
+      const fakeWindow = {
+        addEventListener: (type: string) => listeners.push(type),
+      } as unknown as Window
+      new Function('window', 'navigator', INSTALL_EVENT_CAPTURE_SCRIPT)(
+        fakeWindow,
+        { userAgent },
+      )
+      return listeners
+    }
+    expect(run(IPHONE_APP)).toEqual([])
+    expect(run(ANDROID_CHROME)).toContain('beforeinstallprompt')
   })
 })

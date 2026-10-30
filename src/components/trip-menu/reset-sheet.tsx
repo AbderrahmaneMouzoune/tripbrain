@@ -142,7 +142,7 @@ export function ResetSheet({ onClose }: ScreenProps<'reset'>) {
                 ? `Les ${plural(trips.length, 'voyage')} enregistrés`
                 : 'Le voyage enregistré'}{' '}
               et leurs documents seront supprimés de ce téléphone. Vous
-              reviendrez à l’écran d’accueil.
+              reviendrez à l’écran de bienvenue de TripBrain.
             </AlertDialogDescription>
           </>
         )}

@@ -6,6 +6,8 @@ import { MobileScreen } from '@/components/mobile/mobile-screen'
 import { Button } from '@/components/ui/button'
 import { useTrip } from '@/components/app/trip-provider'
 import { trackEvent } from '@/lib/analytics/client'
+import { triggerHaptic } from '@/lib/native-app'
+import { recordHappyMoment } from '@/lib/review-prompt'
 import {
   importFailureReason,
   itineraryVolume,
@@ -215,6 +217,8 @@ export function TripPreviewStep({
           ...itineraryVolume(days),
         })
       }
+      triggerHaptic('success')
+      recordHappyMoment()
       onSaved()
     } catch (err) {
       if (received.analytics.kind === 'share') {
@@ -228,6 +232,7 @@ export function TripPreviewStep({
           reason: importFailureReason(err),
         })
       }
+      triggerHaptic('error')
       setError(
         err instanceof Error ? err.message : 'L’enregistrement a échoué.',
       )

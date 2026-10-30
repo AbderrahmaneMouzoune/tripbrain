@@ -3,10 +3,12 @@
 import * as React from 'react'
 import * as TabsPrimitive from '@radix-ui/react-tabs'
 
+import { triggerHaptic } from '@/lib/native-app'
 import { cn } from '@/lib/utils'
 
 function Tabs({
   className,
+  onValueChange,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.Root>) {
   return (
@@ -14,6 +16,10 @@ function Tabs({
       data-slot="tabs"
       className={cn('flex flex-col gap-2', className)}
       {...props}
+      onValueChange={(value) => {
+        triggerHaptic('selection')
+        onValueChange?.(value)
+      }}
     />
   )
 }

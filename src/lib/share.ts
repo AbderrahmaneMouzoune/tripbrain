@@ -13,6 +13,7 @@
 import { encode, decode } from '@msgpack/msgpack'
 import { deflateSync, inflateSync } from 'fflate'
 import { isGroupId as readGroupId, readGroupInvite } from '@/lib/group-sync'
+import { isNativeApp, shareLinkNatively } from '@/lib/native-app'
 import type { DayItinerary } from '@/lib/itinerary-data'
 
 /** Au-delà, un QR code inline devient trop dense pour être scanné confortablement. */
@@ -153,6 +154,9 @@ export type NativeShareOutcome =
  * qu'après le montage, sinon l'hydratation ne correspondrait pas.
  */
 export function canShareNatively(content?: NativeShareContent): boolean {
+  // Dans l'app native, la feuille de partage du système passe par le bridge :
+  // `navigator.share` n'existe pas dans la WebView Android.
+  if (isNativeApp()) return true
   if (typeof navigator === 'undefined') return false
   if (typeof navigator.share !== 'function') return false
   // `canShare` dit ce que la plateforme accepte réellement de transmettre.
@@ -175,6 +179,7 @@ export function canShareNatively(content?: NativeShareContent): boolean {
 export async function shareNatively(
   content: NativeShareContent,
 ): Promise<NativeShareOutcome> {
+  if (isNativeApp()) return shareLinkNatively(content)
   if (!canShareNatively(content)) return 'unavailable'
 
   try {

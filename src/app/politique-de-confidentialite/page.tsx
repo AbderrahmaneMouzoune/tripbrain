@@ -77,7 +77,8 @@ export default function PrivacyPolicyPage() {
         <p>
           {product.name} n’a pas de compte, pas de serveur d’application et pas
           de base de données centrale. Tout est écrit dans le stockage de ton
-          navigateur (IndexedDB) et n’en bouge pas :
+          navigateur (IndexedDB) — ou de l’application TripBrain, qui affiche la
+          même page — et n’en bouge pas :
         </p>
         <LegalDefinitionList
           items={[
@@ -106,9 +107,54 @@ export default function PrivacyPolicyPage() {
         <p>
           Ces données restent jusqu’à ce que tu les effaces : « Supprimer ce
           voyage », dans le menu du voyage (bouton « … »), efface un voyage ou
-          tout ce qui est enregistré sur l’appareil, et vider les données du
-          site depuis ton navigateur produit le même résultat. Personne d’autre,
-          éditeur compris, n’y a accès.
+          tout ce qui est enregistré sur l’appareil. Vider les données du site
+          depuis ton navigateur, ou désinstaller l’application, produit le même
+          résultat. Personne d’autre, éditeur compris, n’y a accès.
+        </p>
+      </LegalSection>
+
+      <LegalSection
+        id="application"
+        title="Autorisations de l’application mobile"
+      >
+        <p>
+          L’application iOS et Android ne demande une autorisation qu’au moment
+          où tu utilises la fonction qui en a besoin. Tu peux la refuser ou la
+          retirer à tout moment dans les réglages du téléphone : seule la
+          fonction concernée cesse de marcher.
+        </p>
+        <LegalDefinitionList
+          items={[
+            {
+              term: 'Appareil photo',
+              description:
+                'Lire le QR code d’un voyage partagé. L’image n’est ni enregistrée ni envoyée.',
+            },
+            {
+              term: 'Position',
+              description:
+                'Te situer sur la carte du voyage, quand tu le demandes. Elle n’est ni conservée ni envoyée à TripBrain.',
+            },
+            {
+              term: 'Photos et fichiers',
+              description:
+                'Joindre un billet ou une réservation que tu choisis. Le fichier reste sur l’appareil.',
+            },
+            {
+              term: 'Calendrier',
+              description:
+                'Ajouter les journées du voyage à ton calendrier, à ta demande. TripBrain n’y lit rien.',
+            },
+            {
+              term: 'Notifications',
+              description:
+                'Les rappels que tu as activés, programmés sur le téléphone lui-même : aucun serveur d’envoi.',
+            },
+          ]}
+        />
+        <p>
+          Désinstaller l’application efface tout ce qu’elle a enregistré sur
+          l’appareil. Exporte ton voyage avant si tu veux le garder.
         </p>
       </LegalSection>
 

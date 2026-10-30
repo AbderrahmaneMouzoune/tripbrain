@@ -342,6 +342,8 @@ export interface DepartureChecklistInput {
   notifications: 'granted' | 'denied' | 'default' | 'unsupported'
   /** Au moins un rappel est demandé dans les réglages. */
   remindersEnabled: boolean
+  /** Dans l'app native : un refus se lève dans les réglages du téléphone. */
+  native?: boolean
   transports: Transport['type'][]
   /** Trajets qui ont un billet rangé dans Documents. */
   ticketsLinked: number
@@ -404,7 +406,9 @@ export function buildDepartureChecklist(
             label: 'Activer les rappels',
             detail:
               input.notifications === 'denied'
-                ? 'Notifications refusées dans le navigateur'
+                ? input.native
+                  ? 'Notifications refusées dans les réglages du téléphone'
+                  : 'Notifications refusées dans le navigateur'
                 : 'La veille des trajets et chaque matin',
             done: false,
           },
@@ -701,6 +705,18 @@ export function reorderTarget(
     if (index !== from && mid < draggedCenter) target++
   })
   return target
+}
+
+/**
+ * Journée bouclée : chaque étape est faite ou annulée, et au moins une faite.
+ * Une journée vide ou tout annulée ne compte pas comme un succès.
+ */
+export function isDayCompleted(day: DayItinerary): boolean {
+  return (
+    day.activities.length > 0 &&
+    day.activities.every((a) => (a.status ?? 'planned') !== 'planned') &&
+    day.activities.some((a) => a.status === 'done')
+  )
 }
 
 /** Place une activité à une position donnée de la journée. */

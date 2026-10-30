@@ -15,6 +15,11 @@
 
 import { trackEvent } from '@/lib/analytics/client'
 import {
+  isNativeApp,
+  setNativeKeepAwake,
+  triggerHaptic,
+} from '@/lib/native-app'
+import {
   isAbortError,
   streamGeneration,
   GeneratorRequestError,
@@ -183,6 +188,59 @@ function forgetDraft(): void {
 
 let draft: GeneratorDraft = loadDraft()
 let controller: AbortController | null = null
+
+/**
+ * Message affiché quand l'app native est passée en arrière-plan pendant la
+ * génération : le système suspend alors la WebView et la connexion tombe.
+ */
+export const BACKGROUND_INTERRUPTED_MESSAGE =
+  'La génération a été interrompue quand l’app est passée en arrière-plan. Relancez-la en gardant TripBrain ouverte.'
+
+/**
+ * Message de l'échec à afficher. Une coupure réseau survenue après un passage
+ * en arrière-plan dans l'app a une cause connue : on la dit plutôt que
+ * d'accuser le réseau.
+ */
+export function failureMessage(
+  reason: GeneratorFailureReason,
+  context: { native: boolean; wentHidden: boolean },
+  fallback = FAILURE_MESSAGES[reason],
+): string {
+  if (reason === 'network' && context.native && context.wentHidden) {
+    return BACKGROUND_INTERRUPTED_MESSAGE
+  }
+  return fallback
+}
+
+/** La page a-t-elle été masquée depuis le début de la génération en cours ? */
+let wentHidden = false
+let watchingVisibility = false
+
+function onVisibilityChange(): void {
+  if (document.visibilityState === 'hidden') wentHidden = true
+}
+
+/**
+ * Début ou fin d'une génération : l'écran reste allumé dans l'app (le
+ * téléphone posé ne doit pas couper la requête) et l'on note un éventuel
+ * passage en arrière-plan.
+ */
+function setRunning(active: boolean): void {
+  if (typeof document === 'undefined' || active === watchingVisibility) return
+  watchingVisibility = active
+  setNativeKeepAwake(active)
+  if (active) {
+    document.addEventListener('visibilitychange', onVisibilityChange)
+  } else {
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+  }
+}
+
+/** Retour haptique de fin, seulement si le voyageur regarde l'écran. */
+function hapticIfVisible(kind: 'success' | 'error'): void {
+  if (typeof document === 'undefined') return
+  if (document.visibilityState === 'visible') triggerHaptic(kind)
+}
 const listeners = new Set<() => void>()
 
 function emit(): void {
@@ -246,6 +304,8 @@ async function notifyReady(title: string | undefined): Promise<void> {
   if (typeof window === 'undefined' || typeof Notification === 'undefined') {
     return
   }
+  // La WebView de l'app n'affiche pas ces notifications : on ne tente rien.
+  if (isNativeApp()) return
   if (Notification.permission !== 'granted') return
   if (document.visibilityState !== 'hidden') return
 
@@ -272,11 +332,18 @@ function fail(
   retryAfter?: number,
 ): void {
   trackEvent('generator_failed', { step: 'generate', reason })
+  const shown = failureMessage(
+    reason,
+    { native: isNativeApp(), wentHidden },
+    message,
+  )
+  setRunning(false)
   setState({
     status: 'error',
     current: null,
-    error: { reason, message, retryAfter },
+    error: { reason, message: shown, retryAfter },
   })
+  hapticIfVisible('error')
 }
 
 /**
@@ -287,6 +354,9 @@ export async function startGeneration(request: GenerateRequest): Promise<void> {
   controller?.abort()
   const own = new AbortController()
   controller = own
+  wentHidden =
+    typeof document !== 'undefined' && document.visibilityState === 'hidden'
+  setRunning(true)
 
   state = {
     ...IDLE,
@@ -331,6 +401,7 @@ export async function startGeneration(request: GenerateRequest): Promise<void> {
     }
 
     controller = null
+    setRunning(false)
     setState({
       status: 'done',
       current: null,
@@ -345,11 +416,15 @@ export async function startGeneration(request: GenerateRequest): Promise<void> {
       mode: request.mode,
       days_count: result.itinerary.days.length,
     })
+    hapticIfVisible('success')
     void notifyReady(result.itinerary.tripTitle)
   } catch (error) {
     if (controller !== own) return
     controller = null
-    if (isAbortError(error)) return
+    if (isAbortError(error)) {
+      setRunning(false)
+      return
+    }
     if (error instanceof GeneratorRequestError) {
       fail(error.reason, error.message, error.retryAfter)
     } else {
@@ -366,6 +441,7 @@ export function stopGeneration(): void {
   if (state.status !== 'running') return
   controller?.abort()
   controller = null
+  setRunning(false)
   const itinerary: GeneratedItinerary | null =
     state.days.length > 0
       ? {
@@ -393,6 +469,7 @@ export function replaceGeneratedItinerary(itinerary: GeneratedItinerary): void {
 export function resetGeneration(): void {
   controller?.abort()
   controller = null
+  setRunning(false)
   state = IDLE
   draft = EMPTY_DRAFT
   forgetDraft()
