@@ -20,6 +20,7 @@ import {
   tooManyTemplateRequests,
 } from '@/lib/template-request'
 import {
+  assertTemplateOwner,
   patchTemplate,
   readTemplate,
   retireTemplate,
@@ -73,19 +74,30 @@ export async function GET(_request: Request, { params }: Context) {
     }
     return Response.json({ template: result.template }, { headers })
   } catch (error) {
-    return templateErrorResponse(error, 'Lecture du modèle impossible. Réessayez.')
+    return templateErrorResponse(
+      error,
+      'Lecture du modèle impossible. Réessayez.',
+    )
   }
 }
 
 export async function PUT(request: Request, { params }: Context) {
   const access = await authorizeWrite(request, params)
   if (access instanceof Response) return access
+  const store = openTemplateStore(getTemplateStore)
+  if (store instanceof Response) return store
+  // Le jeton est vérifié contre son empreinte avant de lire le corps :
+  // `authorizeWrite` n'en contrôle que la forme, et la décompression de
+  // l'itinéraire est le travail le plus coûteux de la route.
+  try {
+    await assertTemplateOwner(store, access.id, access.token)
+  } catch (error) {
+    return templateErrorResponse(error, WRITE_FAILED)
+  }
   const body = await readJsonBody(request)
   if (!body.ok) return templateRejection(body.status, body.error)
   const parsed = parseTemplateUpdate(body.data)
   if (!parsed.ok) return templateRejection(parsed.status, parsed.error)
-  const store = openTemplateStore(getTemplateStore)
-  if (store instanceof Response) return store
 
   try {
     const { template } = await updateTemplate(

@@ -368,6 +368,38 @@ describe('cleanForTemplate', () => {
     )
   })
 
+  it('vide le lien d’un hébergement qui contient sa référence, même saisie avec des espaces', () => {
+    const [stay] = cleanForTemplate(
+      [
+        day(1, {
+          accommodation: hotel({
+            bookingUrl: 'https://hotel.example/stay/4021553117',
+            bookingReference: '4021 553 117',
+          }),
+        }),
+      ],
+      DEFAULT_TEMPLATE_OPTIONS,
+    )
+    expect(stay.accommodation?.bookingUrl).toBe('')
+    expect(stay.accommodation).not.toHaveProperty('bookingReference')
+  })
+
+  it('retire un lien de gestion de billet, même sans référence saisie', () => {
+    const [flight] = cleanForTemplate(
+      [
+        day(1, {
+          transport: transport({
+            type: 'plane',
+            bookingUrl:
+              'https://www.easyjet.com/en/secure/MyEasyJet.mvc/ViewBooking?bookingReference=K7X2PQ1&lastName=Dupont',
+          }),
+        }),
+      ],
+      DEFAULT_TEMPLATE_OPTIONS,
+    )
+    expect(flight.transport).not.toHaveProperty('bookingUrl')
+  })
+
   it('retire la clé d’un lien privé de transport ou d’activité, garde les liens publics', () => {
     const [first, second, third] = cleanForTemplate(
       japanTrip(),
@@ -618,6 +650,14 @@ describe('isPrivateBookingUrl', () => {
     'https://www.example.com/hotels/order_id/88',
     'https://www.example.com/r#confirmed',
     'https://www.example.com/r?q=bn%3D4021553117',
+    // Gestion d'un billet : code de réservation et nom de famille
+    'https://www.easyjet.com/en/secure/MyEasyJet.mvc/ViewBooking?bookingReference=K7X2PQ1&lastName=Dupont',
+    'https://wwws.airfrance.fr/trip?bookingCode=K7X2PQ&lastName=DUPONT',
+    'https://www.sncf-connect.com/app/trips/details?reference=QWERTY&name=DUPONT',
+    'https://www.example.com/check-in?recordLocator=K7X2PQ',
+    'https://www.example.com/trip?booking_reference=K7X2PQ',
+    'https://www.example.com/trip?surname=Dupont&ref=K7X2PQ',
+    'https://www.example.com/trip?email=yanis%40example.com',
     // Pas en http(s), ou avec des identifiants
     'http://kenji:motdepasse@www.example.com/',
     'blob:https://app.tripbrain.fr/6f1c',
@@ -657,6 +697,27 @@ describe('isPrivateBookingUrl', () => {
     expect(isPrivateBookingUrl(url, '  RY88231 ')).toBe(true)
   })
 
+  it('reconnaît la référence même écrite avec d’autres séparateurs', () => {
+    expect(
+      isPrivateBookingUrl(
+        'https://hotel.example/stay/4021553117',
+        '4021 553 117',
+      ),
+    ).toBe(true)
+    expect(
+      isPrivateBookingUrl(
+        'https://hotel.example/stay/4021-553-117',
+        '4021553117',
+      ),
+    ).toBe(true)
+    expect(
+      isPrivateBookingUrl('https://www.example.com/r?id=K7X2PQ', 'k7x-2pq'),
+    ).toBe(true)
+    expect(
+      isPrivateBookingUrl('https://hotel.example/stay/', '4021 553 117'),
+    ).toBe(false)
+  })
+
   it('ignore une référence trop courte pour être significative', () => {
     expect(isPrivateBookingUrl('https://www.example.com/rooms/12', '12')).toBe(
       false,
@@ -664,6 +725,10 @@ describe('isPrivateBookingUrl', () => {
     expect(isPrivateBookingUrl('https://www.example.com/rooms/12', '')).toBe(
       false,
     )
+    // Les séparateurs ne comptent pas dans la longueur.
+    expect(
+      isPrivateBookingUrl('https://www.example.com/rooms/123', '1-2-3'),
+    ).toBe(false)
   })
 })
 

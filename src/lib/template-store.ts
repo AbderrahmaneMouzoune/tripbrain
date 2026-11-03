@@ -11,8 +11,10 @@
 //   index         { entries } — modèles listés seulement, boucle `ifMatch`
 //
 // Ordre d'écriture : la version, puis la méta, puis l'index. La méta ne pointe
-// donc jamais vers une version absente ; si l'index échoue, le modèle manque
-// au sitemap jusqu'à sa prochaine écriture, sans rien casser d'autre.
+// donc jamais vers une version absente. L'index suit toujours la méta
+// stockée, relue au moment de l'écrire (`syncIndex`). S'il échoue sur un
+// ajout, le modèle manque au sitemap jusqu'à sa prochaine écriture ; sur une
+// sortie (masqué, retiré), la requête échoue pour que l'auteur la rejoue.
 //
 // Aucune écriture ne passe `expiresIn` : un modèle reste en ligne tant que son
 // auteur ne le retire pas.
@@ -32,7 +34,9 @@ import { SHARE_APP } from '@/lib/share-store'
 import { cleanForTemplate } from '@/lib/template-clean'
 import {
   MAX_TEMPLATE_TITLE_LENGTH,
+  TEMPLATE_ID_LENGTH,
   createTemplateId,
+  idSuffixedSlug,
   isCountryCode,
   isListed,
   isTemplateId,
@@ -93,8 +97,15 @@ const READ_OPTIONS: GetSnapshotOptions = { maxVersion: TEMPLATE_SCHEMA_VERSION }
 
 /** Ids tirés avant d'abandonner : 80 bits, une collision trahirait l'aléa. */
 const ID_ATTEMPTS = 5
-/** `japon-14-jours-tokyo`, puis `…-2` jusqu'à `…-20`. */
-const SLUG_ATTEMPTS = 20
+/**
+ * Suffixes lisibles essayés : `japon-14-jours-tokyo`, puis `…-2` jusqu'à
+ * `…-5`. Au-delà, le suffixe vient de l'id (`…-k3x9m2`, puis l'id entier) :
+ * un itinéraire populaire reste publiable, et vingt publications malveillantes
+ * ne bloquent plus un slug pour tout le monde. Chaque essai est une écriture.
+ */
+const SLUG_ATTEMPTS = 5
+/** Caractères de l'id dans le premier suffixe de repli : 30 bits. */
+const SLUG_ID_SUFFIX_LENGTH = 6
 /** Une écriture de méta en conflit relit une fois, puis renonce. */
 const META_ATTEMPTS = 2
 /**
@@ -131,6 +142,8 @@ export type TemplateStoreErrorCode =
   | 'forbidden'
   | 'conflict'
   | 'invalid'
+  /** Le modèle devait sortir de l'index public, et l'index n'a pas suivi. */
+  | 'index'
 
 // Pas de « code » ni d'« expir » dans ces messages : `analytics/metrics.ts`
 // classe les échecs d'après ces sous-chaînes.
@@ -140,6 +153,8 @@ const ERROR_MESSAGES: Record<TemplateStoreErrorCode, string> = {
   forbidden: 'Cet appareil n’est pas autorisé à modifier ce modèle.',
   conflict: 'Le modèle a changé entre-temps. Réessayez.',
   invalid: 'Ce modèle est invalide.',
+  index:
+    'Le modèle n’a pas pu être retiré de la liste publique de tripbrain.fr. Réessayez.',
 }
 
 /** Refus prévisible du store, que la route traduit en statut HTTP. */
@@ -345,6 +360,21 @@ async function loadVersion(
   return data
 }
 
+/** La méta, si `token` est bien le jeton du modèle. */
+async function loadVerifiedMeta(
+  bucket: TemplateBucket,
+  id: string,
+  token: string,
+): Promise<StoredMeta> {
+  if (!isTemplateId(id)) throw new TemplateStoreError('missing')
+  const stored = await loadMeta(bucket, id)
+  if (!stored) throw new TemplateStoreError('missing')
+  if (!verifyOwnerToken(token, stored.meta.ownerTokenHash)) {
+    throw new TemplateStoreError('forbidden')
+  }
+  return stored
+}
+
 /**
  * Méta d'un modèle dont l'appelant détient le jeton. Le statut « retiré »
  * reste à la charge de l'appelant : retirer deux fois n'est pas une erreur.
@@ -354,15 +384,25 @@ async function loadOwnedMeta(
   id: string,
   token: string,
 ): Promise<{ meta: TemplateMeta; etag: string }> {
-  if (!isTemplateId(id)) throw new TemplateStoreError('missing')
-  const stored = await loadMeta(bucket, id)
-  if (!stored) throw new TemplateStoreError('missing')
-  if (!verifyOwnerToken(token, stored.meta.ownerTokenHash)) {
-    throw new TemplateStoreError('forbidden')
-  }
+  const stored = await loadVerifiedMeta(bucket, id, token)
   // Sans ETag, un `ifMatch` deviendrait une écriture inconditionnelle.
   if (!stored.etag) throw new TemplateStoreError('conflict')
   return { meta: stored.meta, etag: stored.etag }
+}
+
+/**
+ * Le jeton ouvre-t-il ce modèle, toujours en ligne ? Lève sinon (`missing`,
+ * `forbidden`, `retired`). La route PUT l'appelle **avant** de lire le corps :
+ * sans le bon jeton, personne ne fait décompresser un itinéraire au serveur.
+ * `updateTemplate` revérifie de toute façon, sur la méta qu'il va remplacer.
+ */
+export async function assertTemplateOwner(
+  bucket: TemplateBucket,
+  id: string,
+  token: string,
+): Promise<void> {
+  const { meta } = await loadVerifiedMeta(bucket, id, token)
+  if (meta.retiredAt !== null) throw new TemplateStoreError('retired')
 }
 
 /** L'itinéraire de la version publiée, pour répondre après une écriture. */
@@ -486,41 +526,74 @@ function compareIndexEntries(
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
-/** L'index après passage de `meta`, ou `null` s'il ne change pas. */
+/** La ligne qu'un modèle doit avoir dans l'index, ou `null` s'il n'y a pas sa place. */
+function indexEntryOf(meta: TemplateMeta | null): TemplateIndexEntry | null {
+  return meta && isListed(meta) ? toIndexEntry(meta) : null
+}
+
+function sameIndexLine(
+  a: TemplateIndexEntry | null,
+  b: TemplateIndexEntry | null,
+): boolean {
+  return a === null || b === null ? a === b : sameIndexEntry(a, b)
+}
+
+/**
+ * L'index une fois la ligne de `id` accordée à sa méta stockée (`latest`,
+ * `null` si elle n'existe pas), ou `null` s'il ne change pas. Un modèle non
+ * listé ou retiré en sort.
+ */
 function nextIndex(
   current: TemplateIndexEntry[],
-  meta: TemplateMeta,
+  id: string,
+  latest: TemplateMeta | null,
 ): TemplateIndexEntry[] | null {
-  const existing = current.find((entry) => entry.id === meta.id)
-  const others = current.filter((entry) => entry.id !== meta.id)
-  if (!isListed(meta)) return existing ? others : null
-  const entry = toIndexEntry(meta)
-  if (existing && sameIndexEntry(existing, entry)) return null
+  const existing = current.find((entry) => entry.id === id) ?? null
+  const others = current.filter((entry) => entry.id !== id)
+  const entry = indexEntryOf(latest)
+  if (sameIndexLine(existing, entry)) return null
+  if (!entry) return others
   return [...others, entry].sort(compareIndexEntries)
 }
 
 /**
- * Range `meta` dans l'index (ou l'en sort). Ne lève jamais : l'écriture
- * principale a déjà réussi, et un index en retard ne prive le modèle que du
- * sitemap jusqu'à sa prochaine écriture.
+ * Accorde la ligne de `id` dans l'index à sa méta **stockée**, et dit si
+ * c'est fait. Ne lève jamais : à l'appelant de décider si un échec compte
+ * (voir `settleIndex`).
+ *
+ * Pourquoi relire la méta au lieu de prendre celle que l'appelant vient
+ * d'écrire : deux requêtes sur le même modèle ne sont pas ordonnées. Un PUT
+ * lent remettrait sinon dans l'index public un modèle qu'un PATCH ou un
+ * DELETE venait d'en sortir — titre et villes compris, ce que la pierre
+ * tombale efface exprès. D'où, à chaque tentative :
+ * 1. l'index, puis la méta, lue **après** lui ;
+ * 2. l'écriture de l'index en `ifMatch` : elle échoue si un autre l'a écrit
+ *    depuis notre lecture ;
+ * 3. après l'écriture, la méta relue : si sa ligne a changé entre-temps, on
+ *    recommence. Sans ce contrôle, une requête plus récente qui n'a rien vu à
+ *    changer (l'index n'avait pas encore notre ligne) laisserait la nôtre,
+ *    périmée, en place.
+ * Ainsi la dernière écriture de l'index a vu la dernière méta, sauf si les
+ * tentatives s'épuisent — ce que l'appelant apprend par `false`.
  */
-async function syncIndex(
-  bucket: TemplateBucket,
-  meta: TemplateMeta,
-): Promise<void> {
+async function syncIndex(bucket: TemplateBucket, id: string): Promise<boolean> {
   try {
     for (let attempt = 1; attempt <= INDEX_ATTEMPTS; attempt++) {
-      const snapshot = await bucket.getSnapshot(TEMPLATE_INDEX_KEY, READ_OPTIONS)
+      const snapshot = await bucket.getSnapshot(
+        TEMPLATE_INDEX_KEY,
+        READ_OPTIONS,
+      )
       const current = snapshot ? parseIndex(snapshot.data) : []
       if (!current) {
         console.error('Index des modèles illisible : il n’est pas réécrit.')
-        return
+        return false
       }
-      const entries = nextIndex(current, meta)
-      if (!entries) return
+      const latest = (await loadMeta(bucket, id))?.meta ?? null
+      const entries = nextIndex(current, id, latest)
+      if (!entries) return true
       if (snapshot && !snapshot.etag) {
         console.error('Index des modèles sans ETag : il n’est pas réécrit.')
-        return
+        return false
       }
       try {
         await bucket.putSnapshot(
@@ -530,17 +603,37 @@ async function syncIndex(
             ? { ...TEMPLATE_SNAPSHOT_OPTIONS, ifMatch: snapshot.etag }
             : { ...TEMPLATE_SNAPSHOT_OPTIONS, ifAbsent: true },
         )
-        return
       } catch (error) {
-        if (!isPreconditionFailure(error)) throw error
+        if (isPreconditionFailure(error)) continue
+        throw error
       }
+      const after = (await loadMeta(bucket, id))?.meta ?? null
+      if (sameIndexLine(indexEntryOf(latest), indexEntryOf(after))) return true
     }
     console.error(
-      `Index des modèles : ${INDEX_ATTEMPTS} conflits de suite, ${meta.id} attendra sa prochaine écriture.`,
+      `Index des modèles : ${INDEX_ATTEMPTS} conflits de suite, ${id} attendra sa prochaine écriture.`,
     )
+    return false
   } catch (error) {
     console.error('Mise à jour de l’index des modèles impossible', error)
+    return false
   }
+}
+
+/**
+ * Accorde l'index à `meta`, que l'appelant vient d'écrire. Un ajout ou une
+ * modification restent au mieux : le modèle manque au sitemap jusqu'à sa
+ * prochaine écriture. Une **sortie**, elle, doit aboutir : après un 200, plus
+ * rien ne la rejouerait, et le titre et les villes resteraient publics. Elle
+ * lève donc `TemplateStoreError('index')` — après l'écriture de la méta, pour
+ * que la requête rejouée trouve tout en place et refasse seulement l'index.
+ */
+async function settleIndex(
+  bucket: TemplateBucket,
+  meta: TemplateMeta,
+): Promise<void> {
+  const synced = await syncIndex(bucket, meta.id)
+  if (!synced && !isListed(meta)) throw new TemplateStoreError('index')
 }
 
 // ── Publication ───────────────────────────────────────────────────────────────
@@ -593,14 +686,25 @@ async function claimTemplateId(
   throw new Error(`Aucun id de modèle libre en ${ID_ATTEMPTS} tirages.`)
 }
 
-/** `japon-14-jours-tokyo`, sinon `…-2`, `…-3` : premier slug libre. */
+/**
+ * `japon-14-jours-tokyo`, sinon `…-2` à `…-5`, sinon `…-<6 premiers
+ * caractères de l'id>`, sinon `…-<id>` : premier slug libre. Le dernier ne
+ * peut être pris que par un slug de base qui finirait par cet id ; on lève
+ * alors `conflict`, et la publication rejouée tire un autre id.
+ */
 async function reserveSlug(
   bucket: TemplateBucket,
   id: string,
   base: string,
 ): Promise<string> {
-  for (let attempt = 1; attempt <= SLUG_ATTEMPTS; attempt++) {
-    const slug = suffixedSlug(base, attempt)
+  const candidates = [
+    ...Array.from({ length: SLUG_ATTEMPTS }, (_, index) =>
+      suffixedSlug(base, index + 1),
+    ),
+    idSuffixedSlug(base, id, SLUG_ID_SUFFIX_LENGTH),
+    idSuffixedSlug(base, id, TEMPLATE_ID_LENGTH),
+  ]
+  for (const slug of candidates) {
     try {
       await bucket.putSnapshot(
         templateSlugKey(slug),
@@ -612,15 +716,22 @@ async function reserveSlug(
       if (!isPreconditionFailure(error)) throw error
     }
   }
-  throw new Error(`Aucun slug libre pour « ${base} » en ${SLUG_ATTEMPTS} essais.`)
+  throw new TemplateStoreError(
+    'conflict',
+    'Aucune adresse libre pour ce modèle. Réessayez.',
+  )
 }
 
 /**
  * Publie un modèle : version 1, slug réservé, méta, puis index.
  *
  * Si une étape échoue après la version 1, celle-ci reste orpheline : sans
- * méta, aucune lecture ne l'atteint. On ne la supprime pas, car une erreur
- * réseau sur la méta ne prouve pas qu'elle n'a pas été écrite.
+ * méta, aucune lecture ne l'atteint. On ne la supprime que sur un refus
+ * certain (aucun slug libre) : une erreur réseau sur la méta ne prouve pas
+ * qu'elle n'a pas été écrite.
+ *
+ * L'index est mis à jour au mieux : un nouvel id n'y a jamais figuré, un
+ * échec ne fait que retarder son entrée au sitemap.
  */
 export async function publishTemplate(
   bucket: TemplateBucket,
@@ -634,15 +745,24 @@ export async function publishTemplate(
   const ownerToken = createOwnerToken()
 
   const id = await claimTemplateId(bucket, content)
-  const slug = await reserveSlug(
-    bucket,
-    id,
-    templateSlug({
-      country: input.country,
-      dayCount: content.dayCount,
-      cities: content.cities,
-    }),
-  )
+  let slug: string
+  try {
+    slug = await reserveSlug(
+      bucket,
+      id,
+      templateSlug({
+        country: input.country,
+        dayCount: content.dayCount,
+        cities: content.cities,
+      }),
+    )
+  } catch (error) {
+    // Refus certain : aucune méta ne pointera jamais vers cette version.
+    if (isTemplateStoreError(error)) {
+      await discard(bucket, [templateVersionKey(id, 1)])
+    }
+    throw error
+  }
   const meta: TemplateMeta = {
     id,
     slug,
@@ -660,7 +780,7 @@ export async function publishTemplate(
     ...TEMPLATE_SNAPSHOT_OPTIONS,
     ifAbsent: true,
   })
-  await syncIndex(bucket, meta)
+  await syncIndex(bucket, id)
   return {
     meta,
     template: toPublicTemplate(meta, content.itinerary),
@@ -709,8 +829,24 @@ async function claimVersion(
  * bougé entre-temps (un changement de visibilité, une autre mise à jour), on
  * relit une fois et on recommence — sans réécrire la version si elle est
  * toujours la suivante. Au second conflit : `TemplateStoreError('conflict')`.
+ *
+ * Un modèle ramené sous le seuil des listés sort de l'index : si l'index ne
+ * suit pas, `TemplateStoreError('index')`, la nouvelle version restant en
+ * ligne (voir `settleIndex`).
  */
 export async function updateTemplate(
+  bucket: TemplateBucket,
+  id: string,
+  token: string,
+  input: UpdateTemplateInput,
+): Promise<TemplateWriteResult> {
+  const result = await writeNewVersion(bucket, id, token, input)
+  await settleIndex(bucket, result.meta)
+  return result
+}
+
+/** Version puis méta : le cœur de `updateTemplate`, sans l'index. */
+async function writeNewVersion(
   bucket: TemplateBucket,
   id: string,
   token: string,
@@ -759,7 +895,6 @@ export async function updateTemplate(
         if (isPreconditionFailure(error)) continue
         throw error
       }
-      await syncIndex(bucket, next)
       return {
         meta: next,
         template: toPublicTemplate(next, written.content.itinerary),
@@ -786,7 +921,11 @@ export interface TemplatePatch {
   now?: Date
 }
 
-/** Visibilité et prénom : la méta change, pas le contenu ni sa version. */
+/**
+ * Visibilité et prénom : la méta change, pas le contenu ni sa version.
+ * Masquer le modèle le sort de l'index ; si l'index ne suit pas,
+ * `TemplateStoreError('index')`, et la même requête rejouée le rattrape.
+ */
 export async function patchTemplate(
   bucket: TemplateBucket,
   id: string,
@@ -803,8 +942,11 @@ export async function patchTemplate(
       patch.authorName === undefined
         ? meta.authorName
         : cleanAuthor(patch.authorName)
-    // Rien ne change : pas d'écriture, et `updatedAt` ne bouge pas.
+    // Rien ne change : pas d'écriture de la méta, et `updatedAt` ne bouge
+    // pas. L'index est tout de même revu : c'est ainsi qu'un « masquer »
+    // rejoué après un échec de l'index finit par l'en sortir.
     if (indexable === meta.indexable && authorName === meta.authorName) {
+      await settleIndex(bucket, meta)
       return { meta, template: await publicTemplateOf(bucket, meta) }
     }
 
@@ -818,7 +960,7 @@ export async function patchTemplate(
       if (isPreconditionFailure(error)) continue
       throw error
     }
-    await syncIndex(bucket, next)
+    await settleIndex(bucket, next)
     return { meta: next, template: await publicTemplateOf(bucket, next) }
   }
   throw new TemplateStoreError('conflict')
@@ -845,8 +987,9 @@ function toTombstone(meta: TemplateMeta, at: string): TemplateMeta {
 
 /**
  * Retire un modèle : pierre tombale, versions supprimées, sortie de l'index.
- * Idempotent : un second appel refait le ménage sans erreur, ce qui rattrape
- * une suppression ou un index qui avait échoué la première fois.
+ * Si l'index ne suit pas, `TemplateStoreError('index')` : la route répond
+ * 503, l'auteur réessaie. Idempotent : un second appel refait le ménage sans
+ * erreur, ce qui rattrape une suppression ou un index qui avait échoué.
  */
 export async function retireTemplate(
   bucket: TemplateBucket,
@@ -876,7 +1019,7 @@ export async function retireTemplate(
       keys.push(templateVersionKey(id, n))
     }
     await discard(bucket, keys)
-    await syncIndex(bucket, tombstone)
+    await settleIndex(bucket, tombstone)
     return
   }
   throw new TemplateStoreError('conflict')
@@ -946,7 +1089,8 @@ export async function readTemplateVersion(
  * Le modèle d'une page tripbrain.fr. **Seulement s'il est listé** : un slug
  * se devine (`japon-14-jours-tokyo`), et un modèle « lien seulement » ne doit
  * être joignable que par son id. Un modèle retiré qui était listé répond
- * `retired` (410) ; un modèle qui n'a jamais eu de page reste `missing`.
+ * `retired` (410) ; un modèle qui n'a jamais eu de page reste `missing` —
+ * sans quoi un 410 sur un slug deviné trahirait qu'il a existé.
  */
 export async function readTemplateBySlug(
   bucket: TemplateBucket,
@@ -960,22 +1104,26 @@ export async function readTemplateBySlug(
   // Le slug doit être celui du modèle : une publication interrompue peut
   // avoir réservé un slug sans jamais écrire sa méta.
   if (!stored || stored.meta.slug !== slug) return { status: 'missing' }
+  // La pierre tombale garde `indexable` et `dayCount` : on sait encore si le
+  // modèle avait une page.
   if (!isListed({ ...stored.meta, retiredAt: null })) {
     return { status: 'missing' }
   }
   return resolveTemplate(bucket, stored.meta)
 }
 
-/** Les modèles listés, du plus récemment modifié au plus ancien. */
+/**
+ * Les modèles listés, du plus récemment modifié au plus ancien. Un index
+ * illisible lève, comme une méta illisible : présenté comme une liste vide,
+ * il ferait sortir tous les modèles du sitemap de tripbrain.fr, en cache.
+ * Une erreur, elle, laisse l'ISR garder la page précédente.
+ */
 export async function readIndex(
   bucket: TemplateBucket,
 ): Promise<TemplateIndexEntry[]> {
   const snapshot = await bucket.getSnapshot(TEMPLATE_INDEX_KEY, READ_OPTIONS)
   if (!snapshot) return []
   const entries = parseIndex(snapshot.data)
-  if (!entries) {
-    console.error('Index des modèles illisible.')
-    return []
-  }
+  if (!entries) throw new Error('Index des modèles illisible.')
   return entries
 }

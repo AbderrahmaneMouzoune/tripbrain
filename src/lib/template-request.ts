@@ -1,19 +1,25 @@
-// Requêtes et réponses de l'API des modèles (`/api/templates/…`).
+// Requêtes et réponses de l'API des modèles (`/api/templates/…`). Serveur
+// uniquement (`node:zlib`).
 //
 // Les corps d'écriture sont validés ici, avant tout accès au bucket, sur le
 // modèle de `group-request.ts`. À la différence des voyages de groupe, le
 // serveur décompresse l'itinéraire : il doit le renettoyer, compter ses jours
-// et en tirer les villes du slug.
+// et en tirer les villes du slug. Cette décompression est bornée — voir
+// `decodeItinerary`.
 //
 // Aucun message ne contient « code » ni « expir » : `analytics/metrics.ts`
 // classe les échecs d'après ces sous-chaînes.
 
+import { inflateRawSync } from 'node:zlib'
+import { DecodeError, decode, type DecoderOptions } from '@msgpack/msgpack'
 import { isS3ndError } from '@s3nd/core'
 import { cleanAuthor } from '@/lib/group-sync'
 import type { DayItinerary } from '@/lib/itinerary-data'
-import { decompressItinerary } from '@/lib/share'
+import { isDayItinerary } from '@/lib/share'
 import {
   DEFAULT_TEMPLATE_OPTIONS,
+  MAX_TEMPLATE_DAYS,
+  MAX_TEMPLATE_DAY_ACTIVITIES,
   MAX_TEMPLATE_TITLE_LENGTH,
   isCountryCode,
   type CountryCode,
@@ -27,6 +33,34 @@ import {
 
 /** Itinéraire compressé (base64url) accepté par l'API : la limite du partage. */
 export const TEMPLATE_MAX_PAYLOAD_CHARS = 2 * 1024 * 1024
+
+/**
+ * Itinéraire décompressé (msgpack), en octets. La limite des 2 Mo ne porte que
+ * sur la forme compressée : 2 Mo de zéros deflatés se décompressent en 1,5 Go.
+ * Le voyage de démo (20 jours) pèse 48 Ko ; 2 Mio laissent la place à 180
+ * jours très remplis.
+ *
+ * C'est aussi la seule vraie borne du nombre d'objets que crée le décodage
+ * msgpack (au moins un octet chacun) : 2 Mio en donnent au plus 2 millions,
+ * soit une centaine de Mo le temps d'une requête.
+ */
+export const TEMPLATE_MAX_INFLATED_BYTES = 2 * 1024 * 1024
+
+/** Une chaîne (note, description…), en octets UTF-8. */
+export const TEMPLATE_MAX_STRING_BYTES = 32 * 1024
+
+/**
+ * Bornes du décodeur msgpack, vérifiées avant toute allocation. Un tableau
+ * peut être la liste des journées : la borne la plus large est celle-là. Le
+ * dialecte du partage n'emploie ni binaire ni extension.
+ */
+const DECODE_LIMITS: DecoderOptions = {
+  maxArrayLength: Math.max(MAX_TEMPLATE_DAYS, MAX_TEMPLATE_DAY_ACTIVITIES),
+  maxMapLength: 64,
+  maxStrLength: TEMPLATE_MAX_STRING_BYTES,
+  maxBinLength: 0,
+  maxExtLength: 0,
+}
 
 /** Corps JSON entier : le payload, plus les réglages et le titre. */
 export const TEMPLATE_MAX_BODY_BYTES = TEMPLATE_MAX_PAYLOAD_CHARS + 64 * 1024
@@ -45,6 +79,8 @@ export const TEMPLATE_NOT_CONFIGURED =
   'La publication de modèles n’est pas configurée sur ce serveur.'
 
 const TOO_LARGE = 'Itinéraire trop volumineux pour être publié.'
+
+const UNREADABLE = 'Itinéraire illisible.'
 
 export type ParsedTemplateRequest<T> =
   | { ok: true; data: T }
@@ -82,6 +118,59 @@ export async function readJsonBody(
   }
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+  return error instanceof Error && 'code' in error && error.code === code
+}
+
+/**
+ * Une borne du décodeur msgpack a sauté. La bibliothèque n'a pas de classe
+ * d'erreur à part : on reconnaît son message (`Max length exceeded: …`).
+ * S'il changeait, le refus tomberait en 400 au lieu de 413 — un test le
+ * verrait.
+ */
+function isDecodeLimitError(error: unknown): boolean {
+  return (
+    error instanceof DecodeError &&
+    error.message.startsWith('Max length exceeded')
+  )
+}
+
+/**
+ * Le pendant serveur de `decompressItinerary` (`share.ts`), borné. Celui du
+ * navigateur décompresse sans limite : sur une route publique, un envoi de
+ * quelques Ko suffirait à épuiser la mémoire de la fonction.
+ *
+ * `fflate.deflateSync` produit du DEFLATE brut, que `inflateRawSync` relit ;
+ * `maxOutputLength` arrête la décompression dès que la borne est franchie,
+ * sans allouer le reste.
+ */
+function decodeItinerary(
+  payload: string,
+): ParsedTemplateRequest<DayItinerary[]> {
+  let packed: Buffer
+  try {
+    packed = inflateRawSync(Buffer.from(payload, 'base64url'), {
+      maxOutputLength: TEMPLATE_MAX_INFLATED_BYTES,
+    })
+  } catch (error) {
+    if (hasErrorCode(error, 'ERR_BUFFER_TOO_LARGE')) {
+      return reject(413, TOO_LARGE)
+    }
+    return reject(400, UNREADABLE)
+  }
+  let decoded: unknown
+  try {
+    decoded = decode(packed, DECODE_LIMITS)
+  } catch (error) {
+    if (isDecodeLimitError(error)) return reject(413, TOO_LARGE)
+    return reject(400, UNREADABLE)
+  }
+  if (!Array.isArray(decoded) || !decoded.every(isDayItinerary)) {
+    return reject(400, UNREADABLE)
+  }
+  return accept(decoded)
+}
+
 /** `data` : l'itinéraire compressé par `compressItinerary`, décompressé ici. */
 function readItinerary(
   body: Record<string, unknown>,
@@ -93,14 +182,19 @@ function readItinerary(
   if (payload.length > TEMPLATE_MAX_PAYLOAD_CHARS) {
     return reject(413, TOO_LARGE)
   }
-  let itinerary: DayItinerary[]
-  try {
-    itinerary = decompressItinerary(payload)
-  } catch {
-    return reject(400, 'Itinéraire illisible.')
-  }
+  const decoded = decodeItinerary(payload)
+  if (!decoded.ok) return decoded
+  const itinerary = decoded.data
   if (itinerary.length === 0) {
     return reject(400, 'Le modèle doit contenir au moins une journée.')
+  }
+  // Au-delà, ce n'est plus un voyage à refaire : on refuse avant que le
+  // nettoyage, la méta et la page n'aient à porter un tel contenu.
+  if (
+    itinerary.length > MAX_TEMPLATE_DAYS ||
+    itinerary.some((day) => day.activities.length > MAX_TEMPLATE_DAY_ACTIVITIES)
+  ) {
+    return reject(413, TOO_LARGE)
   }
   return accept(itinerary)
 }
@@ -109,7 +203,9 @@ function readItinerary(
  * Titre saisi : absent (`undefined`), effacé (`null`, le store le tire des
  * étapes) ou borné à `MAX_TEMPLATE_TITLE_LENGTH`.
  */
-function readTitle(value: unknown): ParsedTemplateRequest<string | null | undefined> {
+function readTitle(
+  value: unknown,
+): ParsedTemplateRequest<string | null | undefined> {
   if (value === undefined || value === null) return accept(value)
   if (typeof value !== 'string') return reject(400, 'Titre du modèle invalide.')
   const title = value
@@ -143,7 +239,9 @@ function readOptions(value: unknown): ParsedTemplateRequest<TemplateOptions> {
   return accept({ includeNotes, includePrices })
 }
 
-function readIndexable(value: unknown): ParsedTemplateRequest<boolean | undefined> {
+function readIndexable(
+  value: unknown,
+): ParsedTemplateRequest<boolean | undefined> {
   if (value === undefined || typeof value === 'boolean') return accept(value)
   return reject(400, 'Visibilité du modèle invalide.')
 }
@@ -261,6 +359,9 @@ const STORE_STATUS: Record<TemplateStoreErrorCode, number> = {
   forbidden: 403,
   conflict: 409,
   invalid: 400,
+  // Un retrait qui n'a pas atteint l'index : l'écriture est faite, il reste à
+  // la rejouer. 503 dit au client d'échouer et à l'auteur de réessayer.
+  index: 503,
 }
 
 /**

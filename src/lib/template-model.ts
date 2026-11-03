@@ -46,6 +46,28 @@ export const MIN_LISTED_DAYS = 2
 /** Titre d'un modèle, borné comme celui d'un voyage de groupe. */
 export const MAX_TEMPLATE_TITLE_LENGTH = 120
 
+// ── Bornes du contenu ─────────────────────────────────────────────────────────
+//
+// La publication est publique et sans compte : le serveur refuse ce qu'aucun
+// vrai voyage n'atteint, pour qu'un seul envoi ne puisse ni épuiser sa mémoire
+// ni gonfler l'index que partagent tous les modèles.
+
+/** Six mois de voyage : le générateur s'arrête à 30 jours. */
+export const MAX_TEMPLATE_DAYS = 180
+
+/** Activités d'une journée : un vrai voyage en compte rarement plus de dix. */
+export const MAX_TEMPLATE_DAY_ACTIVITIES = 100
+
+/**
+ * Villes gardées dans la méta et l'index : de quoi décrire le parcours, pas
+ * plus. L'index est relu en entier par le sitemap ; une entrée doit y rester
+ * petite quel que soit le voyage.
+ */
+export const MAX_TEMPLATE_CITIES = 10
+
+/** Nom de ville gardé dans la méta et l'index, en caractères. */
+export const MAX_TEMPLATE_CITY_LENGTH = 80
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** Ce que l'auteur choisit de laisser partir, en plus du strict nécessaire. */
@@ -173,6 +195,10 @@ export function toPublicTemplate(
   return { ...rest, listed: isListed(meta), itinerary }
 }
 
+/**
+ * La ligne d'index d'un modèle. Les villes y sont rebornées : une méta écrite
+ * avant les bornes ne doit pas pouvoir gonfler l'index partagé.
+ */
 export function toIndexEntry(meta: TemplateMeta): TemplateIndexEntry {
   return {
     id: meta.id,
@@ -180,17 +206,31 @@ export function toIndexEntry(meta: TemplateMeta): TemplateIndexEntry {
     title: meta.title,
     country: meta.country,
     dayCount: meta.dayCount,
-    cities: meta.cities,
+    cities: meta.cities.slice(0, MAX_TEMPLATE_CITIES).map(cityLabel),
     updatedAt: meta.updatedAt,
   }
 }
 
-/** Villes dans l'ordre du voyage, sans doublon ni vide. */
+/**
+ * Nom de ville borné, coupé sur un caractère entier : `slice` seul pourrait
+ * couper un emoji en deux.
+ */
+function cityLabel(city: string): string {
+  const trimmed = city.trim()
+  if (trimmed.length <= MAX_TEMPLATE_CITY_LENGTH) return trimmed
+  return Array.from(trimmed).slice(0, MAX_TEMPLATE_CITY_LENGTH).join('').trim()
+}
+
+/**
+ * Villes dans l'ordre du voyage, sans doublon ni vide : les
+ * `MAX_TEMPLATE_CITIES` premières, chacune bornée à `MAX_TEMPLATE_CITY_LENGTH`.
+ */
 export function templateCities(itinerary: readonly DayItinerary[]): string[] {
   const seen = new Set<string>()
   const cities: string[] = []
   for (const day of itinerary) {
-    const city = day.city?.trim()
+    if (cities.length === MAX_TEMPLATE_CITIES) break
+    const city = cityLabel(day.city ?? '')
     if (!city) continue
     const key = city.toLocaleLowerCase('fr')
     if (seen.has(key)) continue
@@ -498,12 +538,34 @@ export function countryOptions(): { code: CountryCode; name: string }[] {
 
 export const MAX_SLUG_LENGTH = 80
 
+/**
+ * Lettres latines que NFKD ne décompose pas : sans elles, `Đà Nẵng` donnerait
+ * `a-nang` et `Wrocław` `wroc-aw` — sur une URL figée pour toujours.
+ */
+const TRANSLITERATIONS: Readonly<Record<string, string>> = {
+  đ: 'd',
+  ð: 'd',
+  ł: 'l',
+  ø: 'o',
+  œ: 'oe',
+  æ: 'ae',
+  ß: 'ss',
+  þ: 'th',
+  ı: 'i',
+  ħ: 'h',
+  ŋ: 'n',
+  ŧ: 't',
+}
+
+const UNDECOMPOSED_LETTER = /[đðłøœæßþıħŋŧ]/g
+
 /** Texte → `mots-en-minuscules-sans-accents`, rien d'autre que `[a-z0-9-]`. */
 export function slugify(text: string): string {
   return text
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
+    .replace(UNDECOMPOSED_LETTER, (letter) => TRANSLITERATIONS[letter] ?? '-')
     .replace(/['’]/g, '-')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
@@ -543,6 +605,18 @@ export function templateSlug(input: {
 export function suffixedSlug(slug: string, attempt: number): string {
   if (attempt <= 1) return slug
   const suffix = `-${attempt}`
+  return truncateSlug(slug, MAX_SLUG_LENGTH - suffix.length) + suffix
+}
+
+/**
+ * Variante tirée de l'id du modèle, quand les suffixes lisibles sont tous
+ * pris : `…-osaka-k3x9m2`. L'id est en `[0-9a-z]`, le résultat reste un slug
+ * valide, et la tête `<pays>-<n>-jours` n'est jamais coupée (80 caractères
+ * laissent toujours de la place). Avec l'id entier (`length` = 16), deux
+ * modèles ne peuvent plus tomber sur le même slug.
+ */
+export function idSuffixedSlug(slug: string, id: string, length = 6): string {
+  const suffix = `-${id.slice(0, length)}`
   return truncateSlug(slug, MAX_SLUG_LENGTH - suffix.length) + suffix
 }
 

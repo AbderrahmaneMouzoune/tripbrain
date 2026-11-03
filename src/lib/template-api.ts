@@ -158,16 +158,14 @@ function ownerHeaders(ownerToken: string): HeadersInit {
 }
 
 /**
- * Nettoyé ici aussi : ce qui ne doit pas partir ne quitte pas le téléphone,
- * même si le serveur renettoie de toute façon.
+ * Nettoyé ici aussi, toujours : ce qui ne doit pas partir ne quitte pas le
+ * téléphone, même si le serveur renettoie de toute façon.
  */
 async function payload(
   itinerary: readonly DayItinerary[],
-  options: TemplateOptions | undefined,
+  options: TemplateOptions,
 ): Promise<string> {
-  return compressItinerary(
-    options ? cleanForTemplate(itinerary, options) : [...itinerary],
-  )
+  return compressItinerary(cleanForTemplate(itinerary, options))
 }
 
 export interface TemplatePublishInput {
@@ -205,7 +203,10 @@ export async function publishTemplate(
     }),
   })
   if (!response.ok) {
-    throw await failure(response, 'La publication du modèle a échoué. Réessayez.')
+    throw await failure(
+      response,
+      'La publication du modèle a échoué. Réessayez.',
+    )
   }
   const body = await readBody(response)
   if (
@@ -262,8 +263,17 @@ export async function fetchTemplateVersion(
 export interface TemplateUpdateInput {
   /** Absent : le titre publié est gardé. */
   title?: string
-  /** Absent : les réglages publiés sont gardés (le serveur nettoie avec eux). */
-  options?: TemplateOptions
+  /**
+   * Réglages du modèle : pour garder ceux qui sont publiés, ceux de
+   * `StoredTrip.publishedTemplate` —
+   * `{ includeNotes: includesNotes, includePrices: includesPrices }`.
+   *
+   * Obligatoires : le téléphone nettoie avec eux avant l'envoi. Sans eux, il
+   * faudrait soit tout envoyer (notes et prix que l'auteur a exclus quittent
+   * le téléphone), soit tout retirer (le serveur stockerait une version sans
+   * les notes ou les prix que l'auteur a choisi de publier).
+   */
+  options: TemplateOptions
 }
 
 /** « Mettre le modèle à jour » : une nouvelle version, sans prévenir personne. */
@@ -271,7 +281,7 @@ export async function updateTemplate(
   id: string,
   ownerToken: string,
   itinerary: readonly DayItinerary[],
-  input: TemplateUpdateInput = {},
+  input: TemplateUpdateInput,
 ): Promise<PublicTemplate> {
   if (!isTemplateId(id)) throw new TemplateNotFoundError()
   const response = await fetch(templateUrl(id), {
@@ -281,11 +291,14 @@ export async function updateTemplate(
     body: JSON.stringify({
       data: await payload(itinerary, input.options),
       ...(input.title !== undefined ? { title: input.title } : {}),
-      ...(input.options ? { options: input.options } : {}),
+      options: input.options,
     }),
   })
   if (!response.ok) {
-    throw await failure(response, 'La mise à jour du modèle a échoué. Réessayez.')
+    throw await failure(
+      response,
+      'La mise à jour du modèle a échoué. Réessayez.',
+    )
   }
   return readTemplateBody(response)
 }
@@ -310,7 +323,10 @@ export async function patchTemplate(
     body: JSON.stringify(patch),
   })
   if (!response.ok) {
-    throw await failure(response, 'La mise à jour du modèle a échoué. Réessayez.')
+    throw await failure(
+      response,
+      'La mise à jour du modèle a échoué. Réessayez.',
+    )
   }
   return readTemplateBody(response)
 }

@@ -147,3 +147,9 @@ export function createMemoryTemplateBucket(): MemoryTemplateBucket {
   }
   return bucket
 }
+
+/**
+ * Bucket commun à un fichier de test : la fabrique de `vi.mock` l'importe
+ * dynamiquement, le test statiquement, et les deux voient le même objet.
+ */
+export const memoryTemplateBucket = createMemoryTemplateBucket()

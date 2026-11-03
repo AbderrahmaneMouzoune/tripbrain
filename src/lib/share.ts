@@ -64,9 +64,11 @@ export async function compressItinerary(
 
 /**
  * Le payload arrive d'une URL ou d'un serveur : il est validé avant d'atteindre
- * IndexedDB, comme n'importe quel import de fichier.
+ * IndexedDB, comme n'importe quel import de fichier. Exporté pour l'API des
+ * modèles, qui décompresse côté serveur avec ses propres bornes
+ * (`template-request.ts`) mais valide la même forme.
  */
-function isDayItinerary(value: unknown): value is DayItinerary {
+export function isDayItinerary(value: unknown): value is DayItinerary {
   if (typeof value !== 'object' || value === null) return false
   const day = value as Partial<DayItinerary>
   return (

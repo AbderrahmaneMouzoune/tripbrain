@@ -226,10 +226,37 @@ const PRIVATE_URL_MARKERS = [
   'secret',
   'bn=',
   'conf=',
+  // Gestion d'un billet : un code de réservation et un nom de famille
+  // suffisent pour voir, modifier ou annuler un vol (easyJet
+  // `ViewBooking?bookingReference=…&lastName=…`, Air France
+  // `?bookingCode=…&lastName=…`, SNCF Connect `?reference=…&name=…`).
+  // Pas de `ref=` nu : trop de liens publics s'en servent pour le suivi.
+  'bookingref', // bookingRef, bookingReference
+  'booking_reference',
+  'booking-reference',
+  'bookingcode',
+  'booking_code',
+  'reference=',
+  'recordlocator',
+  'recloc',
+  'viewbooking',
+  'lastname',
+  'last_name',
+  'surname',
+  'familyname',
+  'email=',
 ]
 
 /** En dessous, une « référence » (`12`, `AB`) se retrouverait dans n'importe quelle URL. */
 const MIN_REFERENCE_LENGTH = 4
+
+/**
+ * Lettres et chiffres seuls, en minuscules : `4021 553 117` doit se
+ * reconnaître dans `/stay/4021553117`, et `K7X-2PQ` dans `?ref=k7x2pq`.
+ */
+function alphanumeric(text: string): string {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+}
 
 function safeDecode(value: string): string {
   try {
@@ -261,8 +288,13 @@ export function isPrivateBookingUrl(url: string, reference?: string): boolean {
     haystacks.some((haystack) => haystack.includes(needle))
 
   if (PRIVATE_URL_MARKERS.some(contains)) return true
-  const ref = reference?.trim().toLowerCase()
-  return Boolean(ref && ref.length >= MIN_REFERENCE_LENGTH && contains(ref))
+  // La référence est comparée sans séparateurs, d'un côté comme de l'autre :
+  // l'auteur la saisit comme elle est imprimée, le site l'écrit à sa façon.
+  const ref = reference ? alphanumeric(reference) : ''
+  return (
+    ref.length >= MIN_REFERENCE_LENGTH &&
+    haystacks.some((haystack) => alphanumeric(haystack).includes(ref))
+  )
 }
 
 /** Lien gardé dans le modèle : une URL http(s) publique, non vide. */

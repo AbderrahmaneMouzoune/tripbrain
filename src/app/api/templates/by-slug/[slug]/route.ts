@@ -40,6 +40,9 @@ export async function GET(
     }
     return Response.json({ template: result.template }, { headers })
   } catch (error) {
-    return templateErrorResponse(error, 'Lecture du modèle impossible. Réessayez.')
+    return templateErrorResponse(
+      error,
+      'Lecture du modèle impossible. Réessayez.',
+    )
   }
 }

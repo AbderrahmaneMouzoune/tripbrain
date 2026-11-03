@@ -35,9 +35,13 @@ Partager → Publier (A1–A4)                          /itineraires/[slug]   (I
   dans l'URL ni dans le corps.
 - **Slug** : `<pays>-<n>-jours-<ville1>-<ville2>-<ville3>`. Les accents sont retirés (NFKD), le
   résultat est en minuscules, en mots séparés par `-`, et coupé à 80 caractères sur une
-  frontière de mot. Une ville dont le nom ne donne aucun caractère latin est ignorée. Le slug
-  est **figé à la première publication**. En cas de collision, il prend un suffixe `-2`, `-3`…,
-  réservé via `slugs/<slug>` en `ifAbsent`.
+  frontière de mot. Les lettres latines que NFKD ne décompose pas sont translittérées
+  (`đ ð → d`, `ł → l`, `ø → o`, `œ → oe`, `æ → ae`, `ß → ss`, `þ → th`, `ı → i`…) :
+  `Đà Nẵng` donne `da-nang`, pas `a-nang`. Une ville dont le nom ne donne aucun caractère latin
+  est ignorée. Le slug est **figé à la première publication**. En cas de collision, il prend un
+  suffixe `-2` à `-5`, puis un suffixe tiré de l'id (`-k3x9m2`, puis l'id entier), chacun
+  réservé via `slugs/<slug>` en `ifAbsent` : un parcours populaire reste toujours publiable, et
+  quelques publications ne suffisent pas à bloquer un slug pour tout le monde.
 
 ### 2.2 Pays
 
@@ -186,10 +190,18 @@ d'`expiresIn`.
 | `index`                 | `{ entries: TemplateIndexEntry[] }`, modèles listés uniquement | boucle `ifMatch`, 5 tentatives           |
 
 - Ordre d'écriture : la version, puis la méta, puis l'index. La méta ne pointe donc jamais vers
-  une version absente. Si l'index échoue, le modèle manque au sitemap jusqu'à sa prochaine
-  écriture.
+  une version absente.
+- **Index** : la ligne d'un modèle suit sa méta **stockée**, relue après la lecture de l'index,
+  puis revérifiée après l'écriture (une requête concurrente plus lente ne peut pas y remettre
+  un modèle masqué ou retiré). Si l'index échoue sur un ajout ou une modification, le modèle
+  manque au sitemap jusqu'à sa prochaine écriture. Sur une **sortie** (masqué, ramené à une
+  journée, retiré), la requête échoue en 503 « Réessayez » une fois la méta écrite : rejouée,
+  elle ne refait que l'index. Un index illisible n'est jamais réécrit, et sa lecture lève (500)
+  au lieu de renvoyer une liste vide.
+- Villes de la méta et de l'index : les 10 premières, 80 caractères chacune.
 - **Retrait** : la méta devient une pierre tombale (`retiredAt`). Les versions sont supprimées,
-  le slug reste réservé et l'entrée sort de l'index. Les lectures répondent 410.
+  le slug reste réservé et l'entrée sort de l'index. Les lectures répondent 410 ; par le slug,
+  seulement si le modèle était listé (sinon 404, voir §7).
 - La logique vit dans `src/lib/template-store.ts`, derrière une interface étroite
   `{ putSnapshot, getSnapshot, delete }`. Elle est testée contre un faux bucket en mémoire,
   comme `group-sync-engine.ts`. Les routes restent minces.
@@ -203,9 +215,9 @@ ont la forme `{ error: '<message français>' }`.
 | ----------------------------------- | ----------------- | -------------------------------------------------------- |
 | `POST /api/templates`               | public, 10/min/IP | 201 `{ template, ownerToken }`                           |
 | `GET /api/templates/[id]`           | public            | 200 `{ template }` · 404 · 410 `{ status: 'retired' }`   |
-| `PUT /api/templates/[id]`           | Bearer            | 200 `{ template }` (nouvelle version)                    |
-| `PATCH /api/templates/[id]`         | Bearer            | 200 `{ template }` (`indexable`, `authorName`)           |
-| `DELETE /api/templates/[id]`        | Bearer            | 200 `{ status: 'retired' }`                              |
+| `PUT /api/templates/[id]`           | Bearer            | 200 `{ template }` (nouvelle version) · 503 (index)      |
+| `PATCH /api/templates/[id]`         | Bearer            | 200 `{ template }` (`indexable`, `authorName`) · 503     |
+| `DELETE /api/templates/[id]`        | Bearer            | 200 `{ status: 'retired' }` · 503 (index)                |
 | `GET /api/templates/[id]/v/[n]`     | public            | 200 `{ version, itinerary }` (base de fusion V1.1)       |
 | `GET /api/templates/by-slug/[slug]` | public            | 200 `{ template }` **seulement si `listed`** · 404 · 410 |
 | `GET /api/templates/index`          | public            | 200 `{ entries }`                                        |
@@ -214,6 +226,13 @@ ont la forme `{ error: '<message français>' }`.
   (`compressItinerary`). Le serveur le décompresse, vérifie qu'il y a au moins une journée, le
   **renettoie**, puis stocke du JSON. Plafond : 2 Mo de payload (413). Une erreur
   `FILE_TOO_LARGE` de s3nd est elle aussi renvoyée en 413.
+- **Décompression bornée** (route publique) : le serveur n'utilise pas `decompressItinerary`
+  du navigateur. Il décompresse avec `zlib.inflateRawSync` plafonné à 2 Mio décompressés, puis
+  décode le msgpack avec des bornes (tableaux, objets, chaînes de 32 Kio). Au-delà de 180
+  journées ou de 100 activités par journée : 413. Le PUT vérifie le jeton contre son empreinte
+  **avant** de lire le corps.
+- **Nettoyage sur le téléphone** : avant tout envoi, publication comme mise à jour ; une mise
+  à jour envoie donc toujours ses réglages (ceux de `publishedTemplate` pour les garder).
 - **Lectures publiques** : `Cache-Control: public, s-maxage=60, stale-while-revalidate=300`
   (`index` et `by-slug` : `s-maxage=300`). Elles n'ont pas de limiteur par IP : toutes les
   régénérations du site vitrine viennent de quelques IP Vercel, et c'est le cache CDN qui
