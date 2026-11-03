@@ -73,8 +73,8 @@ Les modèles servent aussi au référencement du site vitrine.
   suffixé en cas de doublon. Le lien de partage court reste une redirection vers cette page.
 - **Rendu** : HTML côté serveur, contenu jour par jour réellement lisible (titres, activités,
   conseils), données structurées `TouristTrip`, image Open Graph, `canonical`.
-- **Indexation** : si l'auteur laisse « Visible sur tripbrain.fr et Google » activé, la page
-  entre dans `sitemap.ts` et dans les listes `/itineraires/<pays>`. Désactivé : la page reste
+- **Indexation** : si l'auteur laisse « Visible sur tripbrain.fr et Google » activé et que le
+  modèle compte au moins 2 jours, la page entre dans `sitemap.ts`, sans validation manuelle, et dans les listes `/itineraires/<pays>`. Désactivé : la page reste
   accessible par lien, avec `<meta name="robots" content="noindex">`, hors sitemap et hors
   listes. Le réglage se change à tout moment depuis l'app ; le sitemap suit à la prochaine
   régénération.
@@ -173,7 +173,7 @@ Recherche par destination et filtres (durée, budget, rythme) sur `/itineraires`
 
 ## 10. Décisions
 
-Tranchées le 2 nov. 2026 :
+Tranchées les 2 et 3 nov. 2026 :
 
 1. Prix payés : **inclus par défaut**, désactivables par l'auteur.
 2. Signature : **prénom libre**, facultatif.
@@ -184,9 +184,7 @@ Tranchées le 2 nov. 2026 :
 5. Référencement : modèles affichés sur tripbrain.fr pour le SEO, **indexés par défaut**,
    désactivable par l'auteur.
 
-Encore ouvertes :
-
-1. Faut-il un seuil minimal pour indexer une page (par exemple ≥ 3 jours et ≥ 10 activités),
-   pour éviter des pages trop pauvres dans Google ?
-2. Les pages indexées passent-elles par une validation manuelle avant d'entrer dans le
-   sitemap, au moins au lancement ?
+6. Seuil d'indexation : **au moins 2 jours**, aucun autre critère. En dessous, la page
+   reste accessible par lien mais porte `noindex`, même si l'interrupteur est activé.
+7. Validation : **aucune validation manuelle**. Un modèle indexable entre dans le sitemap
+   dès sa publication ; le signalement en pied de page reste le seul garde-fou.
