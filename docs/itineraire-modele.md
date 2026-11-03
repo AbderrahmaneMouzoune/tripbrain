@@ -52,6 +52,9 @@ un modèle.
    - **Prix payés** : activé par défaut, désactivable. Affichés « à titre indicatif » avec
      l'année du voyage.
    - **Visible sur tripbrain.fr et Google** : activé par défaut, désactivable (voir §4.3).
+   - **Pays du voyage** : obligatoire, liste avec recherche. Il donne l'adresse de la page
+     publique et la page pays du site. Pour un voyage dans plusieurs pays, l'auteur choisit
+     le principal.
    - **Prénom de l'auteur** : champ libre, prérempli s'il a déjà été saisi, facultatif.
 4. Lien permanent : partager, copier, compteurs ouvertures / reprises, interrupteur de
    visibilité, « Mettre le modèle à jour », « Retirer le modèle ».
@@ -70,17 +73,22 @@ Les modèles servent aussi au référencement du site vitrine.
 
 - **Où** : site vitrine (`tripbrain-landing`), `tripbrain.fr/itineraires/<slug>`. Le slug
   est généré depuis le pays, la durée et les villes : `japon-14-jours-tokyo-kyoto-osaka`,
-  suffixé en cas de doublon. Le lien de partage court reste une redirection vers cette page.
+  suffixé en cas de doublon, figé à la première publication.
+- **Lien partagé par l'auteur** : `app.tripbrain.fr/m/<id>`. Il ouvre l'app si elle est
+  installée, sinon l'aperçu dans la webapp. Il n'est jamais indexé ; quand le modèle est
+  listé, il désigne la page tripbrain.fr comme page canonique.
 - **Rendu** : HTML côté serveur, contenu jour par jour réellement lisible (titres, activités,
   conseils), données structurées `TouristTrip`, image Open Graph, `canonical`.
 - **Indexation** : si l'auteur laisse « Visible sur tripbrain.fr et Google » activé et que le
-  modèle compte au moins 2 jours, la page entre dans `sitemap.ts`, sans validation manuelle, et dans les listes `/itineraires/<pays>`. Désactivé : la page reste
-  accessible par lien, avec `<meta name="robots" content="noindex">`, hors sitemap et hors
-  listes. Le réglage se change à tout moment depuis l'app ; le sitemap suit à la prochaine
-  régénération.
+  modèle compte au moins 2 jours, le modèle est **listé** : il a sa page, entre dans
+  `sitemap.ts`, sans validation manuelle, et dans les listes `/itineraires/<pays>`.
+  Sinon, il n'a **pas de page** sur tripbrain.fr : il reste accessible uniquement par son
+  lien `app.tripbrain.fr/m/<id>`, non indexé. Un slug lisible se devine, un id de 16
+  caractères non : c'est ce qui garantit « lien seulement ». Le réglage se change à tout
+  moment depuis l'app ; le site et le sitemap suivent à la prochaine régénération (1 h).
 - **Retrait** : la page répond `410 Gone` et sort du sitemap.
-- **Bouton** « Reprendre cet itinéraire » : ouvre l'étape « dates » dans l'app, ou la
-  webapp si l'app n'est pas installée.
+- **Bouton** « Reprendre cet itinéraire » : lien vers `app.tripbrain.fr/m/<id>`, qui ouvre
+  la reprise dans l'app, ou dans la webapp si l'app n'est pas installée.
 - **Signalement** : lien en pied de page, retrait manuel.
 
 ### 4.4 V1.1 — repartir de la dernière version du modèle (écrans B7, B8)
@@ -188,3 +196,11 @@ Tranchées les 2 et 3 nov. 2026 :
    reste accessible par lien mais porte `noindex`, même si l'interrupteur est activé.
 7. Validation : **aucune validation manuelle**. Un modèle indexable entre dans le sitemap
    dès sa publication ; le signalement en pied de page reste le seul garde-fou.
+
+Choix techniques du 3 nov. 2026 (voir `docs/itineraire-modele-technique.md`) :
+
+8. **Pays obligatoire** à la publication : l'itinéraire ne contient pas de pays, et l'adresse
+   de la page comme les pages pays en ont besoin.
+9. **Un modèle non listé n'a pas de page sur tripbrain.fr** : il reste accessible par son lien
+   `app.tripbrain.fr/m/<id>`. Cela remplace « la page reste accessible par lien avec
+   noindex », qui exposait le modèle à quiconque devinait son slug.
