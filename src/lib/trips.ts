@@ -10,6 +10,10 @@
 
 import type { TripGroup } from '@/lib/group-sync'
 import type { DayItinerary } from '@/lib/itinerary-data'
+import type {
+  PublishedTemplateInfo,
+  TemplateOrigin,
+} from '@/lib/template-model'
 
 /** D'où vient un voyage : sert l'affichage (« Généré il y a 2 jours ») et la mesure. */
 export type TripSource =
@@ -20,6 +24,8 @@ export type TripSource =
   | 'share'
   | 'generator'
   | 'legacy'
+  /** Repris d'un itinéraire modèle publié par un autre voyageur. */
+  | 'template'
 
 export interface StoredTrip {
   id: string
@@ -30,8 +36,28 @@ export interface StoredTrip {
   updatedAt: number
   /** Voyage d'exemple : ses documents de démo partent avec lui. */
   isDemo?: boolean
+  /**
+   * Copie du voyage d'exemple, ou d'une telle copie (voir `tripCopyOf`). La
+   * copie n'est plus la démo — elle reste quand on la quitte —, mais son
+   * programme n'est le voyage de personne : elle ne se publie pas comme
+   * itinéraire modèle (`canPublishTemplate`). Champ facultatif, sans
+   * migration IndexedDB.
+   */
+  copiedFromDemo?: boolean
   /** Voyage tenu à jour avec d'autres voyageurs (voir `group-sync.ts`). */
   group?: TripGroup
+  /**
+   * Côté auteur : ce voyage est publié comme itinéraire modèle. Porte le
+   * jeton propriétaire, seul moyen de mettre à jour ou de retirer le modèle
+   * sans compte — il ne se copie jamais (ni duplication, ni export).
+   */
+  publishedTemplate?: PublishedTemplateInfo
+  /**
+   * Côté repreneur : le modèle d'où vient ce voyage, avec la version reprise
+   * telle qu'elle a été recalée. Champ facultatif, donc sans migration
+   * IndexedDB : les enregistrements sont stockés entiers.
+   */
+  origin?: TemplateOrigin
 }
 
 /** Ce qu'il faut pour lister les voyages, sans traîner tout l'itinéraire. */
@@ -44,6 +70,10 @@ export interface TripSummary {
   isDemo: boolean
   /** Synchronisé avec d'autres voyageurs. */
   isGroup: boolean
+  /** Repris d'un itinéraire modèle (bannière « D'après le voyage de… »). */
+  fromTemplate: boolean
+  /** Publié comme itinéraire modèle par ce téléphone. */
+  isPublishedTemplate: boolean
   startDate: string | null
   endDate: string | null
   dayCount: number
@@ -149,6 +179,10 @@ export function summarizeTrip(
     updatedAt: trip.updatedAt,
     isDemo: Boolean(trip.isDemo),
     isGroup: Boolean(trip.group),
+    // Sur `origin` et non sur `source` : une copie d'un voyage repris garde la
+    // provenance « Repris » mais pas le lien au modèle (voir `duplicateTrip`).
+    fromTemplate: Boolean(trip.origin),
+    isPublishedTemplate: Boolean(trip.publishedTemplate),
     startDate: range?.start ?? null,
     endDate: range?.end ?? null,
     dayCount: trip.itinerary.length,
@@ -199,6 +233,53 @@ export function currentDayIndex(
   const range = tripDateRange(itinerary)
   if (!range) return 0
   return now > startOfDay(parseDayDate(range.end)) ? itinerary.length - 1 : 0
+}
+
+/**
+ * Ce que garde la copie d'un voyage (`duplicateTrip`) : le programme, le
+ * titre suivi de « (copie) » et la provenance. Ni `group` (la copie n'est pas
+ * synchronisée), ni `publishedTemplate` (le jeton propriétaire ne se duplique
+ * jamais : deux voyages piloteraient le même modèle), ni `origin` (la copie
+ * vit sa vie, sans mise à jour depuis le modèle) ; une copie d'un voyage
+ * repris reste donc affichée « Repris ».
+ *
+ * La copie de la démo n'est plus la démo (provenance `share`, elle survit à
+ * la sortie de la démo), mais elle en garde la trace dans `copiedFromDemo`,
+ * transmise de copie en copie : sans quoi il suffirait de dupliquer la démo
+ * pour la publier comme modèle.
+ */
+export interface TripCopy {
+  itinerary: DayItinerary[]
+  title: string
+  source: TripSource
+  copiedFromDemo?: true
+}
+
+export function tripCopyOf(trip: StoredTrip): TripCopy {
+  return {
+    itinerary: trip.itinerary,
+    title: `${trip.title} (copie)`,
+    source: trip.source === 'demo' ? 'share' : trip.source,
+    ...(trip.isDemo || trip.copiedFromDemo ? { copiedFromDemo: true } : {}),
+  }
+}
+
+/**
+ * Le voyage peut-il être publié comme itinéraire modèle ? Ni la démo, ni une
+ * copie de la démo (spec des modèles, §9 : « Voyage de démo : non
+ * publiable »), ni un voyage sans journée.
+ */
+export function canPublishTemplate(trip: StoredTrip): boolean {
+  return !trip.isDemo && !trip.copiedFromDemo && trip.itinerary.length > 0
+}
+
+/**
+ * Un des voyages de l'appareil a-t-il été repris d'un itinéraire modèle ?
+ * Sert la mesure des installations venues d'un lien modèle
+ * (`pwa_installed.from_template`).
+ */
+export function hasTripFromTemplate(trips: readonly StoredTrip[]): boolean {
+  return trips.some((trip) => Boolean(trip.origin))
 }
 
 /** Délai (ms) jusqu'au prochain minuit local. */

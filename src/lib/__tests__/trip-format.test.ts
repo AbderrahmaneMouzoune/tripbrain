@@ -24,6 +24,8 @@ function summary(partial: Partial<TripSummary>): TripSummary {
     updatedAt: 0,
     isDemo: false,
     isGroup: false,
+    fromTemplate: false,
+    isPublishedTemplate: false,
     startDate: '2026-05-10',
     endDate: '2026-05-29',
     dayCount: 20,
@@ -137,6 +139,15 @@ describe('formatRelativeDays / formatTripOrigin', () => {
       'Importé il y a 2 jours',
     )
     expect(formatTripOrigin('demo', twoDaysAgo, now)).toBe('Voyage d’exemple')
+  })
+
+  it('dit « Repris » d’un voyage repris d’un itinéraire modèle', () => {
+    expect(
+      formatTripOrigin('template', new Date(2026, 9, 3, 21).getTime(), now),
+    ).toBe('Repris hier')
+    expect(
+      formatTripOrigin('template', new Date(2026, 6, 1).getTime(), now),
+    ).toBe('Repris il y a 3 mois')
   })
 
   it('ne dit rien d’un voyage migré, dont la date ne signifie rien', () => {
