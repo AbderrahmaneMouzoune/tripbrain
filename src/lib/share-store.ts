@@ -53,9 +53,14 @@ export function r2Connection(): Pick<
   BucketConfig,
   'bucket' | 'endpoint' | 'credentials'
 > {
+  // `R2_ENDPOINT` remplace l'adresse R2 par un stockage compatible S3 local
+  // (émulateur des tests de bout en bout, MinIO…). Jamais en production.
+  const endpoint = process.env.R2_ENDPOINT?.trim()
   return {
     bucket: requireEnv('R2_BUCKET_NAME'),
-    endpoint: `https://${requireEnv('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`,
+    endpoint:
+      endpoint ||
+      `https://${requireEnv('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`,
     credentials: {
       accessKeyId: requireEnv('R2_ACCESS_KEY_ID'),
       secretAccessKey: requireEnv('R2_SECRET_ACCESS_KEY'),
