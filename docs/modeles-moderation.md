@@ -1,0 +1,99 @@
+# Itinéraires modèles — retrait par l'opérateur
+
+Quand retirer un modèle sans son auteur : contenu signalé, abus, ou auteur qui a perdu son
+téléphone (le jeton qui lui permettait de retirer son modèle était dessus). Le retrait est
+**définitif** et a les mêmes effets qu'un retrait par l'auteur : le lien et la page répondent
+410, les versions (tout l'itinéraire) sont supprimées, le titre et le prénom sont effacés, le
+modèle sort de la liste publique. Le slug, lui, reste réservé **pour toujours** : il contient le
+pays (en toutes lettres), le nombre de jours et jusqu'à 3 villes saisies par l'auteur, par
+exemple `japon-3-jours-tokyo-kyoto`. Il reste dans l'adresse de la page et dans la clé R2
+`templates/slugs/<slug>`. Conception : `docs/itineraire-modele-technique.md` §4.
+
+> **Abus dans un nom de ville.** Le slug est fixé à la première publication, avec les 3
+> premières villes du voyage d'alors (en minuscules, sans accents). Si le contenu signalé est
+> l'une d'elles, il est dans le slug : la procédure ci-dessous ne peut pas l'effacer. L'adresse
+> `https://tripbrain.fr/itineraires/<slug>` et la clé R2 `templates/slugs/<slug>` le garderont.
+> Retirez quand même le modèle (tout le reste disparaît), puis signalez le cas à l'équipe
+> technique.
+
+## 1. Qui reçoit les demandes
+
+Les signalements et les demandes d'auteurs arrivent à l'adresse de l'éditeur,
+`contact@tripbrain.fr` (`publisher.email` dans `src/lib/legal-config.ts`).
+
+## 2. Trouver le modèle
+
+Le script accepte l'id, le slug, ou le lien entier.
+
+| On a reçu…                                | On garde…                                   |
+| ----------------------------------------- | ------------------------------------------- |
+| `https://tripbrain.fr/itineraires/<slug>` | le slug, par exemple `japon-14-jours-tokyo` |
+| `https://app.tripbrain.fr/m/<id>`         | l'id, 16 caractères, par exemple `k3x9m2…`  |
+
+Un auteur qui a perdu son téléphone retrouve le lien `/m/<id>` dans les messages où il l'a
+partagé.
+
+Parti d'un slug, vous n'avez pas encore l'id : le script l'affiche (§3), et la vérification du §4
+en a besoin.
+
+## 3. Retirer
+
+Il faut Bun, ce dépôt, et les 4 variables R2 de **production** : Vercel → projet de l'app →
+Settings → Environment Variables → filtre _Production_.
+
+- Si Vercel affiche les valeurs (icône en forme d'œil), copiez-les.
+- Si elles sont marquées _Sensitive_, leur valeur ne peut plus être relue nulle part, ni dans
+  Vercel ni dans Cloudflare. Créez plutôt une clé temporaire :
+  1. Cloudflare → R2 → _Overview_ : copiez l'_Account ID_ (`R2_ACCOUNT_ID`) et le nom du bucket
+     de production (`R2_BUCKET_NAME`). S'il y a plusieurs buckets et que Vercel masque aussi ce
+     nom, demandez-le à l'équipe technique plutôt que de deviner.
+  2. Même page → _Manage API tokens_ (selon l'interface : _API Tokens_ → _Manage_) → créer un
+     token : permission _Object Read & Write_, limitée à ce seul bucket (_Apply to specific
+     buckets only_).
+  3. Copiez **tout de suite** l'_Access Key ID_ (`R2_ACCESS_KEY_ID`) et le _Secret Access Key_
+     (`R2_SECRET_ACCESS_KEY`) : Cloudflare ne les affiche qu'une fois.
+  4. Une fois le retrait vérifié (§4), supprimez ce token dans _Manage API tokens_.
+
+```sh
+export R2_ACCOUNT_ID='<id du compte Cloudflare>'
+export R2_BUCKET_NAME='<bucket de production>'
+export R2_ACCESS_KEY_ID='<clé d’accès>'
+export R2_SECRET_ACCESS_KEY='<clé secrète>'
+bun --no-env-file scripts/retire-template.ts '<id, slug ou lien>'
+```
+
+`--no-env-file` empêche Bun de compléter avec un `.env` local : seules les variables du shell
+comptent. Le script affiche le bucket visé, l'état du modèle avant (id, slug, titre, prénom,
+pays : de quoi vérifier que c'est le bon), puis après. Notez l'id de la ligne
+`id <16 caractères> · slug …` : c'est lui qui va dans la vérification du §4, même si vous êtes
+parti d'un slug.
+
+- Code de sortie `0` : retiré, hors de la liste publique, et plus aucune version stockée
+  (`versions : aucune, contenu effacé`).
+- `1` avec « l'index public n'a pas suivi » : le modèle répond déjà 410. Relancez la même
+  commande, sans risque.
+- `1` avec « ses versions (le contenu de l'auteur) n'ont pas été supprimées » : le modèle répond
+  déjà 410, mais son itinéraire est encore dans R2. Relancez la même commande, sans risque,
+  jusqu'au code `0`.
+- `1` avec « pas entièrement retiré » : la vérification finale a trouvé le modèle encore dans
+  la liste publique ou une version encore stockée (ligne `versions : …` de « Après »). Relancez
+  la même commande.
+- `2` : argument absent ou mal formé.
+
+## 4. Vérifier
+
+L'API répond 410 tout de suite (jamais en cache) :
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' https://app.tripbrain.fr/api/templates/<id>
+```
+
+`<id>` : celui que le script a affiché sur la ligne `id … · slug …` (avec un slug à la place, cette
+adresse répond 404).
+
+La page du site vitrine répond 410 dans l'heure (régénération ISR), si le modèle était listé ;
+sinon elle n'a jamais existé et répond 404 :
+
+```sh
+curl -sI https://tripbrain.fr/itineraires/<slug> | head -1
+```
