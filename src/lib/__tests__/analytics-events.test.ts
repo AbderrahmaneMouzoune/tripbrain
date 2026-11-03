@@ -24,6 +24,14 @@ const FORBIDDEN_PROPERTY_NAMES = [
   'filename',
   'file_name',
   'message',
+  // Un modèle est public, mais la mesure n'a pas à savoir lequel : ni son id,
+  // ni son adresse, ni le prénom de son auteur, ni son jeton.
+  'id',
+  'template_id',
+  'slug',
+  'author',
+  'author_name',
+  'token',
 ]
 
 const entries = Object.entries(analyticsEvents)

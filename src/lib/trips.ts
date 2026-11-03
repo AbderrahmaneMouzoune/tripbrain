@@ -10,6 +10,10 @@
 
 import type { TripGroup } from '@/lib/group-sync'
 import type { DayItinerary } from '@/lib/itinerary-data'
+import type {
+  PublishedTemplateInfo,
+  TemplateOrigin,
+} from '@/lib/template-model'
 
 /** D'où vient un voyage : sert l'affichage (« Généré il y a 2 jours ») et la mesure. */
 export type TripSource =
@@ -20,6 +24,8 @@ export type TripSource =
   | 'share'
   | 'generator'
   | 'legacy'
+  /** Repris d'un itinéraire modèle publié par un autre voyageur. */
+  | 'template'
 
 export interface StoredTrip {
   id: string
@@ -32,6 +38,18 @@ export interface StoredTrip {
   isDemo?: boolean
   /** Voyage tenu à jour avec d'autres voyageurs (voir `group-sync.ts`). */
   group?: TripGroup
+  /**
+   * Côté auteur : ce voyage est publié comme itinéraire modèle. Porte le
+   * jeton propriétaire, seul moyen de mettre à jour ou de retirer le modèle
+   * sans compte — il ne se copie jamais (ni duplication, ni export).
+   */
+  publishedTemplate?: PublishedTemplateInfo
+  /**
+   * Côté repreneur : le modèle d'où vient ce voyage, avec la version reprise
+   * telle qu'elle a été recalée. Champ facultatif, donc sans migration
+   * IndexedDB : les enregistrements sont stockés entiers.
+   */
+  origin?: TemplateOrigin
 }
 
 /** Ce qu'il faut pour lister les voyages, sans traîner tout l'itinéraire. */
@@ -44,6 +62,10 @@ export interface TripSummary {
   isDemo: boolean
   /** Synchronisé avec d'autres voyageurs. */
   isGroup: boolean
+  /** Repris d'un itinéraire modèle (bannière « D'après le voyage de… »). */
+  fromTemplate: boolean
+  /** Publié comme itinéraire modèle par ce téléphone. */
+  isPublishedTemplate: boolean
   startDate: string | null
   endDate: string | null
   dayCount: number
@@ -149,6 +171,10 @@ export function summarizeTrip(
     updatedAt: trip.updatedAt,
     isDemo: Boolean(trip.isDemo),
     isGroup: Boolean(trip.group),
+    // Sur `origin` et non sur `source` : une copie d'un voyage repris garde la
+    // provenance « Repris » mais pas le lien au modèle (voir `duplicateTrip`).
+    fromTemplate: Boolean(trip.origin),
+    isPublishedTemplate: Boolean(trip.publishedTemplate),
     startDate: range?.start ?? null,
     endDate: range?.end ?? null,
     dayCount: trip.itinerary.length,

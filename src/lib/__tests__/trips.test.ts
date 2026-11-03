@@ -1,4 +1,8 @@
 import type { DayItinerary } from '@/lib/itinerary-data'
+import type {
+  PublishedTemplateInfo,
+  TemplateOrigin,
+} from '@/lib/template-model'
 import {
   currentDayIndex,
   daysUntil,
@@ -33,6 +37,44 @@ function trip(id: string, days: DayItinerary[]): StoredTrip {
     source: 'json',
     createdAt: 0,
     updatedAt: 0,
+  }
+}
+
+/** Côté auteur : un voyage au Japon publié comme modèle, jeton compris. */
+function publishedTemplate(
+  partial: Partial<PublishedTemplateInfo> = {},
+): PublishedTemplateInfo {
+  return {
+    id: 'k3v9x2mq8r7t4wza',
+    slug: 'japon-14-jours-tokyo-kyoto-osaka',
+    ownerToken: 'q8Zl1yM3n0Vb7cXk2Rj5Hs9Pf4Tw6Ue1Ga0Ld8Ky3Ni',
+    version: 2,
+    indexable: true,
+    includesNotes: false,
+    includesPrices: true,
+    authorName: 'Yanis',
+    country: 'JP',
+    publishedAt: '2026-10-02T09:15:00.000Z',
+    updatedAt: '2026-10-20T18:40:00.000Z',
+    ...partial,
+  }
+}
+
+/** Côté repreneur : le même modèle, repris à ses dates en gardant 2 journées. */
+function templateOrigin(
+  base: DayItinerary[],
+  partial: Partial<TemplateOrigin> = {},
+): TemplateOrigin {
+  return {
+    templateId: 'k3v9x2mq8r7t4wza',
+    version: 2,
+    title: 'Japon en 14 jours',
+    authorName: 'Yanis',
+    startDate: base[0]?.date ?? '2026-06-01',
+    keptDayIds: base.map((item) => item.id),
+    base,
+    takenAt: Date.UTC(2026, 9, 28, 20, 5),
+    ...partial,
   }
 }
 
@@ -161,5 +203,57 @@ describe('sortTripSummaries / pickDefaultTrip', () => {
     expect(pickDefaultTrip([past, later])).toBe('later')
     expect(pickDefaultTrip([past])).toBe('past')
     expect(pickDefaultTrip([])).toBeNull()
+  })
+})
+
+describe('summarizeTrip — itinéraires modèles', () => {
+  const japan = [day('2026-06-01', 'Tokyo'), day('2026-06-02', 'Kyoto')]
+
+  it('signale un voyage repris d’un modèle', () => {
+    const taken: StoredTrip = {
+      ...trip('repris', japan),
+      source: 'template',
+      origin: templateOrigin(japan),
+    }
+    expect(summarizeTrip(taken, today)).toMatchObject({
+      source: 'template',
+      fromTemplate: true,
+      isPublishedTemplate: false,
+    })
+  })
+
+  it('signale un voyage publié comme modèle depuis ce téléphone', () => {
+    const published: StoredTrip = {
+      ...trip('publie', japan),
+      publishedTemplate: publishedTemplate(),
+    }
+    expect(summarizeTrip(published, today)).toMatchObject({
+      fromTemplate: false,
+      isPublishedTemplate: true,
+    })
+  })
+
+  it('ne voit ni reprise ni publication sur un voyage ordinaire', () => {
+    expect(summarizeTrip(trip('ordinaire', japan), today)).toMatchObject({
+      fromTemplate: false,
+      isPublishedTemplate: false,
+    })
+  })
+
+  it('s’appuie sur le lien au modèle, pas sur la provenance', () => {
+    // Une copie d'un voyage repris garde la provenance, pas le modèle.
+    const copy: StoredTrip = { ...trip('copie', japan), source: 'template' }
+    expect(summarizeTrip(copy, today).fromTemplate).toBe(false)
+  })
+
+  it('ne fait jamais voyager le jeton propriétaire dans le résumé', () => {
+    const published: StoredTrip = {
+      ...trip('publie', japan),
+      publishedTemplate: publishedTemplate(),
+      origin: templateOrigin(japan),
+    }
+    const summary = JSON.stringify(summarizeTrip(published, today))
+    expect(summary).not.toContain(publishedTemplate().ownerToken)
+    expect(summary).not.toContain('k3v9x2mq8r7t4wza')
   })
 })

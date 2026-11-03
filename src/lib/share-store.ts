@@ -2,7 +2,12 @@
 // Les identifiants R2 ne quittent jamais le serveur — le navigateur ne parle
 // qu'à /api/share, il n'y a donc ni CORS à configurer ni signature côté client.
 
-import { createBucket, syncCodeAlphabets, type Bucket } from '@s3nd/core'
+import {
+  createBucket,
+  syncCodeAlphabets,
+  type Bucket,
+  type BucketConfig,
+} from '@s3nd/core'
 import { SHARE_CODE_LENGTH } from '@/lib/share'
 
 /** Nom d'application inscrit dans l'enveloppe du snapshot. */
@@ -39,6 +44,25 @@ function requireEnv(name: string): string {
   return value
 }
 
+/**
+ * Connexion au bucket R2, commune au partage et aux modèles
+ * (`template-bucket.ts`) : mêmes identifiants, préfixes distincts. Lève si
+ * une variable manque.
+ */
+export function r2Connection(): Pick<
+  BucketConfig,
+  'bucket' | 'endpoint' | 'credentials'
+> {
+  return {
+    bucket: requireEnv('R2_BUCKET_NAME'),
+    endpoint: `https://${requireEnv('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: requireEnv('R2_ACCESS_KEY_ID'),
+      secretAccessKey: requireEnv('R2_SECRET_ACCESS_KEY'),
+    },
+  }
+}
+
 let store: Bucket | null = null
 
 /**
@@ -49,12 +73,7 @@ let store: Bucket | null = null
 export function getShareStore(): Bucket {
   if (!store) {
     store = createBucket({
-      bucket: requireEnv('R2_BUCKET_NAME'),
-      endpoint: `https://${requireEnv('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: requireEnv('R2_ACCESS_KEY_ID'),
-        secretAccessKey: requireEnv('R2_SECRET_ACCESS_KEY'),
-      },
+      ...r2Connection(),
       // Namespace interne : les snapshots ne côtoient pas d'autres objets.
       prefix: 'shares',
       // Chiffres uniquement : le code se dicte au téléphone et se saisit au

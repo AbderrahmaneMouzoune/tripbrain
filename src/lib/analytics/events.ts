@@ -269,6 +269,69 @@ export const analyticsEvents = {
       ),
     },
   },
+  // Itinéraires modèles : ni l'id, ni le slug, ni le prénom de l'auteur, ni le
+  // pays — un modèle est public, mais la mesure n'a pas à savoir lequel on
+  // regarde pour compter publications, ouvertures et reprises.
+  template_published: {
+    description:
+      'Un voyage a été publié comme itinéraire modèle : nombre de journées, notes et prix inclus ou non, visible sur tripbrain.fr ou par lien seulement — jamais lequel.',
+    properties: {
+      days_count: count(),
+      includes_notes: flag(),
+      includes_prices: flag(),
+      indexable: flag(),
+    },
+  },
+  template_publish_failed: {
+    description:
+      "Échec de la publication d'un itinéraire modèle, avec sa cause : trop volumineux, réseau, service indisponible ou contenu refusé.",
+    properties: {
+      reason: choice(
+        'too_large',
+        'network_error',
+        'unavailable',
+        'invalid',
+        'unknown',
+      ),
+    },
+  },
+  template_updated: {
+    description:
+      'Un itinéraire modèle a été mis à jour par son auteur, avec le nombre de journées de la nouvelle version.',
+    properties: { days_count: count() },
+  },
+  template_visibility_changed: {
+    description:
+      "L'auteur d'un itinéraire modèle l'a rendu visible sur tripbrain.fr et Google, ou l'a limité à son lien.",
+    properties: { indexable: flag() },
+  },
+  template_retired: {
+    description:
+      'Un itinéraire modèle a été retiré par son auteur : son lien et sa page ne répondent plus.',
+    properties: {},
+  },
+  template_opened: {
+    description:
+      "Ouverture d'un itinéraire modèle, et par quel chemin : lien partagé, site tripbrain.fr, app installée ou lien collé — jamais lequel.",
+    properties: { via: choice('link', 'site', 'native', 'paste') },
+  },
+  template_taken: {
+    description:
+      "Un itinéraire modèle a été repris : journées du modèle, journées gardées, et durée identique, plus courte ou plus longue que l'original.",
+    properties: {
+      // Journées du modèle, puis journées gardées par le repreneur.
+      days_count: count(),
+      kept_days_count: count(),
+      duration: choice('same', 'shorter', 'longer'),
+    },
+  },
+  template_take_failed: {
+    description:
+      "Échec de la reprise d'un itinéraire modèle, avec sa cause : modèle introuvable, retiré par son auteur, ou erreur de réseau.",
+    properties: {
+      reason: choice('not_found', 'retired', 'network_error', 'unknown'),
+    },
+  },
   generator_opened: {
     description:
       "Départ vers le générateur d'itinéraire du site, et depuis quel écran de l'app.",

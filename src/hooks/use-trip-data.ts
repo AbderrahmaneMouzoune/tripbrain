@@ -14,6 +14,10 @@ import {
   type TripGroup,
 } from '@/lib/group-sync'
 import { readPreferences } from '@/lib/preferences'
+import type {
+  PublishedTemplateInfo,
+  TemplateOrigin,
+} from '@/lib/template-model'
 import { compressItinerary } from '@/lib/share'
 import { trackEvent } from '@/lib/analytics/client'
 import { importFailureReason, itineraryVolume } from '@/lib/analytics/metrics'
@@ -53,6 +57,15 @@ export interface AddTripOptions {
   activate?: boolean
   /** Voyage de groupe rejoint par invitation. */
   group?: TripGroup
+  /** Voyage repris d'un itinéraire modèle (voir `takeTemplate`). */
+  origin?: TemplateOrigin
+}
+
+/** Ce que la reprise d'un modèle (B4) remet au voyage créé. */
+export interface TakeTemplateInput {
+  /** Titre du modèle, ou celui choisi par le repreneur. */
+  title: string
+  origin: TemplateOrigin
 }
 
 /** Remplacer le voyage consulté plutôt que d'en ajouter un : choix offert à la réception d'un partage. */
@@ -249,6 +262,7 @@ export function useTripData() {
         updatedAt: now,
         isDemo: options.source === 'demo',
         ...(options.group ? { group: options.group } : {}),
+        ...(options.origin ? { origin: options.origin } : {}),
       }
       await persistTrip(trip)
 
@@ -356,6 +370,13 @@ export function useTripData() {
    * Enregistre un itinéraire reçu par partage, par le générateur ou par le
    * site. Par défaut il s'ajoute aux voyages et s'ouvre ; en mode `replace`, il
    * prend la place du voyage consulté (même identifiant, même position).
+   *
+   * Remplacer le programme coupe aussi le lien aux modèles : `origin` ne
+   * décrirait plus ce voyage (une mise à jour V1.1 fusionnerait le modèle dans
+   * un tout autre programme), et `publishedTemplate` permettrait de publier
+   * le voyage reçu — celui d'un autre — sous le modèle de l'auteur. Le jeton
+   * propriétaire part avec : le modèle reste en ligne, mais ce téléphone ne
+   * peut plus le retirer.
    */
   const importSharedItinerary = useCallback(
     async (days: DayItinerary[], options: ImportSharedOptions = {}) => {
@@ -378,6 +399,8 @@ export function useTripData() {
             itinerary: days,
             title: options.title?.trim() || deriveTripTitle(days),
             source,
+            origin: undefined,
+            publishedTemplate: undefined,
           }),
         )
         setTripRevision((revision) => revision + 1)
@@ -526,7 +549,15 @@ export function useTripData() {
     [persistTrip],
   )
 
-  /** Copie d'un voyage, utile avant de le retoucher en profondeur. */
+  /**
+   * Copie d'un voyage, utile avant de le retoucher en profondeur.
+   *
+   * Seuls le programme, le titre et la provenance passent : ni `group` (la
+   * copie n'est pas synchronisée), ni `publishedTemplate` (le jeton
+   * propriétaire ne se duplique jamais : deux voyages piloteraient le même
+   * modèle), ni `origin` (la copie vit sa vie, sans mise à jour depuis le
+   * modèle). Une copie d'un voyage repris reste donc affichée « Repris ».
+   */
   const duplicateTrip = useCallback(
     async (id: string) => {
       const trip = tripsRef.current.find((item) => item.id === id)
@@ -537,6 +568,38 @@ export function useTripData() {
         activate: false,
       })
     },
+    [addTrip],
+  )
+
+  /**
+   * Enregistre (ou efface, avec `undefined`) le modèle publié depuis ce
+   * voyage. Comme `leaveGroup`, sans passer par `touched` : publier n'est pas
+   * une retouche du programme, et un voyage de groupe ne doit pas devenir
+   * « à envoyer » pour autant. Sans effet si le voyage n'existe plus.
+   */
+  const setPublishedTemplate = useCallback(
+    async (tripId: string, info: PublishedTemplateInfo | undefined) => {
+      // Relu ici plutôt que reçu de l'appelant : la publication suit un appel
+      // réseau, pendant lequel une retouche a pu être enregistrée.
+      const trip = tripsRef.current.find((item) => item.id === tripId)
+      if (!trip) return
+      await persistTrip({ ...trip, publishedTemplate: info })
+    },
+    [persistTrip],
+  )
+
+  /**
+   * Crée le voyage d'un repreneur à partir d'un modèle déjà recalé et filtré
+   * (`retimeTemplate`), puis l'ouvre. L'appel réseau et la mesure restent à
+   * l'écran de reprise : ici, seulement l'enregistrement local.
+   */
+  const takeTemplate = useCallback(
+    (days: DayItinerary[], input: TakeTemplateInput): Promise<string> =>
+      addTrip(days, {
+        source: 'template',
+        title: input.title,
+        origin: input.origin,
+      }),
     [addTrip],
   )
 
@@ -599,6 +662,8 @@ export function useTripData() {
     enableGroup,
     joinGroupTrip,
     leaveGroup,
+    setPublishedTemplate,
+    takeTemplate,
     /** Voyages complets (itinéraires compris), pour ce qui les sert tous : les rappels. */
     storedTrips: trips,
     activeTrip,
