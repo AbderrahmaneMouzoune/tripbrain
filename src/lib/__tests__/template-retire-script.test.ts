@@ -1,10 +1,13 @@
+import { S3ndError } from '@s3nd/core'
+import { resyncTemplateIndexCommand } from '../../../scripts/resync-template-index'
 import {
   retireTemplateCommand,
   templateRefFromArg,
   type RetireTemplateDeps,
 } from '../../../scripts/retire-template'
 import {
-  TEMPLATE_INDEX_KEY,
+  isTemplateIndexKey,
+  templateIndexKey,
   publishTemplate,
   readIndex,
   readTemplate,
@@ -174,7 +177,7 @@ describe('scripts/retire-template.ts', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const { meta } = await publish()
     bucket.beforePut = (key) => {
-      if (key === TEMPLATE_INDEX_KEY) throw new Error('R2 indisponible')
+      if (isTemplateIndexKey(key)) throw new Error('R2 indisponible')
     }
 
     const failed = await run([meta.id])
@@ -233,5 +236,60 @@ describe('scripts/retire-template.ts', () => {
     expect(out).toContain('versions : 1 encore stockée(s)')
     expect(err).toContain('pas entièrement retiré')
     expect(versionKeys(meta.id)).toEqual([`${meta.id}/v/1`])
+  })
+})
+
+describe('scripts/resync-template-index.ts', () => {
+  async function resync(args: string[]): Promise<Run> {
+    const out: string[] = []
+    const err: string[] = []
+    const code = await resyncTemplateIndexCommand(args, {
+      open: () => bucket,
+      bucketName: 'tripbrain-prod',
+      log: (line) => out.push(line),
+      error: (line) => err.push(line),
+    })
+    return { code, out: out.join('\n'), err: err.join('\n') }
+  }
+
+  it('remet dans l’index les modèles restés hors d’un morceau plein, par id, slug ou lien', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    bucket.beforePut = (key) => {
+      if (isTemplateIndexKey(key)) {
+        throw new S3ndError('FILE_TOO_LARGE', `${key} dépasse maxSize.`)
+      }
+    }
+    const first = await publish()
+    const second = await publish()
+    expect(await readIndex(bucket)).toEqual([])
+
+    // Toujours plein : la commande le dit, et sort en 1.
+    const stillFull = await resync([first.meta.id])
+    expect(stillFull.code).toBe(1)
+    expect(stillFull.err).toContain('l’index n’a pas suivi')
+
+    bucket.beforePut = null
+    const done = await resync([
+      first.meta.id,
+      `https://tripbrain.fr/itineraires/${second.meta.slug}`,
+    ])
+    expect(done.code).toBe(0)
+    expect(done.out).toContain('Bucket R2 : tripbrain-prod')
+    expect(done.out).toContain(
+      `${first.meta.id} · ${first.meta.slug} : dans l’index public`,
+    )
+    expect((await readIndex(bucket)).map((entry) => entry.id).sort()).toEqual(
+      [first.meta.id, second.meta.id].sort(),
+    )
+    expect(bucket.keys()).toContain(templateIndexKey(first.meta.id))
+    vi.restoreAllMocks()
+  })
+
+  it('refuse un argument mal formé ou absent, et signale un modèle introuvable', async () => {
+    expect((await resync([])).code).toBe(2)
+    expect((await resync(['pas un id'])).code).toBe(2)
+    const missing = await resync(['k3x9m2abcdefghjk'])
+    expect(missing.code).toBe(1)
+    expect(missing.err).toContain('introuvable')
   })
 })

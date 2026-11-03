@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { isS3ndError } from '@s3nd/core'
+import { S3ndError, isS3ndError } from '@s3nd/core'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import {
   createTemplateId,
@@ -7,9 +7,11 @@ import {
   type TemplateMeta,
 } from '@/lib/template-model'
 import {
-  TEMPLATE_INDEX_KEY,
+  TEMPLATE_INDEX_FULL_ALERT,
+  TEMPLATE_INDEX_KEYS,
   TEMPLATE_SCHEMA_VERSION,
   assertTemplateOwner,
+  isTemplateIndexKey,
   isTemplateStoreError,
   patchTemplate,
   publishTemplate,
@@ -18,8 +20,10 @@ import {
   readTemplateBySlug,
   readTemplateForOperator,
   readTemplateVersion,
+  resyncTemplateIndex,
   retireTemplate,
   retireTemplateAsOperator,
+  templateIndexKey,
   templateMetaKey,
   templateSlugKey,
   templateVersionKey,
@@ -138,7 +142,7 @@ function racing(
 ): TemplateBucket {
   let pending: (() => Promise<unknown>) | null = competitor
   async function race(key: string): Promise<void> {
-    if (key !== TEMPLATE_INDEX_KEY || !pending) return
+    if (!isTemplateIndexKey(key) || !pending) return
     const run = pending
     pending = null
     await run()
@@ -159,8 +163,18 @@ function racing(
 /** Toute écriture de l'index échoue, comme une panne de R2. */
 function breakIndexWrites(): void {
   bucket.beforePut = (key) => {
-    if (key === TEMPLATE_INDEX_KEY) throw new Error('R2 indisponible')
+    if (isTemplateIndexKey(key)) throw new Error('R2 indisponible')
   }
+}
+
+/** Un autre serveur réécrit ce morceau d'index : son ETag change. */
+function touchIndex(key: string): void {
+  bucket.poke(key, bucket.peek(key) ?? { entries: [] })
+}
+
+/** Tout l'index tel qu'il est stocké, morceaux confondus. */
+function storedIndexJson(): string {
+  return JSON.stringify(TEMPLATE_INDEX_KEYS.map((key) => bucket.peek(key)))
 }
 
 async function indexIds(): Promise<string[]> {
@@ -208,7 +222,7 @@ describe('publishTemplate', () => {
       [
         `${meta.id}/meta`,
         `${meta.id}/v/1`,
-        TEMPLATE_INDEX_KEY,
+        templateIndexKey(meta.id),
         'slugs/japon-3-jours-tokyo-kyoto',
       ].sort(),
     )
@@ -225,7 +239,7 @@ describe('publishTemplate', () => {
       order.indexOf(templateMetaKey(meta.id)),
     )
     expect(order.indexOf(templateMetaKey(meta.id))).toBeLessThan(
-      order.indexOf(TEMPLATE_INDEX_KEY),
+      order.indexOf(templateIndexKey(meta.id)),
     )
   })
 
@@ -299,6 +313,53 @@ describe('publishTemplate', () => {
     expect(long.meta.title.length).toBeLessThanOrEqual(120)
     expect(long.meta.title.startsWith('Japon Japon')).toBe(true)
     expect(long.meta.title.endsWith(' ')).toBe(false)
+  })
+
+  it('ne coupe jamais un emoji en deux, titre saisi, titre tiré des étapes ou prénom', async () => {
+    const LONE =
+      /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/
+    const typed = await publishTemplate(
+      bucket,
+      publishInput({
+        title: `${'a'.repeat(119)}😀`,
+        authorName: `${'b'.repeat(39)}😀`,
+      }),
+    )
+    expect(typed.meta).toMatchObject({
+      title: 'a'.repeat(119),
+      authorName: 'b'.repeat(39),
+    })
+
+    const city = `${'x'.repeat(119)}🗾`
+    const derived = await publishTemplate(
+      bucket,
+      publishInput({
+        title: '',
+        itinerary: [day(1, { city }), day(2, { city })],
+      }),
+    )
+    expect(derived.meta.title).not.toMatch(LONE)
+    expect(derived.meta.title.length).toBeLessThanOrEqual(120)
+
+    const lone = await publishTemplate(
+      bucket,
+      publishInput({ title: 'Porto \ud83d', authorName: '\udc00Rui' }),
+    )
+    expect(lone.meta).toMatchObject({
+      title: 'Porto \ufffd',
+      authorName: '\ufffdRui',
+    })
+    for (const entry of await readIndex(bucket)) {
+      expect(entry.title).not.toMatch(LONE)
+    }
+
+    const updated = await updateTemplate(
+      bucket,
+      typed.meta.id,
+      typed.ownerToken,
+      { itinerary: japanTrip(), title: `${'c'.repeat(119)}🗾`, now: LATER },
+    )
+    expect(updated.meta.title).toBe('c'.repeat(119))
   })
 
   it('nettoie le prénom comme celui d’un voyage de groupe', async () => {
@@ -445,7 +506,7 @@ describe('publishTemplate', () => {
   it('publie même si l’index ne peut pas être écrit', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     bucket.beforePut = (key) => {
-      if (key === TEMPLATE_INDEX_KEY) throw new Error('R2 indisponible')
+      if (isTemplateIndexKey(key)) throw new Error('R2 indisponible')
     }
 
     const { meta } = await publishTemplate(bucket, publishInput())
@@ -682,7 +743,7 @@ describe('retireTemplate', () => {
     expect(bucket.keys()).toEqual(
       [
         `${meta.id}/meta`,
-        TEMPLATE_INDEX_KEY,
+        templateIndexKey(meta.id),
         // Le slug reste réservé : il ne servira jamais à un autre modèle.
         templateSlugKey(meta.slug),
       ].sort(),
@@ -830,7 +891,7 @@ describe('lectures publiques', () => {
   })
 
   it('lève sur un index illisible au lieu de le présenter comme vide', async () => {
-    bucket.poke(TEMPLATE_INDEX_KEY, ['pas', 'un', 'index'])
+    bucket.poke(TEMPLATE_INDEX_KEYS[7], ['pas', 'un', 'index'])
     await expect(readIndex(bucket)).rejects.toThrow(/illisible/)
   })
 
@@ -867,9 +928,9 @@ describe('index partagé', () => {
     const first = await publishTemplate(bucket, publishInput())
     let raced = false
     bucket.beforePut = (key) => {
-      if (key !== TEMPLATE_INDEX_KEY || raced) return
+      if (!isTemplateIndexKey(key) || raced) return
       raced = true
-      bucket.poke(TEMPLATE_INDEX_KEY, bucket.peek(TEMPLATE_INDEX_KEY))
+      touchIndex(key)
     }
 
     const second = await publishTemplate(bucket, publishInput({ now: LATER }))
@@ -884,25 +945,25 @@ describe('index partagé', () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     await publishTemplate(bucket, publishInput())
     bucket.beforePut = (key) => {
-      if (key === TEMPLATE_INDEX_KEY) {
-        bucket.poke(TEMPLATE_INDEX_KEY, bucket.peek(TEMPLATE_INDEX_KEY))
-      }
+      if (isTemplateIndexKey(key)) touchIndex(key)
     }
 
     const { meta } = await publishTemplate(bucket, publishInput())
 
     expect((await readTemplate(bucket, meta.id)).status).toBe('active')
     expect(
-      bucket.puts.filter((put) => put.key === TEMPLATE_INDEX_KEY),
+      bucket.puts.filter((put) => isTemplateIndexKey(put.key)),
     ).toHaveLength(6)
     expect(logged).toHaveBeenCalledWith(expect.stringContaining('5 conflits'))
   })
 
   it('ne réécrit pas un index illisible', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
-    bucket.poke(TEMPLATE_INDEX_KEY, ['pas', 'un', 'index'])
+    vi.mocked(createTemplateId).mockReturnValueOnce(FIXED_ID)
+    const shard = templateIndexKey(FIXED_ID)
+    bucket.poke(shard, ['pas', 'un', 'index'])
     await publishTemplate(bucket, publishInput())
-    expect(bucket.peek(TEMPLATE_INDEX_KEY)).toEqual(['pas', 'un', 'index'])
+    expect(bucket.peek(shard)).toEqual(['pas', 'un', 'index'])
     expect(logged).toHaveBeenCalled()
   })
 })
@@ -947,9 +1008,7 @@ describe('index et requêtes concurrentes', () => {
     expect(await readTemplate(bucket, meta.id)).toEqual({ status: 'retired' })
     expect(await indexIds()).toEqual([])
     // Ce que la pierre tombale efface ne survit pas dans l'index public.
-    expect(JSON.stringify(bucket.peek(TEMPLATE_INDEX_KEY))).not.toContain(
-      'Mon Japon secret',
-    )
+    expect(storedIndexJson()).not.toContain('Mon Japon secret')
   })
 
   it('relit la méta quand un masquage a écrit l’index entre sa lecture et son écriture', async () => {
@@ -1081,7 +1140,7 @@ describe('sortie de l’index', () => {
 
   it('fait échouer un retrait quand l’index est illisible', async () => {
     const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
-    bucket.poke(TEMPLATE_INDEX_KEY, { pas: 'un index' })
+    bucket.poke(templateIndexKey(meta.id), { pas: 'un index' })
     expect(await storeError(retireTemplate(bucket, meta.id, ownerToken))).toBe(
       'index',
     )
@@ -1459,7 +1518,7 @@ describe('retireTemplateAsOperator', () => {
     expect(bucket.keys()).toEqual(
       [
         `${meta.id}/meta`,
-        TEMPLATE_INDEX_KEY,
+        templateIndexKey(meta.id),
         // Le slug reste réservé : il ne servira jamais à un autre modèle.
         templateSlugKey(meta.slug),
       ].sort(),
@@ -1634,7 +1693,7 @@ describe('readTemplateForOperator', () => {
       status: 'missing',
     })
     const { meta } = await publishTemplate(bucket, publishInput())
-    bucket.poke(TEMPLATE_INDEX_KEY, { pas: 'un index' })
+    bucket.poke(templateIndexKey(meta.id), { pas: 'un index' })
     expect(await readTemplateForOperator(bucket, meta.id)).toMatchObject({
       status: 'active',
       inIndex: null,
@@ -1689,5 +1748,420 @@ describe('forme des valeurs avant stockage', () => {
     ).toBe('invalid')
     expect(storedMeta(meta.id).version).toBe(1)
     expect(bucket.peek(templateVersionKey(meta.id, 2))).toBeUndefined()
+  })
+})
+
+// ── Réponse S3 perdue ─────────────────────────────────────────────────────────
+
+/**
+ * L'écriture de la première clé qui vérifie `matches` aboutit, puis lève 412 :
+ * ce que voit s3nd quand la réponse se perd et que le SDK rejoue la requête,
+ * qui bute alors sur sa propre écriture.
+ */
+function loseResponseOnce(matches: (key: string, data: unknown) => boolean) {
+  const realPut = bucket.putSnapshot.bind(bucket)
+  let lost = false
+  return vi
+    .spyOn(bucket, 'putSnapshot')
+    .mockImplementation(async (key, data, options) => {
+      const result = await realPut(key, data, options)
+      if (!lost && matches(key, data)) {
+        lost = true
+        throw new S3ndError('PRECONDITION_FAILED', `${key} existe déjà.`)
+      }
+      return result
+    })
+}
+
+describe('réponse S3 perdue : 412 sur notre propre écriture', () => {
+  it('publie quand même si la réponse de la méta se perd : jeton rendu, index et slug de base', async () => {
+    loseResponseOnce((key) => key.endsWith('/meta'))
+
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+
+    await expect(
+      assertTemplateOwner(bucket, meta.id, ownerToken),
+    ).resolves.toBeUndefined()
+    expect(await indexIds()).toEqual([meta.id])
+    expect(meta.slug).toBe('japon-3-jours-tokyo-kyoto')
+    expect(storedMeta(meta.id).ownerTokenHash).toBe(meta.ownerTokenHash)
+  })
+
+  it('échoue toujours si la méta en place n’est pas la nôtre', async () => {
+    vi.mocked(createTemplateId).mockReturnValueOnce(FIXED_ID)
+    // Une autre méta (autre jeton) occupe la place : le 412 est un vrai refus.
+    bucket.beforePut = (key) => {
+      if (key === templateMetaKey(FIXED_ID)) {
+        bucket.beforePut = null
+        bucket.poke(templateMetaKey(FIXED_ID), {
+          ...storedMetaLike(FIXED_ID),
+          ownerTokenHash: 'a'.repeat(64),
+        })
+      }
+    }
+    await expect(publishTemplate(bucket, publishInput())).rejects.toSatisfy(
+      (error) => isS3ndError(error) && error.code === 'PRECONDITION_FAILED',
+    )
+  })
+
+  it('garde le slug de base si la réponse de sa réservation se perd', async () => {
+    loseResponseOnce((key) => key.startsWith('slugs/'))
+
+    const { meta } = await publishTemplate(bucket, publishInput())
+
+    expect(meta.slug).toBe('japon-3-jours-tokyo-kyoto')
+    expect(bucket.keys().filter((key) => key.startsWith('slugs/'))).toEqual([
+      templateSlugKey('japon-3-jours-tokyo-kyoto'),
+    ])
+  })
+
+  it('passe au slug suivant si le slug est vraiment à un autre modèle', async () => {
+    bucket.poke(templateSlugKey('japon-3-jours-tokyo-kyoto'), {
+      id: 'autremodele12345',
+    })
+    const { meta } = await publishTemplate(bucket, publishInput())
+    expect(meta.slug).toBe('japon-3-jours-tokyo-kyoto-2')
+  })
+
+  it('publie la version 2 d’une mise à jour dont la réponse de la méta se perd', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    loseResponseOnce(
+      (key, data) =>
+        key === templateMetaKey(meta.id) &&
+        (data as { version?: number }).version === 2,
+    )
+
+    const updated = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: japanTrip(),
+      now: LATER,
+    })
+
+    expect(updated.meta.version).toBe(2)
+    expect(updated.template.version).toBe(2)
+    expect(storedMeta(meta.id).version).toBe(2)
+    expect(await readTemplateVersion(bucket, meta.id, 2)).toMatchObject({
+      status: 'active',
+      version: 2,
+    })
+    expect(versionKeys(meta.id)).toEqual([
+      templateVersionKey(meta.id, 1),
+      templateVersionKey(meta.id, 2),
+    ])
+  })
+
+  it('ne supprime jamais la version vers laquelle pointe la méta, même modifiée depuis', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    const realPut = bucket.putSnapshot.bind(bucket)
+    let lost = false
+    vi.spyOn(bucket, 'putSnapshot').mockImplementation(
+      async (key, data, options) => {
+        const result = await realPut(key, data, options)
+        if (
+          !lost &&
+          key === templateMetaKey(meta.id) &&
+          (data as { version?: number }).version === 2
+        ) {
+          lost = true
+          // Un masquage passe entre notre écriture et le 412 de son rejeu.
+          await patchTemplate(bucket, meta.id, ownerToken, {
+            indexable: false,
+            now: EVEN_LATER,
+          })
+          throw new S3ndError('PRECONDITION_FAILED', `${key} a changé.`)
+        }
+        return result
+      },
+    )
+
+    const updated = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: japanTrip(),
+      now: LATER,
+    })
+
+    expect(updated.meta).toMatchObject({ version: 2, indexable: false })
+    expect(await readTemplate(bucket, meta.id)).toMatchObject({
+      status: 'active',
+      template: { version: 2 },
+    })
+  })
+})
+
+/** Une méta active plausible, pour occuper une clé à la place d'un autre. */
+function storedMetaLike(id: string): TemplateMeta {
+  return {
+    id,
+    slug: 'japon-3-jours-tokyo-kyoto',
+    version: 1,
+    title: 'Autre',
+    authorName: null,
+    country: 'JP',
+    indexable: false,
+    includesNotes: false,
+    includesPrices: false,
+    dayCount: 3,
+    cities: ['Tokyo'],
+    tripYear: 2026,
+    publishedAt: PUBLISHED_AT.toISOString(),
+    updatedAt: PUBLISHED_AT.toISOString(),
+    retiredAt: null,
+    ownerTokenHash: 'b'.repeat(64),
+  }
+}
+
+// ── Retrait concurrent ────────────────────────────────────────────────────────
+
+/**
+ * Le bucket, avec un retrait complet glissé juste avant la première lecture
+ * d'une version du modèle : là où une écriture relit la version publiée.
+ */
+function retiringBeforeVersionRead(id: string, token: string): TemplateBucket {
+  let pending = true
+  return {
+    async getSnapshot(key, options) {
+      if (pending && key.startsWith(`${id}/v/`)) {
+        pending = false
+        await retireTemplate(bucket, id, token, LATER)
+      }
+      return bucket.getSnapshot(key, options)
+    },
+    putSnapshot: (key, data, options) => bucket.putSnapshot(key, data, options),
+    delete: (key) => bucket.delete(key),
+  }
+}
+
+describe('retrait concurrent d’une écriture ou d’une lecture', () => {
+  it('répond « retiré » à un réglage qui croise un retrait, qu’il change la méta ou non', async () => {
+    for (const indexable of [false, true]) {
+      bucket.reset()
+      const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+      expect(
+        await storeError(
+          patchTemplate(
+            retiringBeforeVersionRead(meta.id, ownerToken),
+            meta.id,
+            ownerToken,
+            { indexable, now: EVEN_LATER },
+          ),
+        ),
+      ).toBe('retired')
+      expect(await readTemplate(bucket, meta.id)).toEqual({ status: 'retired' })
+      expect(versionKeys(meta.id)).toEqual([])
+    }
+  })
+
+  it('répond « retiré » et non « absent » à une lecture qui croise un retrait', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    expect(
+      await readTemplate(
+        retiringBeforeVersionRead(meta.id, ownerToken),
+        meta.id,
+      ),
+    ).toEqual({ status: 'retired' })
+  })
+
+  it('par le slug, ne répond « retiré » que si le modèle était listé au retrait', async () => {
+    const listed = await publishTemplate(bucket, publishInput())
+    expect(
+      await readTemplateBySlug(
+        retiringBeforeVersionRead(listed.meta.id, listed.ownerToken),
+        listed.meta.slug,
+      ),
+    ).toEqual({ status: 'retired' })
+
+    const hidden = await publishTemplate(bucket, publishInput())
+    // Masqué puis retiré entre la lecture de la méta et celle de la version.
+    const racing: TemplateBucket = {
+      async getSnapshot(key, options) {
+        if (key === templateVersionKey(hidden.meta.id, 1)) {
+          await patchTemplate(bucket, hidden.meta.id, hidden.ownerToken, {
+            indexable: false,
+          })
+          await retireTemplate(bucket, hidden.meta.id, hidden.ownerToken)
+        }
+        return bucket.getSnapshot(key, options)
+      },
+      putSnapshot: (key, data, options) =>
+        bucket.putSnapshot(key, data, options),
+      delete: (key) => bucket.delete(key),
+    }
+    expect(await readTemplateBySlug(racing, hidden.meta.slug)).toEqual({
+      status: 'missing',
+    })
+  })
+
+  /**
+   * Le retrait aboutit entre la lecture de la méta par la mise à jour et
+   * l'écriture de sa version 2 : sa suppression des versions passe avant
+   * elle. `after` s'exécute juste après le retrait.
+   */
+  function retireBeforeVersion2(
+    id: string,
+    token: string,
+    after: () => void = () => {},
+  ) {
+    const realPut = bucket.putSnapshot.bind(bucket)
+    vi.spyOn(bucket, 'putSnapshot').mockImplementation(
+      async (key, data, options) => {
+        if (key === templateVersionKey(id, 2)) {
+          await retireTemplate(bucket, id, token, LATER)
+          after()
+        }
+        // L'écriture de sa méta échouerait de toute façon (réseau épuisé).
+        if (
+          key === templateMetaKey(id) &&
+          (data as { version?: number }).version === 2
+        ) {
+          throw new S3ndError('UPLOAD_FAILED', 'ECONNRESET')
+        }
+        return realPut(key, data, options)
+      },
+    )
+  }
+
+  it('ne laisse aucune version dans R2 quand une mise à jour croise un retrait réussi', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    retireBeforeVersion2(meta.id, ownerToken)
+
+    expect(
+      await storeError(
+        updateTemplate(bucket, meta.id, ownerToken, {
+          itinerary: japanTrip(),
+          now: EVEN_LATER,
+        }),
+      ),
+    ).toBe('retired')
+    expect(versionKeys(meta.id)).toEqual([])
+    expect(await readTemplateForOperator(bucket, meta.id)).toMatchObject({
+      status: 'retired',
+      versionsLeft: 0,
+    })
+  })
+
+  it('lève « versions » si la suppression qui suit échoue, et le retrait rejoué l’efface', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    retireBeforeVersion2(meta.id, ownerToken, breakDeletes)
+
+    expect(
+      await storeError(
+        updateTemplate(bucket, meta.id, ownerToken, {
+          itinerary: japanTrip(),
+          now: EVEN_LATER,
+        }),
+      ),
+    ).toBe('versions')
+    expect(versionKeys(meta.id)).toEqual([templateVersionKey(meta.id, 2)])
+
+    vi.mocked(bucket.putSnapshot).mockRestore()
+    bucket.beforeDelete = null
+    await retireTemplate(bucket, meta.id, ownerToken, LATER)
+    expect(versionKeys(meta.id)).toEqual([])
+    logged.mockRestore()
+  })
+})
+
+// ── Index en morceaux ─────────────────────────────────────────────────────────
+
+describe('index en morceaux', () => {
+  /** Deux ids imposés, dans deux morceaux différents. */
+  const IN_K = 'k3x9m2abcdefghjk'
+  const IN_2 = '2bcdefghjkmnpqrs'
+
+  /** Ce morceau ne peut plus grandir : la limite de taille de s3nd. */
+  function fillShard(key: string): void {
+    bucket.beforePut = (written) => {
+      if (written === key) {
+        throw new S3ndError('FILE_TOO_LARGE', `${written} dépasse maxSize.`)
+      }
+    }
+  }
+
+  it('range chaque modèle dans le morceau du premier caractère de son id', async () => {
+    vi.mocked(createTemplateId)
+      .mockReturnValueOnce(IN_K)
+      .mockReturnValueOnce(IN_2)
+    await publishTemplate(bucket, publishInput())
+    await publishTemplate(bucket, publishInput({ now: LATER }))
+
+    expect(templateIndexKey(IN_K)).toBe('index/k')
+    expect(TEMPLATE_INDEX_KEYS).toHaveLength(32)
+    expect(bucket.peek('index/k')).toMatchObject({ entries: [{ id: IN_K }] })
+    expect(bucket.peek('index/2')).toMatchObject({ entries: [{ id: IN_2 }] })
+    // La lecture fusionne les morceaux, du plus récent au plus ancien.
+    expect(await indexIds()).toEqual([IN_2, IN_K])
+  })
+
+  it('un morceau plein n’empêche pas un autre de grandir, et lève une alerte qui nomme le modèle', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    fillShard(templateIndexKey(IN_K))
+    vi.mocked(createTemplateId)
+      .mockReturnValueOnce(IN_K)
+      .mockReturnValueOnce(IN_2)
+
+    const blocked = await publishTemplate(bucket, publishInput())
+    const other = await publishTemplate(bucket, publishInput({ now: LATER }))
+
+    expect(blocked.meta.id).toBe(IN_K)
+    expect(blocked.template.listed).toBe(true)
+    expect(await indexIds()).toEqual([other.meta.id])
+    expect(logged).toHaveBeenCalledWith(
+      expect.stringMatching(
+        new RegExp(`^${TEMPLATE_INDEX_FULL_ALERT} .*index/k.*${IN_K}`),
+      ),
+    )
+  })
+
+  it('rattrape par l’opérateur un modèle resté hors d’un morceau plein', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    fillShard(templateIndexKey(IN_K))
+    vi.mocked(createTemplateId).mockReturnValueOnce(IN_K)
+    const { meta } = await publishTemplate(bucket, publishInput())
+    expect(await resyncTemplateIndex(bucket, meta.id)).toEqual({
+      id: IN_K,
+      slug: meta.slug,
+      listed: true,
+      synced: false,
+    })
+    expect(await indexIds()).toEqual([])
+
+    // De la place est faite : le rattrapage le remet, par l'id ou le slug.
+    bucket.beforePut = null
+    expect(await resyncTemplateIndex(bucket, meta.slug)).toMatchObject({
+      id: IN_K,
+      synced: true,
+    })
+    expect(await indexIds()).toEqual([IN_K])
+    // Rejoué, il ne change rien.
+    const puts = bucket.puts.length
+    expect(await resyncTemplateIndex(bucket, IN_K)).toMatchObject({
+      synced: true,
+    })
+    expect(bucket.puts.length).toBe(puts)
+  })
+
+  it('le rattrapage sort aussi de l’index un modèle masqué, et ignore un modèle inconnu', async () => {
+    const { meta } = await publishTemplate(bucket, publishInput())
+    // Une ligne restée là alors que la méta dit « masqué ».
+    bucket.poke(templateMetaKey(meta.id), {
+      ...storedMeta(meta.id),
+      indexable: false,
+    })
+    expect(await resyncTemplateIndex(bucket, meta.id)).toMatchObject({
+      listed: false,
+      synced: true,
+    })
+    expect(await indexIds()).toEqual([])
+    expect(await resyncTemplateIndex(bucket, createTemplateId())).toBeNull()
+    expect(await resyncTemplateIndex(bucket, 'pas-un-slug-7-jours')).toBeNull()
+  })
+
+  it('ignore une ligne rangée dans un autre morceau que le sien', async () => {
+    const { meta } = await publishTemplate(bucket, publishInput())
+    const entry = (await readIndex(bucket))[0]
+    const elsewhere = TEMPLATE_INDEX_KEYS.find(
+      (key) => key !== templateIndexKey(meta.id),
+    )!
+    bucket.poke(elsewhere, { entries: [{ ...entry, title: 'Périmé' }] })
+    expect(await readIndex(bucket)).toEqual([entry])
   })
 })

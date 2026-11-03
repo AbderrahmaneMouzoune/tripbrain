@@ -24,6 +24,7 @@ import type {
   Transport,
 } from '@/lib/itinerary-data'
 import {
+  MAX_DAY_NUMBER,
   addDays,
   fromDayNumber,
   isIsoDate,
@@ -328,8 +329,10 @@ function reroute(
  *      précédente — et disparaît s'il repartirait de là où il arrive
  *      (Tokyo → Nikko → Tokyo, sans Nikko).
  *
- * Lève une erreur si `startDate` n'est pas une date, ou si aucune journée ne
- * reste. Ne modifie jamais `itinerary` : le résultat est une copie profonde.
+ * Lève une erreur si `startDate` n'est pas une date, si aucune journée ne
+ * reste, ou si le voyage sortirait du calendrier (`tripFitsCalendar`, ou une
+ * date de la journée décalée au-delà de 9999 ou avant 0000). Ne modifie
+ * jamais `itinerary` : le résultat est une copie profonde.
  */
 export function retimeTemplate(
   itinerary: readonly DayItinerary[],
@@ -346,9 +349,38 @@ export function retimeTemplate(
   if (kept.length === 0) {
     throw new Error('Il faut garder au moins une journée du modèle.')
   }
+  const outOfCalendar = () =>
+    new Error(
+      `Date de départ hors calendrier (« ${startDate} ») : le voyage doit tenir entre le 0000-01-01 et le 9999-12-31.`,
+    )
+  if (!tripFitsCalendar(startDate, kept.length)) throw outOfCalendar()
+  try {
+    return placeDays(itinerary, kept, toDayNumber(startDate))
+  } catch (error) {
+    // Une date de la journée (un vol de nuit, un départ la veille) que
+    // l'écart ferait sortir du calendrier.
+    if (error instanceof RangeError) throw outOfCalendar()
+    throw error
+  }
+}
 
+/**
+ * Le voyage tient-il au calendrier ? De `startDate` au lendemain de la
+ * dernière nuit (le `checkOut` d'un séjour), soit `nights` jours plus loin,
+ * tout doit tenir au plus tard le 9999-12-31. C'est la règle de `retimeTemplate`,
+ * et celle de l'écran B4 (`groupDaysByCity`), qui ne date alors rien.
+ */
+function tripFitsCalendar(startDate: string, nights: number): boolean {
+  return toDayNumber(startDate) + nights <= MAX_DAY_NUMBER
+}
+
+/** Les étapes 1 à 5 de `retimeTemplate`, une fois les entrées vérifiées. */
+function placeDays(
+  itinerary: readonly DayItinerary[],
+  kept: readonly TemplateDay[],
+  start: number,
+): DayItinerary[] {
   // 1 à 3 — chaque journée à sa place, son contenu avec elle.
-  const start = toDayNumber(startDate)
   const offsets = kept.map(({ oldDay }, rank) =>
     oldDay === null ? 0 : start + rank - oldDay,
   )
@@ -360,20 +392,20 @@ export function retimeTemplate(
   for (const run of runsOf(kept, ({ stay }) => stay?.key ?? null)) {
     const checkIn = fromDayNumber(start + run.first)
     const checkOut = fromDayNumber(start + run.last + 1)
-    let carried = false
     for (let rank = run.first; rank <= run.last; rank++) {
       const accommodation = days[rank].accommodation
       if (!accommodation) continue
-      carried = true
       days[rank] = {
         ...days[rank],
         accommodation: redateStay(accommodation, checkIn, checkOut),
       }
     }
     const stay = kept[run.first].stay
-    if (carried || !stay) continue
-    // Seule la journée d'arrivée portait l'hébergement, et elle est retirée :
-    // sans ce report, les nuits gardées du séjour n'auraient plus de toit.
+    if (days[run.first].accommodation || !stay) continue
+    // La première nuit gardée du séjour n'a pas d'hébergement : sa journée
+    // d'arrivée, qui le portait, est retirée (§3.2.4). Même si l'hôtel est
+    // répété plus loin dans le séjour, `findStay` ne regarde qu'en arrière :
+    // sans ce report, cette nuit n'aurait plus de toit.
     const moved = sameId(
       shiftDatesDeep(stay.accommodation, offsets[run.first]),
       stay.accommodation,
@@ -544,7 +576,11 @@ export function groupDaysByCity(
   startDate: string,
 ): CityGroup[] {
   const keptIds = new Set(keptDayIds)
-  const hasStart = isIsoDate(startDate)
+  const keptCount = itinerary.filter((day) => keptIds.has(day.id)).length
+  // Une date que `retimeTemplate` refuserait (le voyage sortirait du
+  // calendrier) ne date rien, comme une date pas encore valide.
+  const hasStart =
+    isIsoDate(startDate) && tripFitsCalendar(startDate, keptCount)
   let rank = 0
   const entries = itinerary.map((day, index): CityGroupDay => {
     const kept = keptIds.has(day.id)

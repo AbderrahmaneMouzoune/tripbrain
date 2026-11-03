@@ -26,6 +26,7 @@ import {
   type TemplateOptions,
 } from '@/lib/template-model'
 import { normalizeItineraryShape } from '@/lib/template-shape'
+import { truncateText } from '@/lib/text-limit'
 import {
   isTemplateStoreError,
   type TemplateBucket,
@@ -43,7 +44,9 @@ export const TEMPLATE_MAX_PAYLOAD_CHARS = 2 * 1024 * 1024
  *
  * C'est aussi la seule vraie borne du nombre d'objets que crée le décodage
  * msgpack (au moins un octet chacun) : 2 Mio en donnent au plus 2 millions,
- * soit une centaine de Mo le temps d'une requête.
+ * soit une centaine de Mo le temps d'une requête — parce que la profondeur
+ * est bornée elle aussi (`MAX_DECODE_DEPTH`). Sans cette borne, 2 millions de
+ * tableaux imbriqués coûtent plus de 300 Mo.
  */
 export const TEMPLATE_MAX_INFLATED_BYTES = 2 * 1024 * 1024
 
@@ -62,6 +65,15 @@ const DECODE_LIMITS: DecoderOptions = {
   maxBinLength: 0,
   maxExtLength: 0,
 }
+
+/**
+ * Imbrication maximale du msgpack décodé. Un voyage en a 5 (journées →
+ * journée → activités → activité → étiquettes ou coordonnées). Chaque niveau
+ * coûte au décodeur un état de pile en plus d'un tableau ou d'un objet : c'est
+ * ainsi que 2 Mio d'imbrication, cachés dans une clé que le nettoyage
+ * ignorerait ensuite, gonflaient à 340 Mo de tas.
+ */
+const MAX_DECODE_DEPTH = 8
 
 /** Corps JSON entier : le payload, plus les réglages et le titre. */
 export const TEMPLATE_MAX_BODY_BYTES = TEMPLATE_MAX_PAYLOAD_CHARS + 64 * 1024
@@ -111,8 +123,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // ── Corps de requête ──────────────────────────────────────────────────────────
 
 /**
- * Le JSON du corps, refusé d'emblée s'il annonce une taille déraisonnable :
- * inutile de lire 50 Mo pour répondre 413.
+ * Le JSON du corps, borné à `TEMPLATE_MAX_BODY_BYTES` : inutile de lire 50 Mo
+ * pour répondre 413. Une taille annoncée trop grande est refusée sans lecture ;
+ * sans `Content-Length` (envoi chunked), on compte les octets lus et on coupe
+ * dès que le plafond est franchi.
  */
 export async function readJsonBody(
   request: Request,
@@ -121,8 +135,24 @@ export async function readJsonBody(
   if (Number.isFinite(declared) && declared > TEMPLATE_MAX_BODY_BYTES) {
     return reject(413, TOO_LARGE)
   }
+  if (!request.body) return reject(400, 'Requête illisible.')
+  const reader = request.body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
   try {
-    return accept(await request.json())
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      if (size > TEMPLATE_MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => {})
+        return reject(413, TOO_LARGE)
+      }
+      chunks.push(value)
+    }
+    // `TextDecoder` (UTF-8, BOM retiré, caractères invalides remplacés)
+    // décode comme `request.json()`.
+    return accept(JSON.parse(new TextDecoder().decode(Buffer.concat(chunks))))
   } catch {
     return reject(400, 'Requête illisible.')
   }
@@ -143,6 +173,127 @@ function isDecodeLimitError(error: unknown): boolean {
     error instanceof DecodeError &&
     error.message.startsWith('Max length exceeded')
   )
+}
+
+/**
+ * L'imbrication de `bytes` (un msgpack) dépasse-t-elle `maxDepth` ? Un seul
+ * passage, sans récursion ni allocation au-delà d'une pile de `maxDepth + 1`
+ * compteurs : de quoi refuser avant que le décodeur ne construise quoi que ce
+ * soit. `remaining` tient, par niveau ouvert, le nombre de valeurs qu'il reste
+ * à lire. Un tampon tronqué fait lever `RangeError` (lecture hors du
+ * `DataView`), que l'appelant traduit en 400. Le reste de la validation
+ * (octet 0xc1, longueurs, octets en trop) appartient au décodeur.
+ */
+export function nestingTooDeep(bytes: Uint8Array, maxDepth: number): boolean {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const remaining: number[] = [1]
+  let pos = 0
+  while (remaining.length > 0) {
+    remaining[remaining.length - 1] -= 1
+    const head = view.getUint8(pos)
+    pos += 1
+    let skip = 0
+    let children = 0
+    if (head <= 0x7f || head >= 0xe0) {
+      // fixint positif ou négatif : rien à sauter.
+    } else if (head <= 0x8f) {
+      children = 2 * (head & 0x0f)
+    } else if (head <= 0x9f) {
+      children = head & 0x0f
+    } else if (head <= 0xbf) {
+      skip = head & 0x1f
+    } else {
+      switch (head) {
+        case 0xc0: // nil
+        case 0xc2: // false
+        case 0xc3: // true
+          break
+        case 0xc4: // bin 8
+        case 0xd9: // str 8
+          skip = 1 + view.getUint8(pos)
+          break
+        case 0xc5: // bin 16
+        case 0xda: // str 16
+          skip = 2 + view.getUint16(pos)
+          break
+        case 0xc6: // bin 32
+        case 0xdb: // str 32
+          skip = 4 + view.getUint32(pos)
+          break
+        case 0xc7: // ext 8 : longueur, type, données
+          skip = 2 + view.getUint8(pos)
+          break
+        case 0xc8: // ext 16
+          skip = 3 + view.getUint16(pos)
+          break
+        case 0xc9: // ext 32
+          skip = 5 + view.getUint32(pos)
+          break
+        case 0xcc: // uint 8
+        case 0xd0: // int 8
+          skip = 1
+          break
+        case 0xcd: // uint 16
+        case 0xd1: // int 16
+          skip = 2
+          break
+        case 0xca: // float 32
+        case 0xce: // uint 32
+        case 0xd2: // int 32
+          skip = 4
+          break
+        case 0xcb: // float 64
+        case 0xcf: // uint 64
+        case 0xd3: // int 64
+          skip = 8
+          break
+        case 0xd4: // fixext 1 : type, puis données
+          skip = 2
+          break
+        case 0xd5: // fixext 2
+          skip = 3
+          break
+        case 0xd6: // fixext 4
+          skip = 5
+          break
+        case 0xd7: // fixext 8
+          skip = 9
+          break
+        case 0xd8: // fixext 16
+          skip = 17
+          break
+        case 0xdc: // array 16
+          skip = 2
+          children = view.getUint16(pos)
+          break
+        case 0xdd: // array 32
+          skip = 4
+          children = view.getUint32(pos)
+          break
+        case 0xde: // map 16
+          skip = 2
+          children = 2 * view.getUint16(pos)
+          break
+        case 0xdf: // map 32
+          skip = 4
+          children = 2 * view.getUint32(pos)
+          break
+        default: // 0xc1, jamais employé : le décodeur le refusera.
+          return false
+      }
+    }
+    pos += skip
+    if (children > 0) {
+      remaining.push(children)
+      if (remaining.length - 1 > maxDepth) return true
+    } else {
+      // Un conteneur vide n'ouvre aucun niveau, comme dans le décodeur.
+      while (remaining.length > 0 && remaining[remaining.length - 1] === 0) {
+        remaining.pop()
+      }
+    }
+  }
+  return false
 }
 
 /**
@@ -170,6 +321,8 @@ function decodeItinerary(
   }
   let decoded: unknown
   try {
+    // La profondeur d'abord : le décodeur, lui, alloue à chaque niveau.
+    if (nestingTooDeep(packed, MAX_DECODE_DEPTH)) return reject(413, TOO_LARGE)
     decoded = decode(packed, DECODE_LIMITS)
   } catch (error) {
     if (isDecodeLimitError(error)) return reject(413, TOO_LARGE)
@@ -212,18 +365,18 @@ function readItinerary(
 
 /**
  * Titre saisi : absent (`undefined`), effacé (`null`, le store le tire des
- * étapes) ou borné à `MAX_TEMPLATE_TITLE_LENGTH`.
+ * étapes) ou borné à `MAX_TEMPLATE_TITLE_LENGTH`, coupé sur un caractère
+ * entier.
  */
 function readTitle(
   value: unknown,
 ): ParsedTemplateRequest<string | null | undefined> {
   if (value === undefined || value === null) return accept(value)
   if (typeof value !== 'string') return reject(400, 'Titre du modèle invalide.')
-  const title = value
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, MAX_TEMPLATE_TITLE_LENGTH)
-    .trim()
+  const title = truncateText(
+    value.replace(/\s+/g, ' ').trim(),
+    MAX_TEMPLATE_TITLE_LENGTH,
+  ).trim()
   return accept(title || null)
 }
 

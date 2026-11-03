@@ -1,7 +1,8 @@
 import { compressItinerary } from '@/lib/share'
 import { getTemplateStore } from '@/lib/template-bucket'
 import {
-  TEMPLATE_INDEX_KEY,
+  TEMPLATE_INDEX_KEYS,
+  isTemplateIndexKey,
   templateMetaKey,
   templateVersionKey,
 } from '@/lib/template-store'
@@ -629,12 +630,12 @@ describe('lectures publiques', () => {
     const response = await getIndex()
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ entries: [] })
-    expect(bucket.peek(TEMPLATE_INDEX_KEY)).toBeUndefined()
+    expect(bucket.keys()).toEqual([])
   })
 
   it('répond 500 sans cache sur un index illisible, au lieu d’une liste vide', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
-    bucket.poke(TEMPLATE_INDEX_KEY, { notEntries: true })
+    bucket.poke(TEMPLATE_INDEX_KEYS[3], { notEntries: true })
     const response = await getIndex()
     expect(response.status).toBe(500)
     expect(response.headers.get('Cache-Control')).toBe('no-store')
@@ -646,11 +647,42 @@ describe('lectures publiques', () => {
 })
 
 describe('retrait et index public', () => {
+  it('répond 410 à un PATCH qui croise un retrait, jamais 500', async () => {
+    const { template, ownerToken } = await publish()
+    const realGet = bucket.getSnapshot.bind(bucket)
+    let raced = false
+    // Le retrait aboutit au moment où le PATCH relit la version publiée.
+    const spy = vi
+      .spyOn(bucket, 'getSnapshot')
+      .mockImplementation(async (key, options) => {
+        if (!raced && key === templateVersionKey(template.id, 1)) {
+          raced = true
+          expect((await retire(template.id, ownerToken)).status).toBe(200)
+        }
+        return realGet(key, options)
+      })
+
+    const response = await PATCH(
+      jsonRequest(
+        `/api/templates/${template.id}`,
+        'PATCH',
+        { indexable: false },
+        bearer(ownerToken),
+      ),
+      idContext(template.id),
+    )
+    spy.mockRestore()
+
+    expect(raced).toBe(true)
+    expect(response.status).toBe(410)
+    expect(await response.json()).toMatchObject({ status: 'retired' })
+  })
+
   it('répond 503 sans cache quand l’index n’a pas suivi, et le retrait rejoué aboutit', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { template, ownerToken } = await publish()
     bucket.beforePut = (key) => {
-      if (key === TEMPLATE_INDEX_KEY) throw new Error('R2 indisponible')
+      if (isTemplateIndexKey(key)) throw new Error('R2 indisponible')
     }
 
     const failed = await retire(template.id, ownerToken)

@@ -97,3 +97,37 @@ sinon elle n'a jamais existé et répond 404 :
 ```sh
 curl -sI https://tripbrain.fr/itineraires/<slug> | head -1
 ```
+
+## 5. Index public plein
+
+Les modèles listés figurent dans l'index public, découpé en 32 morceaux (`templates/index/<c>`,
+un par premier caractère de l'id). Un morceau ne peut pas dépasser 4 Mio : seule une vague de
+publications abusives peut l'en approcher. Un modèle listé qui ne peut plus y entrer reste en
+ligne et joignable par son lien, mais n'apparaît plus sur tripbrain.fr (sitemap, pages pays).
+
+**L'alerte.** Chaque refus laisse une ligne dans les journaux de la fonction (Vercel → projet de
+l'app → _Logs_, recherche `template_index_full`) :
+
+```
+template_index_full : le morceau d’index index/k ne peut plus grandir, le modèle k3x9m2… n’y entre pas.
+```
+
+Notez chaque id cité : ce sont les modèles à rattraper.
+
+**La procédure** (mêmes variables R2 de production qu'au §3) :
+
+1. Trouver les publications abusives : `curl -s https://app.tripbrain.fr/api/templates/index`,
+   puis repérer les entrées du morceau en cause (id qui commence par la lettre de l'alerte) au
+   titre ou aux villes absurdes.
+2. Retirer chacune avec `scripts/retire-template.ts` (§3) : le retrait libère sa place.
+3. Remettre dans l'index les modèles cités par l'alerte :
+
+   ```sh
+   bun --no-env-file scripts/resync-template-index.ts '<id>' '<id>' …
+   ```
+
+   Code `0` : chaque modèle a sa ligne (`dans l’index public`), ou n'en a pas parce qu'il
+   n'est plus listé. Code `1` avec « l'index n'a pas suivi » : le morceau est encore plein,
+   reprendre à l'étape 2. Rejouer la commande est sans risque.
+
+Le site vitrine reprend les modèles rattrapés à sa régénération suivante (une heure au plus).

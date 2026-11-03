@@ -286,6 +286,17 @@ function idsOf(days: readonly DayItinerary[]): string[] {
 }
 
 /** `[genre, texte surligné]`, plus lisible qu'un couple d'indices. */
+/** Passages triés, sans chevauchement, dans le texte. */
+function expectWellFormed(text: string, spans: readonly SensitiveSpan[]) {
+  let previousEnd = 0
+  for (const span of spans) {
+    expect(span.start).toBeGreaterThanOrEqual(previousEnd)
+    expect(span.end).toBeGreaterThan(span.start)
+    expect(span.end).toBeLessThanOrEqual(text.length)
+    previousEnd = span.end
+  }
+}
+
 function highlighted(text: string, spans: readonly SensitiveSpan[]) {
   return spans.map((span) => [span.kind, text.slice(span.start, span.end)])
 }
@@ -658,6 +669,23 @@ describe('isPrivateBookingUrl', () => {
     'https://www.example.com/trip?booking_reference=K7X2PQ',
     'https://www.example.com/trip?surname=Dupont&ref=K7X2PQ',
     'https://www.example.com/trip?email=yanis%40example.com',
+    // Numéros de réservation et de commande, espaces client
+    'https://www.expedia.fr/trips/72118734123456',
+    'https://fr.hotels.com/booking/details?itineraryId=72118734123456',
+    'https://www.viator.com/fr-FR/account/booking/BR-1078812345',
+    'https://www.klook.com/fr/order/detail/?orderNo=KLK123456789',
+    'https://www.thetrainline.com/my-account/bookings/7f3c2a91-0b5e-4d4e',
+    'https://www.hotel-exemple.fr/sejour?bookingNumber=88123456',
+    'https://secure.booking.com/help/booking?pincode=7731&id=4021553117',
+    // Accents ignorés
+    'https://www.hotel-exemple.fr/ma-réservation/88123456',
+    'https://www.hotel-exemple.fr/ma-r%C3%A9servation/88123456',
+    // Adresse e-mail ou téléphone, quel que soit le paramètre
+    'https://www.hotel-exemple.fr/sejour?mail=yanis.dupont%40gmail.com',
+    'https://www.hotel-exemple.fr/sejour?e=yanis.dupont@gmail.com',
+    'https://www.hotel-exemple.fr/clients/yanis.dupont@gmail.com/sejour',
+    'https://www.hotel-exemple.fr/sejour?tel=%2B33612345678',
+    'https://www.hotel-exemple.fr/sejour?contact=06%2012%2034%2056%2078',
     // Pas en http(s), ou avec des identifiants
     'http://kenji:motdepasse@www.example.com/',
     'blob:https://app.tripbrain.fr/6f1c',
@@ -686,6 +714,16 @@ describe('isPrivateBookingUrl', () => {
     // Le domaine n'est pas inspecté, seulement le chemin et la requête.
     'https://secure.booking.com/',
     '  https://www.yugarden.com.cn  ',
+    // Ni coordonnées, ni dates, ni identifiants publics ne passent pour un
+    // téléphone ou une réservation.
+    'https://www.booking.com/hotel/jp/gracery.fr.html',
+    'https://gracery.com/shinjuku/',
+    'https://www.google.com/maps/place/Kiyomizu-dera/@34.9948561,135.7850463,17z',
+    'https://www.hotel-exemple.fr/chambres?arrivee=2026-04-01&depart=2026-04-05',
+    'https://www.airbnb.fr/rooms/12345678901234',
+    'https://www.tablecheck.com/fr/shops/sushi-saito/reserve',
+    'https://medium.com/@kenji/kyoto-en-3-jours',
+    'https://www.expedia.fr/trips',
   ])('« %s » est public', (url) => {
     expect(isPrivateBookingUrl(url)).toBe(false)
   })
@@ -718,6 +756,12 @@ describe('isPrivateBookingUrl', () => {
     ).toBe(false)
   })
 
+  it('accepte toutes les références du voyage à la fois', () => {
+    const url = 'https://hotel.example/spa?ref=4021553117'
+    expect(isPrivateBookingUrl(url, ['K7X2PQ', '4021 553 117'])).toBe(true)
+    expect(isPrivateBookingUrl(url, new Set(['k7x2pq', '12']))).toBe(false)
+  })
+
   it('ignore une référence trop courte pour être significative', () => {
     expect(isPrivateBookingUrl('https://www.example.com/rooms/12', '12')).toBe(
       false,
@@ -733,6 +777,61 @@ describe('isPrivateBookingUrl', () => {
 })
 
 // ── summarizeTemplateCleaning ─────────────────────────────────────────────────
+
+describe('liens qui portent une référence d’ailleurs dans le voyage', () => {
+  it('retire le lien d’une activité qui contient la référence d’un hôtel', () => {
+    const itinerary = [
+      day(1, {
+        accommodation: hotel({
+          bookingUrl: 'https://www.ryokan-yachiyo.com/',
+          bookingReference: '4021 553 117',
+        }),
+        activities: [
+          activity({ bookingUrl: 'https://hotel.example/spa?ref=4021553117' }),
+          activity({
+            id: 'act-2',
+            bookingUrl: 'https://www.teamlab.art/fr/e/planets/',
+          }),
+        ],
+      }),
+    ]
+    const [cleaned] = cleanForTemplate(itinerary, DEFAULT_TEMPLATE_OPTIONS)
+    expect(cleaned.activities[0]).not.toHaveProperty('bookingUrl')
+    expect(cleaned.activities[1].bookingUrl).toBe(
+      'https://www.teamlab.art/fr/e/planets/',
+    )
+    // Le lien public de l'hôtel, lui, reste.
+    expect(cleaned.accommodation?.bookingUrl).toBe(
+      'https://www.ryokan-yachiyo.com/',
+    )
+    // L'écran A2 compte ce qui est réellement retiré.
+    expect(
+      summarizeTemplateCleaning(itinerary, DEFAULT_TEMPLATE_OPTIONS).stays
+        .privateLinks,
+    ).toBe(1)
+  })
+
+  it('retire le lien de chaque nuit quand la référence n’est saisie que sur la première', () => {
+    const url = 'https://hotel.example/stay/4021553117'
+    const itinerary = [
+      day(1, {
+        accommodation: hotel({
+          bookingUrl: url,
+          bookingReference: '4021553117',
+        }),
+      }),
+      day(2, { accommodation: hotel({ id: 'acc-2', bookingUrl: url }) }),
+      day(3, {
+        transport: transport({ bookingUrl: `${url}?step=2` }),
+      }),
+    ]
+    const cleaned = cleanForTemplate(itinerary, DEFAULT_TEMPLATE_OPTIONS)
+    expect(JSON.stringify(cleaned)).not.toContain('4021553117')
+    expect(cleaned[1].accommodation?.bookingUrl).toBe('')
+    // Idempotent : le second passage n'a plus de référence, ni de lien à retirer.
+    expect(cleanForTemplate(cleaned, DEFAULT_TEMPLATE_OPTIONS)).toEqual(cleaned)
+  })
+})
 
 describe('summarizeTemplateCleaning', () => {
   it('compte ce qui part et ce qui reste sur un vrai voyage', () => {
@@ -858,6 +957,37 @@ describe('sensitiveSpans', () => {
     expect(highlighted(text, sensitiveSpans(text))).toContainEqual([
       'phone',
       phone,
+    ])
+  })
+
+  it.each([
+    ['Chambre 104 06 12 34 56 78', '06 12 34 56 78'],
+    ['Urgences : 06 12 34 56 78 06 98 76 54 32', '06 98 76 54 32'],
+    ['Urgences : 06 12 34 56 78 06 98 76 54 32', '06 12 34 56 78'],
+    ['Arrivée 2026-05-10 06 12 34 56 78 merci', '06 12 34 56 78'],
+    ['0312345678 080-3312-4471', '080-3312-4471'],
+    ['Code postal 20480 06 12 34 56 78', '06 12 34 56 78'],
+    ['+1 (212) 555-1234 555-1234 li_wei@qq.com', '+1 (212) 555-1234'],
+  ])(
+    'surligne chaque chiffre d’un numéro qui suit un autre nombre : « %s »',
+    (text, phone) => {
+      const spans = sensitiveSpans(text)
+      const from = text.indexOf(phone)
+      for (let k = 0; k < phone.length; k++) {
+        if (!/\d/.test(phone[k])) continue
+        expect(
+          spans.some((span) => span.start <= from + k && from + k < span.end),
+        ).toBe(true)
+      }
+      expectWellFormed(text, spans)
+    },
+  )
+
+  it('garde l’e-mail entier après un numéro qui en avalait le début', () => {
+    const text = '+1 (212) 555-1234 555-1234 li_wei@qq.com'
+    expect(highlighted(text, sensitiveSpans(text))).toContainEqual([
+      'email',
+      'li_wei@qq.com',
     ])
   })
 
@@ -1098,6 +1228,49 @@ describe('noteExcerpts', () => {
     for (const span of excerpt.spans) {
       expect(span.end).toBeLessThanOrEqual(kept.length)
     }
+  })
+
+  it.each([
+    ['japonais sans espace', `${'駅'.repeat(200)} 0612345678`, '0612345678'],
+    [
+      'lien long avant un code',
+      `Voir https://www.example.com/${'a'.repeat(200)} code 4821`,
+      '4821',
+    ],
+    [
+      'note d’hôtel en chinois',
+      `${'酒店在地铁站出口右转直走大约五分钟就到了'.repeat(8)} 电话 13812345678`,
+      '13812345678',
+    ],
+  ])(
+    'montre et surligne la donnée sensible d’une note sans espace proche (%s)',
+    (_label, notes, secret) => {
+      const [excerpt] = noteExcerpts([day(1, { notes })])
+      expect(excerpt.spans.length).toBeGreaterThan(0)
+      expect(excerpt.text.length).toBeLessThanOrEqual(NOTE_EXCERPT_LENGTH + 2)
+      expect(
+        highlighted(excerpt.text, excerpt.spans).some(([, value]) =>
+          secret.startsWith(value),
+        ),
+      ).toBe(true)
+    },
+  )
+
+  it.each([
+    ['japonais', `${'駅'.repeat(159)}🍣${'駅'.repeat(10)}`],
+    ['français', `Super journée! ${'🍣'.repeat(100)}`],
+  ])('ne coupe jamais un emoji en deux (%s)', (_label, notes) => {
+    const [excerpt] = noteExcerpts([day(1, { notes })])
+    expect(excerpt.text.isWellFormed()).toBe(true)
+    expect(() => encodeURIComponent(excerpt.text)).not.toThrow()
+    expect(excerpt.text.length).toBeLessThanOrEqual(NOTE_EXCERPT_LENGTH + 1)
+  })
+
+  it('ne commence jamais l’extrait au milieu d’un emoji', () => {
+    const notes = `${'🍣'.repeat(120)}0612345678`
+    const [excerpt] = noteExcerpts([day(1, { notes })])
+    expect(excerpt.text.isWellFormed()).toBe(true)
+    expect(excerpt.spans.length).toBeGreaterThan(0)
   })
 
   it('recentre l’extrait sur la donnée sensible quand elle est loin du début', () => {

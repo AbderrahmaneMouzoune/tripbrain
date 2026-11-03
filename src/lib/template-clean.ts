@@ -202,10 +202,13 @@ function omitBookingUrl<T extends { bookingUrl?: string }>(
 /**
  * Marqueurs d'une page de réservation privée. On les cherche dans le chemin, la
  * requête et l'ancre, jamais dans le domaine : `booking.com/hotel/…` est une
- * page publique, `secure.booking.com/confirmation…` ne l'est pas.
+ * page publique, `secure.booking.com/confirmation…` ne l'est pas. Accents
+ * ignorés : `ma-réservation` contient `reservation`.
  *
  * Un faux positif retire un lien utile ; un faux négatif publie l'accès à la
- * réservation de l'auteur. La liste penche donc vers le retrait.
+ * réservation de l'auteur. La liste penche donc vers le retrait. Un lien qui
+ * porte une adresse e-mail ou un numéro de téléphone est retiré lui aussi,
+ * quel que soit le nom du paramètre (voir `isPrivateBookingUrl`).
  */
 const PRIVATE_URL_MARKERS = [
   'confirm', // confirmation, confirmed, confirm.html…
@@ -216,6 +219,27 @@ const PRIVATE_URL_MARKERS = [
   'booking_id',
   'bookingid',
   'itinerary_id',
+  // Hotels.com `?itineraryId=…`, Expedia, et leurs variantes.
+  'itineraryid',
+  'itinerarynumber',
+  'itinerary-number',
+  'bookingnumber',
+  'booking_number',
+  'booking-number',
+  'booking_no',
+  // Klook `/order/detail/?orderNo=…`, et autres numéros de commande.
+  'orderno',
+  'order_no',
+  'ordernumber',
+  'order/detail',
+  // Espaces client : Viator `/account/booking/…`, Trainline `/my-account/…`.
+  'account/booking',
+  'my-account',
+  'mytickets',
+  'my-trips',
+  // Booking.com `?pincode=…` : avec le numéro, l'accès à la réservation.
+  'pincode',
+  'voucher',
   // Trip.com : `/hotels/ctorderdetail?orderid=…` (voyage de démo).
   'orderid',
   'order_id',
@@ -247,15 +271,45 @@ const PRIVATE_URL_MARKERS = [
   'email=',
 ]
 
+/** Formes de chemin privées : Expedia `/trips/72118734123456`. */
+const PRIVATE_URL_SHAPES = [/\/trips\/\d{8,}/]
+
 /** En dessous, une « référence » (`12`, `AB`) se retrouverait dans n'importe quelle URL. */
 const MIN_REFERENCE_LENGTH = 4
 
+/** Minuscules sans accents : `Réservation` → `reservation`. */
+function fold(text: string): string {
+  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+}
+
 /**
- * Lettres et chiffres seuls, en minuscules : `4021 553 117` doit se
- * reconnaître dans `/stay/4021553117`, et `K7X-2PQ` dans `?ref=k7x2pq`.
+ * Lettres et chiffres seuls, en minuscules, sans accents : `4021 553 117`
+ * doit se reconnaître dans `/stay/4021553117`, et `K7X-2PQ` dans
+ * `?ref=k7x2pq`.
  */
 function alphanumeric(text: string): string {
-  return text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+  return fold(text).replace(/[^\p{L}\p{N}]/gu, '')
+}
+
+/**
+ * Les références de réservation d'un voyage, prêtes à comparer : celles de
+ * chaque transport et hébergement, sans séparateurs, assez longues pour
+ * compter. Un lien qui en contient une est privé, quelle que soit l'entité
+ * qui le porte : une activité n'a pas de référence, et un hôtel sur plusieurs
+ * nuits est souvent saisi avec sa référence sur la première seulement.
+ */
+function tripReferences(itinerary: readonly DayItinerary[]): Set<string> {
+  const references = new Set<string>()
+  const add = (value: unknown) => {
+    if (typeof value !== 'string') return
+    const reference = alphanumeric(value)
+    if (reference.length >= MIN_REFERENCE_LENGTH) references.add(reference)
+  }
+  for (const day of itinerary) {
+    add(day.transport?.bookingReference)
+    add(day.accommodation?.bookingReference)
+  }
+  return references
 }
 
 function safeDecode(value: string): string {
@@ -269,10 +323,14 @@ function safeDecode(value: string): string {
 /**
  * Un lien de réservation est-il privé ? Vrai s'il n'est pas en http(s), s'il
  * porte des identifiants, si son chemin ou sa requête ressemble à une
- * confirmation ou à un espace client, ou s'il contient la référence de
- * réservation de l'entité.
+ * confirmation ou à un espace client, s'il porte une adresse e-mail ou un
+ * numéro de téléphone, ou s'il contient l'une des `references` (une seule,
+ * ou toutes celles du voyage).
  */
-export function isPrivateBookingUrl(url: string, reference?: string): boolean {
+export function isPrivateBookingUrl(
+  url: string,
+  references: Iterable<string> | string = [],
+): boolean {
   let parsed: URL
   try {
     parsed = new URL(url.trim())
@@ -283,26 +341,39 @@ export function isPrivateBookingUrl(url: string, reference?: string): boolean {
   if (parsed.username || parsed.password) return true
 
   const raw = parsed.pathname + parsed.search + parsed.hash
-  const haystacks = [raw.toLowerCase(), safeDecode(raw).toLowerCase()]
+  const decoded = safeDecode(raw)
+  const haystacks = [fold(raw), fold(decoded)]
   const contains = (needle: string) =>
     haystacks.some((haystack) => haystack.includes(needle))
 
   if (PRIVATE_URL_MARKERS.some(contains)) return true
+  if (
+    PRIVATE_URL_SHAPES.some((shape) => haystacks.some((h) => shape.test(h)))
+  ) {
+    return true
+  }
+  // `?mail=…`, `?e=…`, `/clients/<adresse>/…`, `?tel=%2B33…` : pas une page
+  // publique. Sur le texte brut et décodé (`%40`, `%2B`), avant les minuscules.
+  if ([raw, decoded].some(containsContact)) return true
   // La référence est comparée sans séparateurs, d'un côté comme de l'autre :
   // l'auteur la saisit comme elle est imprimée, le site l'écrit à sa façon.
-  const ref = reference ? alphanumeric(reference) : ''
-  return (
-    ref.length >= MIN_REFERENCE_LENGTH &&
-    haystacks.some((haystack) => alphanumeric(haystack).includes(ref))
-  )
+  const refs = (typeof references === 'string' ? [references] : [...references])
+    .map(alphanumeric)
+    .filter((ref) => ref.length >= MIN_REFERENCE_LENGTH)
+  if (refs.length === 0) return false
+  const squashed = haystacks.map(alphanumeric)
+  return refs.some((ref) => squashed.some((haystack) => haystack.includes(ref)))
 }
 
 /** Lien gardé dans le modèle : une URL http(s) publique, non vide. */
-function isShareableBookingUrl(url: unknown, reference: unknown): boolean {
+function isShareableBookingUrl(
+  url: unknown,
+  references: ReadonlySet<string>,
+): boolean {
   return (
     typeof url === 'string' &&
     url.trim() !== '' &&
-    !isPrivateBookingUrl(url, typeof reference === 'string' ? reference : '')
+    !isPrivateBookingUrl(url, references)
   )
 }
 
@@ -343,12 +414,22 @@ function withPortableDayImages(day: DayItinerary): DayItinerary {
 
 // ── Nettoyage ─────────────────────────────────────────────────────────────────
 
-function cleanActivity(activity: Activity, options: TemplateOptions): Activity {
+/**
+ * Ce que le nettoyage d'une journée doit savoir du voyage entier : les
+ * références de réservation (`tripReferences`), lues avant d'être retirées.
+ */
+interface CleanContext {
+  options: TemplateOptions
+  references: ReadonlySet<string>
+}
+
+function cleanActivity(activity: Activity, context: CleanContext): Activity {
+  const { options, references } = context
   let cleaned: Activity = pickKnown(activity, ACTIVITY_KEY_SET)
   if (!options.includePrices) cleaned = omitPrice(cleaned)
   if (
     cleaned.bookingUrl !== undefined &&
-    !isShareableBookingUrl(cleaned.bookingUrl, undefined)
+    !isShareableBookingUrl(cleaned.bookingUrl, references)
   ) {
     cleaned = omitBookingUrl(cleaned)
   }
@@ -357,15 +438,16 @@ function cleanActivity(activity: Activity, options: TemplateOptions): Activity {
 
 function cleanTransport(
   transport: Transport,
-  options: TemplateOptions,
+  context: CleanContext,
 ): Transport {
+  const { options, references } = context
   let cleaned: Transport = pickKnown(transport, TRANSPORT_KEY_SET)
   if (!options.includeNotes) cleaned = omitNotes(cleaned)
   if (!options.includePrices) cleaned = omitPrice(cleaned)
-  // La référence est déjà retirée de `cleaned` : on la lit sur l'original.
+  // Les références du voyage (la sienne comprise) sont lues sur l'original.
   if (
     cleaned.bookingUrl !== undefined &&
-    !isShareableBookingUrl(cleaned.bookingUrl, transport.bookingReference)
+    !isShareableBookingUrl(cleaned.bookingUrl, references)
   ) {
     cleaned = omitBookingUrl(cleaned)
   }
@@ -374,36 +456,36 @@ function cleanTransport(
 
 function cleanAccommodation(
   accommodation: Accommodation,
-  options: TemplateOptions,
+  context: CleanContext,
 ): Accommodation {
+  const { options, references } = context
   let cleaned: Accommodation = pickKnown(accommodation, ACCOMMODATION_KEY_SET)
   if (!options.includePrices) cleaned = omitPrice(cleaned)
   // `bookingUrl` est requis par le type : on le vide au lieu de le retirer.
-  if (
-    !isShareableBookingUrl(cleaned.bookingUrl, accommodation.bookingReference)
-  ) {
+  if (!isShareableBookingUrl(cleaned.bookingUrl, references)) {
     cleaned = { ...cleaned, bookingUrl: '' }
   }
   return withPortableImages(cleaned)
 }
 
-function cleanDay(day: DayItinerary, options: TemplateOptions): DayItinerary {
+function cleanDay(day: DayItinerary, context: CleanContext): DayItinerary {
+  const { options } = context
   let cleaned: DayItinerary = {
     ...pickKnown(day, DAY_KEY_SET),
     activities: day.activities.map((activity) =>
-      cleanActivity(activity, options),
+      cleanActivity(activity, context),
     ),
   }
   if (cleaned.accommodation) {
     cleaned = {
       ...cleaned,
-      accommodation: cleanAccommodation(cleaned.accommodation, options),
+      accommodation: cleanAccommodation(cleaned.accommodation, context),
     }
   }
   if (cleaned.transport) {
     cleaned = {
       ...cleaned,
-      transport: cleanTransport(cleaned.transport, options),
+      transport: cleanTransport(cleaned.transport, context),
     }
   }
   if (!options.includeNotes) cleaned = omitNotes(cleaned)
@@ -417,7 +499,8 @@ function cleanDay(day: DayItinerary, options: TemplateOptions): DayItinerary {
  * - `notes` (journée, transport) : retirées sauf si `includeNotes` ;
  * - `price` et `currency` : retirés sauf si `includePrices` ;
  * - `bookingUrl` privé : vidé sur un hébergement (champ requis), retiré
- *   ailleurs ;
+ *   ailleurs ; un lien qui contient la référence de n'importe quelle
+ *   réservation du voyage est privé ;
  * - images hors http(s) retirées ; un tableau vide disparaît ;
  * - clés inconnues du type retirées (voir la liste blanche plus haut).
  *
@@ -428,7 +511,8 @@ export function cleanForTemplate(
   itinerary: readonly DayItinerary[],
   options: TemplateOptions,
 ): DayItinerary[] {
-  return itinerary.map((day) => cleanDay(day, options))
+  const context = { options, references: tripReferences(itinerary) }
+  return itinerary.map((day) => cleanDay(day, context))
 }
 
 // ── Écran A2 : ce qui part, ce qui reste ──────────────────────────────────────
@@ -509,8 +593,10 @@ export function summarizeTemplateCleaning(
   let notes = 0
   let prices = 0
 
-  const noteLink = (url: unknown, reference: unknown) => {
-    if (hasText(url) && !isShareableBookingUrl(url, reference)) {
+  // Mêmes références que `cleanForTemplate` : le chiffre est ce qui part.
+  const tripRefs = tripReferences(itinerary)
+  const noteLink = (url: unknown) => {
+    if (hasText(url) && !isShareableBookingUrl(url, tripRefs)) {
       privateLinks.add(url.trim())
     }
   }
@@ -530,7 +616,7 @@ export function summarizeTemplateCleaning(
       if (hasText(activity.tips)) tips += 1
       if (hasInformativeStatus(activity)) statuses += 1
       if (typeof activity.price === 'number') prices += 1
-      noteLink(activity.bookingUrl, undefined)
+      noteLink(activity.bookingUrl)
       noteImages(activity.images)
     }
 
@@ -550,7 +636,7 @@ export function summarizeTemplateCleaning(
       if (hasInformativeStatus(transport)) statuses += 1
       if (hasText(transport.notes)) notes += 1
       if (typeof transport.price === 'number') prices += 1
-      noteLink(transport.bookingUrl, transport.bookingReference)
+      noteLink(transport.bookingUrl)
     }
 
     const accommodation = day.accommodation
@@ -560,7 +646,7 @@ export function summarizeTemplateCleaning(
       if (hasText(accommodation.bookingReference)) {
         references.add(nameKey(accommodation.bookingReference))
       }
-      noteLink(accommodation.bookingUrl, accommodation.bookingReference)
+      noteLink(accommodation.bookingUrl)
       noteImages(accommodation.images)
     }
   }
@@ -914,6 +1000,14 @@ function trimPhone(value: string, max: number): string {
   return phone
 }
 
+/**
+ * Numéros de téléphone, qui peuvent se chevaucher (`findSpans` les fusionne).
+ * Après chaque correspondance, retenue ou non, la recherche repart du
+ * caractère suivant et non de sa fin : un numéro peut commencer dans les
+ * chiffres qu'une autre a avalés (« 2026-05-10 06 12 34 56 78 », où « 05-10
+ * 06… » est rejeté, collé à « 2026 » ; « 06 12 34 56 78 06 98 76 54 32 », où
+ * le premier numéro prend le « 06 » du second).
+ */
 function phoneSpans(text: string): SensitiveSpan[] {
   const spans: SensitiveSpan[] = []
   const patterns = [
@@ -921,8 +1015,11 @@ function phoneSpans(text: string): SensitiveSpan[] {
     { pattern: NATIONAL_PHONE, limits: NATIONAL_DIGITS },
   ]
   for (const { pattern, limits } of patterns) {
-    for (const match of text.matchAll(pattern)) {
-      const start = match.index ?? 0
+    // Copie locale : `lastIndex` est modifié ici, jamais sur le motif partagé.
+    const search = new RegExp(pattern.source, pattern.flags)
+    let match: RegExpExecArray | null
+    while ((match = search.exec(text)) !== null) {
+      const start = match.index
       const phone = trimPhone(match[0], limits.max)
       const end = start + phone.length
       const digits = countDigits(phone)
@@ -933,9 +1030,15 @@ function phoneSpans(text: string): SensitiveSpan[] {
       if (!glued && digits >= limits.min && digits <= limits.max) {
         spans.push({ start, end, kind: 'phone' })
       }
+      search.lastIndex = start + 1
     }
   }
   return spans
+}
+
+/** Une donnée de contact : e-mail ou numéro de téléphone. */
+function containsContact(text: string): boolean {
+  return rangesOf(text, EMAIL).length > 0 || phoneSpans(text).length > 0
 }
 
 function findSpans(text: string, places: PlaceIndex): SensitiveSpan[] {
@@ -959,12 +1062,42 @@ function findSpans(text: string, places: PlaceIndex): SensitiveSpan[] {
       a.start - b.start ||
       b.end - a.end,
   )
-  const kept: SensitiveSpan[] = []
-  for (const span of candidates) {
-    const overlaps = kept.some(
+  let kept: SensitiveSpan[] = []
+  for (const candidate of candidates) {
+    let span = candidate
+    // Un numéro qui avale le début d'une adresse e-mail (« +1 555-1234
+    // 555-1234 li@qq.com ») s'arrête juste avant elle, au lieu de disparaître.
+    if (span.kind === 'phone') {
+      const email = kept.find(
+        (other) =>
+          other.kind === 'email' &&
+          other.start > span.start &&
+          other.start < span.end,
+      )
+      if (email) {
+        const head = text.slice(span.start, email.start).replace(/[^\d)]+$/, '')
+        if (countDigits(head) < INTERNATIONAL_DIGITS.min) continue
+        span = { ...span, end: span.start + head.length }
+      }
+    }
+    const clashes = kept.filter(
       (other) => span.start < other.end && other.start < span.end,
     )
-    if (!overlaps) kept.push(span)
+    if (clashes.length === 0) {
+      kept.push(span)
+    } else if (
+      span.kind === 'phone' &&
+      clashes.every((other) => other.kind === 'phone')
+    ) {
+      // Deux numéros qui se chevauchent (« 06 12 34 56 78 06 98 76 54 32 ») :
+      // un seul surlignage, qui les couvre tous les deux.
+      kept = kept.filter((other) => !clashes.includes(other))
+      kept.push({
+        start: Math.min(span.start, ...clashes.map((other) => other.start)),
+        end: Math.max(span.end, ...clashes.map((other) => other.end)),
+        kind: 'phone',
+      })
+    }
   }
   return kept.sort((a, b) => a.start - b.start)
 }
@@ -1037,19 +1170,33 @@ export interface NoteExcerpt {
   spans: SensitiveSpan[]
 }
 
-/**
- * Coupe une note autour de ce qui compte : depuis le début, ou un peu avant la
- * première donnée sensible si elle tomberait au-delà de la coupe — un extrait
- * choisi pour ses données sensibles doit les montrer.
- */
+/** Une moitié basse de paire UTF-16 : le second code d'un emoji. */
+function isLowSurrogate(char: string | undefined): boolean {
+  return char !== undefined && /^[\uDC00-\uDFFF]$/.test(char)
+}
+
 /** Où couper un texte trop long : sur la dernière espace avant la limite. */
 function cutPoint(text: string): number {
   if (text.length <= NOTE_EXCERPT_LENGTH) return text.length
   const space = text.lastIndexOf(' ', NOTE_EXCERPT_LENGTH)
-  // Un mot interminable (une URL) : on coupe dedans plutôt que tout perdre.
-  return space < NOTE_EXCERPT_LENGTH / 2 ? NOTE_EXCERPT_LENGTH : space
+  if (space >= NOTE_EXCERPT_LENGTH / 2) return space
+  // Un mot interminable (une URL, du japonais sans espace) : on coupe dedans
+  // plutôt que tout perdre, mais jamais entre les deux moitiés d'un emoji.
+  return isLowSurrogate(text[NOTE_EXCERPT_LENGTH])
+    ? NOTE_EXCERPT_LENGTH - 1
+    : NOTE_EXCERPT_LENGTH
 }
 
+/**
+ * Coupe une note autour de ce qui compte : depuis le début, ou un peu avant la
+ * première donnée sensible si elle tomberait au-delà de la coupe — un extrait
+ * choisi pour ses données sensibles doit les montrer.
+ *
+ * Le début de l'extrait est alors pris sur une espace, si l'une tombe dans les
+ * `EXCERPT_LEAD` caractères qui précèdent le contexte gardé ; sinon (japonais
+ * ou chinois sans espace, long lien), dans le mot. La donnée commence donc au
+ * plus à ~80 caractères du début, toujours avant la coupe de fin.
+ */
 function clip(
   text: string,
   spans: readonly SensitiveSpan[],
@@ -1059,8 +1206,11 @@ function clip(
   let from = 0
   const first = spans[0]
   if (first && first.end > cutPoint(text)) {
-    const space = text.lastIndexOf(' ', Math.max(0, first.start - EXCERPT_LEAD))
-    from = space < 0 ? 0 : space + 1
+    const lead = Math.max(0, first.start - EXCERPT_LEAD)
+    const space = text.lastIndexOf(' ', lead)
+    from = space >= 0 && lead - space <= EXCERPT_LEAD ? space + 1 : lead
+    // Jamais au milieu d'un emoji.
+    if (isLowSurrogate(text[from])) from -= 1
   }
   const prefix = from > 0 ? '…' : ''
 

@@ -2,6 +2,8 @@ import {
   addDays,
   daysBetween,
   fromDayNumber,
+  MAX_DAY_NUMBER,
+  MIN_DAY_NUMBER,
   isIsoDate,
   localIsoDate,
   shiftDatesDeep,
@@ -149,6 +151,26 @@ describe('addDays', () => {
         expect(daysBetween('2026-03-01', '2026-04-01')).toBe(31)
       })
     }
+  })
+})
+
+describe('bornes du calendrier', () => {
+  it('écrivent 0000-01-01 et 9999-12-31', () => {
+    expect(fromDayNumber(MIN_DAY_NUMBER)).toBe('0000-01-01')
+    expect(fromDayNumber(MAX_DAY_NUMBER)).toBe('9999-12-31')
+    expect(toDayNumber('0000-01-01')).toBe(MIN_DAY_NUMBER)
+    expect(toDayNumber('9999-12-31')).toBe(MAX_DAY_NUMBER)
+  })
+
+  it('lèvent RangeError au-delà, plutôt que d’écrire « +010000-01 »', () => {
+    expect(() => addDays('9999-12-31', 1)).toThrow(RangeError)
+    expect(() => addDays('0000-01-01', -1)).toThrow(RangeError)
+    expect(() => fromDayNumber(MAX_DAY_NUMBER + 1)).toThrow(/hors calendrier/)
+    expect(() => fromDayNumber(1.5)).toThrow(RangeError)
+    expect(() => fromDayNumber(Number.NaN)).toThrow(RangeError)
+    expect(() => shiftIsoDateValue('9999-12-31T10:00', 1)).toThrow(RangeError)
+    // Une valeur qui n'est pas une date ne bouge toujours pas.
+    expect(shiftIsoDateValue('10:00', 1_000_000)).toBe('10:00')
   })
 })
 

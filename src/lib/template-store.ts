@@ -8,7 +8,8 @@
 //   <id>/meta     TemplateMeta — `ifAbsent` à la création, puis `ifMatch`
 //   <id>/v/<n>    { version, title, itinerary } — `ifAbsent`, jamais réécrit
 //   slugs/<slug>  { id } — `ifAbsent`, jamais réutilisé
-//   index         { entries } — modèles listés seulement, boucle `ifMatch`
+//   index/<c>     { entries } — modèles listés dont l'id commence par `c`,
+//                 boucle `ifMatch` (32 morceaux, voir `templateIndexKey`)
 //
 // Ordre d'écriture : la version, puis la méta, puis l'index. La méta ne pointe
 // donc jamais vers une version absente. Retiré, un modèle ne garde qu'une
@@ -17,7 +18,10 @@
 // stockée, relue au moment de l'écrire (`syncIndex`). S'il échoue sur un
 // ajout, le modèle manque au sitemap jusqu'à sa prochaine écriture ; sur une
 // sortie (masqué, retiré), la requête échoue pour que l'auteur la rejoue. Un
-// retrait dont les versions n'ont pas pu être supprimées échoue de même.
+// retrait dont les versions n'ont pas pu être supprimées échoue de même. Un
+// morceau d'index plein (`FILE_TOO_LARGE`) est journalisé sous une alerte
+// dédiée (`TEMPLATE_INDEX_FULL_ALERT`), et `resyncTemplateIndex` rattrape
+// ensuite les modèles restés dehors.
 //
 // Aucune écriture ne passe `expiresIn` : un modèle reste en ligne tant que son
 // auteur ne le retire pas.
@@ -37,6 +41,7 @@ import { SHARE_APP } from '@/lib/share-store'
 import { cleanForTemplate } from '@/lib/template-clean'
 import {
   MAX_TEMPLATE_TITLE_LENGTH,
+  TEMPLATE_ID_ALPHABET,
   TEMPLATE_ID_LENGTH,
   createTemplateId,
   idSuffixedSlug,
@@ -64,6 +69,7 @@ import {
   hashOwnerToken,
   verifyOwnerToken,
 } from '@/lib/template-token'
+import { truncateText } from '@/lib/text-limit'
 import { deriveTripTitle } from '@/lib/trips'
 
 // ── Bucket ────────────────────────────────────────────────────────────────────
@@ -121,13 +127,46 @@ const META_ATTEMPTS = 2
  * la suivante passe à `n + 1` au lieu de buter dessus pour toujours.
  */
 const VERSION_SLOTS = 3
-/** L'index est partagé par tous les modèles : plus de concurrence possible. */
+/** Un morceau d'index est partagé par 1/32 des modèles : de la concurrence possible. */
 const INDEX_ATTEMPTS = 5
 
 // ── Clés ──────────────────────────────────────────────────────────────────────
 
-/** Ni `index` ni `slugs` n'ont la forme d'un id (16 caractères) : pas de collision. */
-export const TEMPLATE_INDEX_KEY = 'index'
+/**
+ * L'index des modèles listés est découpé en 32 morceaux, un par premier
+ * caractère de l'id (`index/0` … `index/z`). Un seul objet partagé par tous
+ * finissait par atteindre la taille maximale de s3nd (4 Mio gzippés,
+ * ~1 800 entrées forgées) : plus aucun modèle listé n'y entrait. Les ids
+ * étant tirés au hasard, personne ne choisit son morceau ; il faut remplir
+ * les 32 pour bloquer un modèle donné. Chaque morceau a aussi sa propre
+ * boucle `ifMatch` : moins de conflits entre publications simultanées.
+ *
+ * Ni `index/…` ni `slugs/…` n'ont la forme d'un id (16 caractères) : pas de
+ * collision avec `<id>/meta`.
+ */
+export const TEMPLATE_INDEX_PREFIX = 'index/'
+
+/** Le morceau d'index où figure (ou figurerait) le modèle `id`. */
+export function templateIndexKey(id: string): string {
+  return `${TEMPLATE_INDEX_PREFIX}${id.charAt(0)}`
+}
+
+/** Tous les morceaux de l'index, dans l'ordre de l'alphabet des ids. */
+export const TEMPLATE_INDEX_KEYS: readonly string[] = Array.from(
+  TEMPLATE_ID_ALPHABET,
+  (char) => `${TEMPLATE_INDEX_PREFIX}${char}`,
+)
+
+export function isTemplateIndexKey(key: string): boolean {
+  return key.startsWith(TEMPLATE_INDEX_PREFIX)
+}
+
+/**
+ * Étiquette des journaux quand un morceau d'index ne peut plus grandir
+ * (`FILE_TOO_LARGE`) : à surveiller. Procédure : `docs/modeles-moderation.md`
+ * §5.
+ */
+export const TEMPLATE_INDEX_FULL_ALERT = 'template_index_full'
 
 export function templateMetaKey(id: string): string {
   return `${id}/meta`
@@ -372,13 +411,20 @@ function parseIndexEntry(value: unknown): TemplateIndexEntry | null {
   return { id, slug, title, country, dayCount, cities, updatedAt }
 }
 
-/** `null` si l'objet n'a pas la forme d'un index : mieux vaut ne pas l'écraser. */
-function parseIndex(value: unknown): TemplateIndexEntry[] | null {
+/**
+ * Les lignes d'un morceau d'index, `null` si l'objet n'en a pas la forme :
+ * mieux vaut ne pas l'écraser. Une ligne rangée dans un autre morceau que le
+ * sien est ignorée : personne ne la tiendrait à jour.
+ */
+function parseIndexShard(
+  value: unknown,
+  key: string,
+): TemplateIndexEntry[] | null {
   if (!isRecord(value) || !Array.isArray(value.entries)) return null
   const entries: TemplateIndexEntry[] = []
   for (const candidate of value.entries) {
     const entry = parseIndexEntry(candidate)
-    if (entry) entries.push(entry)
+    if (entry && templateIndexKey(entry.id) === key) entries.push(entry)
   }
   return entries
 }
@@ -471,16 +517,40 @@ export async function assertTemplateOwner(
   if (isRetiredTemplateMeta(meta)) throw new TemplateStoreError('retired')
 }
 
-/** L'itinéraire de la version publiée, pour répondre après une écriture. */
+/**
+ * L'itinéraire de la version publiée, pour répondre après une écriture. Un
+ * retrait concurrent a pu effacer les versions entre la lecture de la méta et
+ * celle-ci : la méta relue le dit, et l'on répond « retiré » (410) comme si le
+ * retrait était passé avant. Une méta encore en ligne qui pointe vers une
+ * version absente reste une vraie incohérence (§4) : erreur serveur.
+ */
 async function publicTemplateOf(
   bucket: TemplateBucket,
   meta: TemplateMeta,
 ): Promise<PublicTemplate> {
   const version = await loadVersion(bucket, meta.id, meta.version)
-  if (!version) {
-    throw new Error(`Version ${meta.version} absente du modèle ${meta.id}.`)
+  if (version) return toPublicTemplate(meta, version.itinerary)
+  const latest = await loadMeta(bucket, meta.id)
+  if (!latest) throw new TemplateStoreError('missing')
+  if (isRetiredTemplateMeta(latest.meta)) {
+    throw new TemplateStoreError('retired')
   }
-  return toPublicTemplate(meta, version.itinerary)
+  throw new Error(`Version ${meta.version} absente du modèle ${meta.id}.`)
+}
+
+/**
+ * Une écriture conditionnelle refusée (412) n'est pas forcément celle d'un
+ * autre : si la réponse S3 se perd, le SDK rejoue la requête, et la seconde
+ * tentative bute sur la première, qui a abouti. L'objet relu dit lequel des
+ * deux cas on tient.
+ */
+async function slugBelongsTo(
+  bucket: TemplateBucket,
+  slug: string,
+  id: string,
+): Promise<boolean> {
+  const pointer = await bucket.getSnapshot(templateSlugKey(slug), READ_OPTIONS)
+  return pointer !== null && isRecord(pointer.data) && pointer.data.id === id
 }
 
 // ── Contenu ───────────────────────────────────────────────────────────────────
@@ -494,17 +564,21 @@ interface TemplateContent {
   tripYear: number | null
 }
 
-/** Titre saisi, borné ; à défaut, les étapes du voyage (« Tokyo et Kyoto »). */
+/**
+ * Titre saisi, borné ; à défaut, les étapes du voyage (« Tokyo et Kyoto »).
+ * Coupé sur un caractère entier : c'est du texte public, indexé.
+ */
 function templateTitle(
   title: string | null | undefined,
   itinerary: DayItinerary[],
 ): string {
-  const typed = (title ?? '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, MAX_TEMPLATE_TITLE_LENGTH)
-    .trim()
-  return typed || deriveTripTitle(itinerary).slice(0, MAX_TEMPLATE_TITLE_LENGTH)
+  const typed = truncateText(
+    (title ?? '').replace(/\s+/g, ' ').trim(),
+    MAX_TEMPLATE_TITLE_LENGTH,
+  ).trim()
+  return (
+    typed || truncateText(deriveTripTitle(itinerary), MAX_TEMPLATE_TITLE_LENGTH)
+  )
 }
 
 /**
@@ -636,9 +710,11 @@ function nextIndex(
 }
 
 /**
- * Accorde la ligne de `id` dans l'index à sa méta **stockée**, et dit si
- * c'est fait. Ne lève jamais : à l'appelant de décider si un échec compte
- * (voir `settleIndex`).
+ * Accorde la ligne de `id` dans son morceau d'index (`templateIndexKey`) à sa
+ * méta **stockée**, et dit si c'est fait. Ne lève jamais : à l'appelant de
+ * décider si un échec compte (voir `settleIndex`). Un morceau qui ne peut
+ * plus grandir (`FILE_TOO_LARGE`) est signalé par `TEMPLATE_INDEX_FULL_ALERT`,
+ * avec l'id resté dehors, que `resyncTemplateIndex` rattrapera.
  *
  * Pourquoi relire la méta au lieu de prendre celle que l'appelant vient
  * d'écrire : deux requêtes sur le même modèle ne sont pas ordonnées. Un PUT
@@ -656,27 +732,29 @@ function nextIndex(
  * tentatives s'épuisent — ce que l'appelant apprend par `false`.
  */
 async function syncIndex(bucket: TemplateBucket, id: string): Promise<boolean> {
+  const key = templateIndexKey(id)
   try {
     for (let attempt = 1; attempt <= INDEX_ATTEMPTS; attempt++) {
-      const snapshot = await bucket.getSnapshot(
-        TEMPLATE_INDEX_KEY,
-        READ_OPTIONS,
-      )
-      const current = snapshot ? parseIndex(snapshot.data) : []
+      const snapshot = await bucket.getSnapshot(key, READ_OPTIONS)
+      const current = snapshot ? parseIndexShard(snapshot.data, key) : []
       if (!current) {
-        console.error('Index des modèles illisible : il n’est pas réécrit.')
+        console.error(
+          `Index des modèles illisible (${key}) : il n’est pas réécrit.`,
+        )
         return false
       }
       const latest = (await loadMeta(bucket, id))?.meta ?? null
       const entries = nextIndex(current, id, latest)
       if (!entries) return true
       if (snapshot && !snapshot.etag) {
-        console.error('Index des modèles sans ETag : il n’est pas réécrit.')
+        console.error(
+          `Index des modèles sans ETag (${key}) : il n’est pas réécrit.`,
+        )
         return false
       }
       try {
         await bucket.putSnapshot(
-          TEMPLATE_INDEX_KEY,
+          key,
           { entries },
           snapshot
             ? { ...TEMPLATE_SNAPSHOT_OPTIONS, ifMatch: snapshot.etag }
@@ -684,6 +762,15 @@ async function syncIndex(bucket: TemplateBucket, id: string): Promise<boolean> {
         )
       } catch (error) {
         if (isPreconditionFailure(error)) continue
+        if (isS3ndError(error) && error.code === 'FILE_TOO_LARGE') {
+          // Une alerte à part, pas un échec parmi d'autres : sans opérateur,
+          // ce modèle (et les suivants du même morceau) resteraient hors du
+          // sitemap.
+          console.error(
+            `${TEMPLATE_INDEX_FULL_ALERT} : le morceau d’index ${key} ne peut plus grandir, le modèle ${id} n’y entre pas. Procédure : docs/modeles-moderation.md §5.`,
+          )
+          return false
+        }
         throw error
       }
       const after = (await loadMeta(bucket, id))?.meta ?? null
@@ -793,6 +880,8 @@ async function reserveSlug(
       return slug
     } catch (error) {
       if (!isPreconditionFailure(error)) throw error
+      // Réponse perdue puis rejouée par le SDK : le slug est déjà à nous.
+      if (await slugBelongsTo(bucket, slug, id)) return slug
     }
   }
   throw new TemplateStoreError(
@@ -808,6 +897,11 @@ async function reserveSlug(
  * méta, aucune lecture ne l'atteint. On ne la supprime que sur un refus
  * certain (aucun slug libre) : une erreur réseau sur la méta ne prouve pas
  * qu'elle n'a pas été écrite.
+ *
+ * Un 412 sur la méta, lui, se vérifie : la réponse S3 perdue puis rejouée par
+ * le SDK bute sur notre propre écriture. La méta relue porte alors l'empreinte
+ * de notre jeton, et la publication continue (index, jeton rendu) : jamais un
+ * modèle en ligne que personne ne détient (§2.1).
  *
  * L'index est mis à jour au mieux : un nouvel id n'y a jamais figuré, un
  * échec ne fait que retarder son entrée au sitemap.
@@ -855,10 +949,19 @@ export async function publishTemplate(
     retiredAt: null,
     ownerTokenHash: hashOwnerToken(ownerToken),
   }
-  await bucket.putSnapshot(templateMetaKey(id), meta, {
-    ...TEMPLATE_SNAPSHOT_OPTIONS,
-    ifAbsent: true,
-  })
+  try {
+    await bucket.putSnapshot(templateMetaKey(id), meta, {
+      ...TEMPLATE_SNAPSHOT_OPTIONS,
+      ifAbsent: true,
+    })
+  } catch (error) {
+    // L'id vient d'être réservé par `v/1` en `ifAbsent` : seule cette requête
+    // écrit cette méta. Un 412 est donc notre écriture rejouée, si l'empreinte
+    // stockée est celle de notre jeton.
+    if (!isPreconditionFailure(error)) throw error
+    const stored = await loadMeta(bucket, id)
+    if (stored?.meta.ownerTokenHash !== meta.ownerTokenHash) throw error
+  }
   await syncIndex(bucket, id)
   return {
     meta,
@@ -933,14 +1036,48 @@ async function writeNewVersion(
 ): Promise<TemplateWriteResult> {
   const at = (input.now ?? new Date()).toISOString()
   let written: { version: number; content: TemplateContent } | null = null
+  /**
+   * Retrait passé pendant la mise à jour : notre version, écrite peut-être
+   * après sa suppression des versions, ne doit pas survivre à un retrait
+   * annoncé comme réussi (§4). Suppression attendue, pas `discard` : si elle
+   * échoue, `versions` (503), et l'auteur rejoue le retrait.
+   */
+  async function purgeAfterRetirement(
+    tombstone: RetiredTemplateMeta,
+  ): Promise<never> {
+    const keys = versionKeysOf(tombstone)
+    if (written) {
+      const own = templateVersionKey(id, written.version)
+      if (!keys.includes(own)) keys.push(own)
+    }
+    written = null
+    try {
+      await bucket.delete(keys)
+    } catch (error) {
+      console.error('Versions du modèle retiré non supprimées', error)
+      throw new TemplateStoreError('versions')
+    }
+    throw new TemplateStoreError('retired')
+  }
   try {
     for (let attempt = 1; attempt <= META_ATTEMPTS; attempt++) {
       const { meta, etag } = await loadOwnedMeta(bucket, id, token)
-      if (isRetiredTemplateMeta(meta)) throw new TemplateStoreError('retired')
+      if (isRetiredTemplateMeta(meta)) {
+        if (written) await purgeAfterRetirement(meta)
+        throw new TemplateStoreError('retired')
+      }
 
+      // La méta pointe déjà vers notre version : seule cette requête a pu
+      // écrire `v/<n>` (`ifAbsent`), notre écriture de la méta a donc abouti.
+      if (written && written.version === meta.version) {
+        return {
+          meta,
+          template: toPublicTemplate(meta, written.content.itinerary),
+        }
+      }
       // Une autre mise à jour a publié par-dessus notre emplacement : notre
       // version passerait pour plus ancienne que l'actuelle. On en reprend un.
-      if (written && written.version <= meta.version) {
+      if (written && written.version < meta.version) {
         await discard(bucket, [templateVersionKey(id, written.version)])
         written = null
       }
@@ -957,6 +1094,13 @@ async function writeNewVersion(
           content,
         )
         written = { version, content }
+        // Relue après l'écriture de la version : un retrait dont la
+        // suppression est passée avant elle se voit forcément ici, quelle
+        // que soit l'issue de l'écriture de la méta qui suit.
+        const latest = await loadMeta(bucket, id)
+        if (latest && isRetiredTemplateMeta(latest.meta)) {
+          await purgeAfterRetirement(latest.meta)
+        }
       }
 
       // Le slug et le pays ne bougent jamais : l'adresse de la page est
@@ -973,8 +1117,21 @@ async function writeNewVersion(
           ifMatch: etag,
         })
       } catch (error) {
-        if (isPreconditionFailure(error)) continue
-        throw error
+        if (!isPreconditionFailure(error)) throw error
+        // Réponse perdue puis rejouée par le SDK : le 412 peut venir de notre
+        // propre écriture. La méta relue le dit (voir plus haut).
+        const latest = await loadMeta(bucket, id)
+        if (
+          latest &&
+          !isRetiredTemplateMeta(latest.meta) &&
+          latest.meta.version === written.version
+        ) {
+          return {
+            meta: latest.meta,
+            template: toPublicTemplate(latest.meta, written.content.itinerary),
+          }
+        }
+        continue
       }
       return {
         meta: next,
@@ -1258,9 +1415,9 @@ export async function readTemplateForOperator(
   if (!stored) return { status: 'missing' }
   let inIndex: boolean | null
   try {
-    inIndex = (await readIndex(bucket)).some(
-      (entry) => entry.id === stored.meta.id,
-    )
+    inIndex = (
+      await readIndexShard(bucket, templateIndexKey(stored.meta.id))
+    ).some((entry) => entry.id === stored.meta.id)
   } catch {
     inIndex = null
   }
@@ -1303,13 +1460,26 @@ export type TemplateVersionReadResult =
   | { status: 'retired' }
   | { status: 'missing' }
 
+/**
+ * `bySlug` : la lecture vient d'une page tripbrain.fr. Un modèle retiré n'y
+ * répond 410 que s'il était listé (voir `readTemplateBySlug`).
+ */
 async function resolveTemplate(
   bucket: TemplateBucket,
   meta: StoredTemplateMeta,
+  bySlug = false,
 ): Promise<TemplateReadResult> {
   if (isRetiredTemplateMeta(meta)) return { status: 'retired' }
   const version = await loadVersion(bucket, meta.id, meta.version)
   if (!version) {
+    // Un retrait concurrent a pu effacer les versions depuis la lecture de
+    // la méta : relue, sa pierre tombale fait répondre 410, pas 404.
+    const latest = await loadMeta(bucket, meta.id)
+    if (latest && isRetiredTemplateMeta(latest.meta)) {
+      return !bySlug || latest.meta.wasListed
+        ? { status: 'retired' }
+        : { status: 'missing' }
+    }
     console.error(`Version ${meta.version} absente du modèle ${meta.id}.`)
     return { status: 'missing' }
   }
@@ -1372,21 +1542,64 @@ export async function readTemplateBySlug(
     return meta.wasListed ? { status: 'retired' } : { status: 'missing' }
   }
   if (!isListed(meta)) return { status: 'missing' }
-  return resolveTemplate(bucket, meta)
+  return resolveTemplate(bucket, meta, true)
+}
+
+async function readIndexShard(
+  bucket: TemplateBucket,
+  key: string,
+): Promise<TemplateIndexEntry[]> {
+  const snapshot = await bucket.getSnapshot(key, READ_OPTIONS)
+  if (!snapshot) return []
+  const entries = parseIndexShard(snapshot.data, key)
+  if (!entries) throw new Error(`Index des modèles illisible (${key}).`)
+  return entries
 }
 
 /**
- * Les modèles listés, du plus récemment modifié au plus ancien. Un index
- * illisible lève, comme une méta illisible : présenté comme une liste vide,
- * il ferait sortir tous les modèles du sitemap de tripbrain.fr, en cache.
- * Une erreur, elle, laisse l'ISR garder la page précédente.
+ * Les modèles listés, du plus récemment modifié au plus ancien : les 32
+ * morceaux, lus en parallèle et fusionnés. Un morceau illisible lève, comme
+ * une méta illisible : présenté comme une liste vide, il ferait sortir ses
+ * modèles du sitemap de tripbrain.fr, en cache. Une erreur, elle, laisse
+ * l'ISR garder la page précédente.
  */
 export async function readIndex(
   bucket: TemplateBucket,
 ): Promise<TemplateIndexEntry[]> {
-  const snapshot = await bucket.getSnapshot(TEMPLATE_INDEX_KEY, READ_OPTIONS)
-  if (!snapshot) return []
-  const entries = parseIndex(snapshot.data)
-  if (!entries) throw new Error('Index des modèles illisible.')
-  return entries
+  const shards = await Promise.all(
+    TEMPLATE_INDEX_KEYS.map((key) => readIndexShard(bucket, key)),
+  )
+  return shards.flat().sort(compareIndexEntries)
+}
+
+/** Ce que l'opérateur apprend d'un rattrapage de l'index. */
+export interface IndexResync {
+  id: string
+  slug: string
+  /** La méta dit que le modèle doit figurer dans l'index. */
+  listed: boolean
+  /** Sa ligne est accordée à sa méta (présente si listé, absente sinon). */
+  synced: boolean
+}
+
+/**
+ * Accorde à sa méta la ligne d'index d'un modèle (`ref` : id ou slug), sans
+ * rien écrire d'autre : de quoi rattraper un modèle listé resté dehors
+ * pendant qu'un morceau d'index était plein (`TEMPLATE_INDEX_FULL_ALERT`),
+ * sans attendre que son auteur le modifie. `null` si le modèle est introuvable.
+ * Sans risque à rejouer. Seul `scripts/resync-template-index.ts` l'appelle.
+ */
+export async function resyncTemplateIndex(
+  bucket: TemplateBucket,
+  ref: string,
+): Promise<IndexResync | null> {
+  const stored = await findTemplate(bucket, ref)
+  if (!stored) return null
+  const { id, slug } = stored.meta
+  return {
+    id,
+    slug,
+    listed: isListedMeta(stored.meta),
+    synced: await syncIndex(bucket, id),
+  }
 }

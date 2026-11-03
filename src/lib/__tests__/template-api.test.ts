@@ -532,7 +532,7 @@ describe('parcours complet contre les routes', () => {
       INPUT,
     )
     bucket.beforePut = (key) => {
-      if (key === 'index') throw new Error('R2 indisponible')
+      if (key.startsWith('index/')) throw new Error('R2 indisponible')
     }
     const error = await caught(() => retireTemplate(published.id, ownerToken))
     expect(error).toBeInstanceOf(TemplateUnavailableError)

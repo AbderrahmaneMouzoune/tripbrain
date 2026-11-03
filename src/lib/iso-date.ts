@@ -45,12 +45,29 @@ export function toDayNumber(iso: string): number {
   return Math.round(utcMidnight(year, month, day) / DAY_MS)
 }
 
-/** Jours depuis l'époque → date ISO. */
+/** Premier et dernier jour qui s'écrivent `AAAA-MM-JJ` : 0000-01-01 et 9999-12-31. */
+export const MIN_DAY_NUMBER = Math.round(utcMidnight(0, 1, 1) / DAY_MS)
+export const MAX_DAY_NUMBER = Math.round(utcMidnight(9999, 12, 31) / DAY_MS)
+
+/**
+ * Jours depuis l'époque → date ISO. Lève `RangeError` hors de 0000-01-01 …
+ * 9999-12-31 : au-delà, `toISOString` écrit `+010000-01-01`, que rien ne
+ * relit comme une date.
+ */
 export function fromDayNumber(dayNumber: number): string {
+  if (
+    !Number.isInteger(dayNumber) ||
+    dayNumber < MIN_DAY_NUMBER ||
+    dayNumber > MAX_DAY_NUMBER
+  ) {
+    throw new RangeError(
+      `Date hors calendrier (jour ${dayNumber}) : il faut une année entre 0000 et 9999.`,
+    )
+  }
   return new Date(dayNumber * DAY_MS).toISOString().slice(0, 10)
 }
 
-/** `addDays('2026-05-30', 3)` → `'2026-06-02'`. */
+/** `addDays('2026-05-30', 3)` → `'2026-06-02'`. Lève `RangeError` hors calendrier. */
 export function addDays(iso: string, days: number): string {
   return fromDayNumber(toDayNumber(iso) + days)
 }
@@ -87,7 +104,8 @@ export function splitIsoDateValue(
 /**
  * Décale la partie date d'une date (`AAAA-MM-JJ`) ou d'une date-heure
  * (`AAAA-MM-JJTHH:MM…`) ; l'heure ne bouge pas. Toute autre valeur — une heure
- * seule (`08:30`), un texte, une date invalide — revient telle quelle.
+ * seule (`08:30`), un texte, une date invalide — revient telle quelle. Lève
+ * `RangeError` si la date décalée sort de 0000-01-01 … 9999-12-31.
  */
 export function shiftIsoDateValue(value: string, offset: number): string {
   if (offset === 0) return value

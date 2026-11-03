@@ -157,18 +157,26 @@ sur le serveur** avant tout stockage.
 - `notes` (journée, transport) : retirées sauf si `includeNotes`.
 - `price` et `currency` (activité, transport, hébergement) : retirés sauf si `includePrices`.
 - `bookingUrl` : retiré s'il ressemble à une confirmation. Le motif cherche dans le chemin ou
-  la requête des termes comme `confirmation`, `confirm`, `mybooking`, `manage`, `reservation`,
-  `pnr`, `token`, `auth`, `bn=`, ou la `bookingReference` de l'entité. Pour un hébergement on
-  met `''` (le champ est requis dans le type) ; ailleurs on supprime la clé.
+  la requête, accents ignorés (`ma-réservation`), des termes comme `confirmation`, `confirm`,
+  `mybooking`, `manage`, `reservation`, `pnr`, `token`, `auth`, `bn=`, des numéros de
+  réservation ou de commande (`itineraryId`, `bookingNumber`, `orderNo`, `pincode`…), des
+  espaces client (`my-account`, `account/booking`…) ou la forme `/trips/<8 chiffres ou plus>`.
+  Il est aussi retiré s'il porte une adresse e-mail ou un numéro de téléphone, quel que soit le
+  paramètre (`?mail=`, `?tel=%2B33…`, `/clients/<adresse>/`), ou la `bookingReference` de
+  **n'importe quel** transport ou hébergement du voyage : une activité n'a pas de référence, et
+  un séjour est souvent saisi avec sa référence sur la première nuit seulement. Pour un
+  hébergement on met `''` (le champ est requis dans le type) ; ailleurs on supprime la clé.
 - Les ids (journées, activités, transports, hébergements) sont conservés à l'identique : la
   fusion V1.1 s'appuie dessus.
 
 `noteExcerpts(itinerary, limit)` sert l'écran A3. Il renvoie des extraits réels
 `{ dayNumber, text, spans }`, en privilégiant les notes qui contiennent quelque chose de
-sensible. `sensitiveSpans(text, knownPlaces)` repère :
+sensible. L'extrait d'une telle note en montre toujours au moins une, même sans espace où
+couper (japonais, chinois, long lien) ; il n'est jamais coupé au milieu d'un emoji. `sensitiveSpans(text, knownPlaces)` repère :
 
 - les suites de 4 chiffres ou plus (codes, digicodes) ;
-- les numéros de téléphone et les e-mails ;
+- les numéros de téléphone et les e-mails ; un numéro qui suit un autre nombre (« Chambre 104
+  06 12… », deux numéros à la suite) reste surligné en entier ;
 - les mots à majuscule qui ne sont ni en début de phrase ni un lieu connu du voyage.
 
 ### 3.2 Recalage — `src/lib/template-redate.ts`
@@ -215,6 +223,10 @@ rejouer le recalage.
      sans Nikko).
 6. Un modèle sans date valide fonctionne de la même façon : le jour 1 prend `startDate`, et rien
    d'autre ne glisse.
+7. Le voyage doit tenir dans le calendrier `AAAA-MM-JJ` : de `startDate` au lendemain de la
+   dernière nuit, au plus tard le 9999-12-31, et aucune date de la journée décalée ne sort de
+   0000-01-01 … 9999-12-31. Sinon `retimeTemplate` lève une erreur en français, et
+   `groupDaysByCity` (B4) ne date aucune journée, comme sans date de départ valide.
 
 `templateTodo(itinerary)` renvoie ce qu'il reste à réserver (B5) :
 `{ accommodations: noms distincts sans référence, transports, bookableActivities }`.
@@ -225,7 +237,8 @@ Les journées gardées sont prises dans le modèle, la reprise n'est jamais plus
 
 Les helpers de date (`toDayNumber`, `fromDayNumber`, `addDays`) sont extraits de
 `demo-trip.ts` dans `src/lib/iso-date.ts`, puis partagés. Ils sont sûrs vis-à-vis des fuseaux
-horaires. Il ne faut pas réutiliser le `addDays` de `itinerary-edit.ts`, qui passe par
+horaires, et lèvent `RangeError` hors de 0000-01-01 … 9999-12-31 (au-delà, `toISOString`
+écrirait `+010000-01-01`). Il ne faut pas réutiliser le `addDays` de `itinerary-edit.ts`, qui passe par
 `toISOString`.
 
 ## 4. Stockage (serveur)
@@ -240,10 +253,25 @@ d'`expiresIn`.
 | `<id>/meta`             | `TemplateMeta`, puis `RetiredTemplateMeta` une fois retiré     | `ifAbsent` à la création, puis `ifMatch` |
 | `<id>/v/<n>`            | `{ version, title, itinerary }`, en JSON brut (s3nd le gzippe) | `ifAbsent`, immuable                     |
 | `slugs/<slug>`          | `{ id }`                                                       | `ifAbsent`, jamais réutilisé             |
-| `index`                 | `{ entries: TemplateIndexEntry[] }`, modèles listés uniquement | boucle `ifMatch`, 5 tentatives           |
+| `index/<c>`             | `{ entries: TemplateIndexEntry[] }`, modèles listés uniquement | boucle `ifMatch`, 5 tentatives           |
 
 - Ordre d'écriture : la version, puis la méta, puis l'index. La méta ne pointe donc jamais vers
   une version absente.
+- **Réponse S3 perdue** : le SDK rejoue une écriture dont la réponse s'est perdue, et
+  l'écriture conditionnelle rejouée reçoit 412 sur la sienne. Un 412 sur la méta d'une
+  publication, sur un slug ou sur la méta d'une mise à jour est donc vérifié en relisant
+  l'objet : s'il est le nôtre (empreinte du jeton, `{ id }`, numéro de la version écrite), la
+  requête continue comme si l'écriture avait répondu. Jamais de modèle en ligne sans que son
+  auteur ait reçu le jeton.
+- **Index en morceaux** : 32 objets `index/<c>`, un par premier caractère de l'id. Un objet
+  unique atteignait la taille maximale de s3nd (4 Mio gzippés) après ~1 800 publications
+  forgées, et plus aucun modèle listé n'y entrait. Les ids sont tirés au hasard : bloquer un
+  modèle donné demande de remplir les 32. `readIndex` (et donc `GET /api/templates/index`) lit
+  les 32 en parallèle et les fusionne ; le format de la réponse ne change pas. Un morceau qui ne
+  peut plus grandir (`FILE_TOO_LARGE`) est journalisé avec l'étiquette `template_index_full`
+  et l'id resté dehors, que `scripts/resync-template-index.ts` remet dans l'index une fois de la
+  place faite (procédure : `docs/modeles-moderation.md` §5). L'ancien objet `index`, jamais
+  publié en production, n'est plus lu.
 - **Index** : la ligne d'un modèle suit sa méta **stockée**, relue après la lecture de l'index,
   puis revérifiée après l'écriture (une requête concurrente plus lente ne peut pas y remettre
   un modèle masqué ou retiré). Si l'index échoue sur un ajout ou une modification, le modèle
@@ -252,6 +280,9 @@ d'`expiresIn`.
   elle ne refait que l'index. Un index illisible n'est jamais réécrit, et sa lecture lève (500)
   au lieu de renvoyer une liste vide.
 - Villes de la méta et de l'index : les 10 premières, 80 caractères chacune.
+- Titre (120) et prénom (40) sont bornés en unités UTF-16, comme le `maxLength` des champs,
+  mais jamais au milieu d'un emoji (`truncateText`, `src/lib/text-limit.ts`) ; une moitié de
+  paire isolée envoyée telle quelle devient U+FFFD. Même règle pour les voyages de groupe.
 - **Mise à jour** : la méta reprend de la nouvelle version le titre (gardé s'il n'est pas
   envoyé), `dayCount`, `cities`, `tripYear`, `includesNotes`, `includesPrices`, et prend un
   nouvel `updatedAt`. Le slug et le pays ne changent jamais. Mise à jour comme changement de
@@ -270,7 +301,11 @@ d'`expiresIn`.
   deux doivent aboutir : si l'index ne suit pas, le retrait échoue en `index` ; si la
   suppression des versions échoue, l'index est tout de même accordé, puis le retrait échoue en
   `versions`. Dans les deux cas la route répond 503 « Réessayez », la pierre tombale étant déjà
-  écrite : rejoué, le retrait refait la suppression et l'index. Les lectures répondent 410 ;
+  écrite : rejoué, le retrait refait la suppression et l'index. Une mise à jour qui croise un
+  retrait relit la méta juste après avoir écrit sa version : si elle trouve la pierre tombale,
+  elle supprime sa version (`versions` si la suppression échoue) et répond 410. Aucune version
+  ne survit donc à un retrait annoncé comme réussi. Une écriture ou une lecture dont la version
+  disparaît sous un retrait concurrent répond de même 410, jamais 404 ni 500. Les lectures répondent 410 ;
   par le slug, seulement si `wasListed` (sinon 404, voir §7). Une pierre tombale de l'ancienne
   forme (méta entière vidée) se lit encore : `wasListed` est alors tiré d'`indexable` et
   `dayCount`.
@@ -288,25 +323,28 @@ d'`expiresIn`.
 Toutes les routes déclarent `runtime = 'nodejs'` et `dynamic = 'force-dynamic'`. Les erreurs
 ont la forme `{ error: '<message français>' }`.
 
-| Route                               | Accès              | Réponse                                                  |
-| ----------------------------------- | ------------------ | -------------------------------------------------------- |
-| `POST /api/templates`               | public, 10/min/IP  | 201 `{ template, ownerToken }`                           |
-| `GET /api/templates/[id]`           | public, sans cache | 200 `{ template }` · 404 · 410 `{ status: 'retired' }`   |
-| `PUT /api/templates/[id]`           | Bearer             | 200 `{ template }` (nouvelle version) · 503 (index)      |
-| `PATCH /api/templates/[id]`         | Bearer             | 200 `{ template }` (`indexable`, `authorName`) · 503     |
-| `DELETE /api/templates/[id]`        | Bearer             | 200 `{ status: 'retired' }` · 503 (index, versions)      |
-| `GET /api/templates/[id]/v/[n]`     | public             | 200 `{ version, itinerary }` (base de fusion V1.1)       |
-| `GET /api/templates/by-slug/[slug]` | public             | 200 `{ template }` **seulement si `listed`** · 404 · 410 |
-| `GET /api/templates/index`          | public             | 200 `{ entries }`                                        |
+| Route                               | Accès              | Réponse                                                    |
+| ----------------------------------- | ------------------ | ---------------------------------------------------------- |
+| `POST /api/templates`               | public, 10/min/IP  | 201 `{ template, ownerToken }`                             |
+| `GET /api/templates/[id]`           | public, sans cache | 200 `{ template }` · 404 · 410 `{ status: 'retired' }`     |
+| `PUT /api/templates/[id]`           | Bearer             | 200 `{ template }` (nouvelle version) · 410 · 503          |
+| `PATCH /api/templates/[id]`         | Bearer             | 200 `{ template }` (`indexable`, `authorName`) · 410 · 503 |
+| `DELETE /api/templates/[id]`        | Bearer             | 200 `{ status: 'retired' }` · 503 (index, versions)        |
+| `GET /api/templates/[id]/v/[n]`     | public             | 200 `{ version, itinerary }` (base de fusion V1.1)         |
+| `GET /api/templates/by-slug/[slug]` | public             | 200 `{ template }` **seulement si `listed`** · 404 · 410   |
+| `GET /api/templates/index`          | public             | 200 `{ entries }`                                          |
 
 - **Écritures** : le corps porte `data`, l'itinéraire compressé au format du partage
   (`compressItinerary`). Le serveur le décompresse, remet chaque valeur à son type (§4), vérifie
   qu'il y a au moins une journée, le **renettoie**, puis stocke du JSON. Plafond : 2 Mo de
-  payload (413). Une erreur `FILE_TOO_LARGE` de s3nd est elle aussi renvoyée en 413.
+  payload (413), et 2 Mio + 64 Kio pour le corps entier, compté à la lecture : un envoi sans
+  `Content-Length` (chunked) est coupé dès le plafond franchi. Une erreur `FILE_TOO_LARGE` de
+  s3nd est elle aussi renvoyée en 413.
 - **Décompression bornée** (route publique) : le serveur n'utilise pas `decompressItinerary`
   du navigateur. Il décompresse avec `zlib.inflateRawSync` plafonné à 2 Mio décompressés, puis
-  décode le msgpack avec des bornes (tableaux, objets, chaînes de 32 Kio). Au-delà de 180
-  journées ou de 100 activités par journée : 413. Le PUT vérifie le jeton contre son empreinte
+  décode le msgpack avec des bornes (tableaux, objets, chaînes de 32 Kio, profondeur 8, mesurée
+  en un passage avant tout décodage : un voyage en a 5, et 2 Mio d'imbrication coûtaient
+  340 Mo de tas). Au-delà de 180 journées ou de 100 activités par journée : 413. Le PUT vérifie le jeton contre son empreinte
   **avant** de lire le corps.
 - **Nettoyage sur le téléphone** : avant tout envoi, publication comme mise à jour ; une mise
   à jour envoie donc toujours ses réglages (ceux de `publishedTemplate` pour les garder).
@@ -415,3 +453,25 @@ l'écran A4 font l'objet d'un ticket à part (objet `stats` mis à jour au mieux
 - Le build ignore les erreurs de type. Il faut donc lancer :
   `bunx tsc --noEmit --incremental false 2>&1 | grep 'error TS' | grep -v __tests__`. La sortie
   doit être vide ; c'est le cas sur `main` au 3 nov. 2026.
+
+### Tests de bout en bout
+
+`bun run e2e:templates` (`scripts/e2e/run.ts`) joue l'API en HTTP réel, à travers le vrai
+`@s3nd/core` et le vrai SDK AWS :
+
+1. un faux S3 en mémoire démarre sur un port libre (`scripts/e2e/fake-s3.ts`) ;
+2. `bun run build`, puis `next start`, avec `R2_ENDPOINT` pointé sur ce faux S3 ;
+3. les scénarios de `scripts/e2e/templates-e2e.ts` s'enchaînent : cycle de vie, nettoyage,
+   slugs, authentification, corps hostiles, limites, Unicode, concurrence, limiteur, pannes
+   injectées (index, versions, réponse S3 perdue, S3 hors service), script de retrait, client
+   `template-api.ts`, `Cache-Control` de chaque statut, cohérence finale de l'index.
+
+Compter environ 35 s, dont 20 s de build. Le code de sortie vaut 0 si tout passe, 1 sinon, avec le
+détail de chaque échec. Trois variables :
+
+- `E2E_SKIP_BUILD=1` réutilise le `.next` existant ;
+- `E2E_ONLY=<texte>` ne joue que les scénarios dont le nom contient ce texte ;
+- `E2E_VERBOSE=1` affiche le journal du serveur Next.
+
+Rien ne part vers R2 : le serveur et le script de retrait visent le faux S3. Lancé seul
+(`bun scripts/e2e/fake-s3.ts 9000`), le faux S3 liste ses clés sur `GET /__keys`.

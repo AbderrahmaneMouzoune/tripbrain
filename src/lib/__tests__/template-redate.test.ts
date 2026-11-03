@@ -1,5 +1,6 @@
 import { analyticsEvents } from '@/lib/analytics/events'
-import { daysBetween } from '@/lib/iso-date'
+import { addDays, daysBetween, fromDayNumber, isIsoDate } from '@/lib/iso-date'
+import { findStay } from '@/components/day/day-logic'
 import {
   itinerary as demoItinerary,
   type Accommodation,
@@ -991,6 +992,62 @@ describe('retimeTemplate', () => {
       }
     })
 
+    it('refuse en français une date de départ qui ferait sortir le voyage du calendrier', () => {
+      const template = numbered([
+        day('d1', '2026-05-10', 'Kyoto', 'Arrivée', {
+          accommodation: hotel(
+            'acc-k',
+            'Ryokan Yachiyo',
+            '2026-05-10T15:00',
+            '2026-05-12T10:00',
+          ),
+        }),
+        day('d2', '2026-05-11', 'Kyoto', 'Départ', {
+          transport: train('t1', 'Kyoto', 'Tokyo', {
+            departureTime: '2026-05-11T10:00',
+          }),
+        }),
+      ])
+      for (const [startDate, keptDayIds] of [
+        ['9999-12-31', ['d1', 'd2']],
+        // Une seule nuit : son départ le lendemain tomberait en 10000.
+        ['9999-12-31', ['d1']],
+        ['9999-12-30', ['d1', 'd2']],
+      ] as const) {
+        expect(() =>
+          retimeTemplate(template, { startDate, keptDayIds }),
+        ).toThrow(/Date de départ hors calendrier/)
+      }
+      // La veille, tout tient : chaque date est une vraie date.
+      const last = retimeTemplate(template, {
+        startDate: '9999-12-29',
+        keptDayIds: ['d1', 'd2'],
+      })
+      expect(last.map((entry) => entry.date)).toEqual([
+        '9999-12-29',
+        '9999-12-30',
+      ])
+      expect(last[0].accommodation?.checkOut).toBe('9999-12-31T10:00')
+    })
+
+    it('refuse en français une date de la journée que l’écart ferait sortir du calendrier', () => {
+      // Une date saisie en 9999 dans une journée de 2026 : décalée de +10 ans.
+      const template = numbered([
+        day('d1', '2026-05-10', 'Kyoto', 'Arrivée', {
+          notes: 'rien',
+          transport: train('t1', 'Tokyo', 'Kyoto', {
+            arrivalTime: '9999-06-01T10:00',
+          }),
+        }),
+      ])
+      expect(() =>
+        retimeTemplate(template, {
+          startDate: '2036-05-10',
+          keptDayIds: ['d1'],
+        }),
+      ).toThrow(/Date de départ hors calendrier/)
+    })
+
     it('refuse de ne garder aucune journée', () => {
       expect(() =>
         retimeTemplate(japanTemplate(), {
@@ -1045,6 +1102,37 @@ describe('retimeTemplate', () => {
         checkOut: '2026-11-25',
       })
       expect(result[4]).not.toHaveProperty('accommodation')
+    })
+
+    it('reporte l’hôtel sur la première nuit gardée même s’il est répété plus loin dans le séjour', () => {
+      // Kyoto, 3 nuits : l'hôtel sur la journée d'arrivée, et répété le 3ᵉ soir.
+      const ryokan = hotel(
+        'acc-k',
+        'Ryokan Yachiyo',
+        '2026-04-01',
+        '2026-04-04',
+      )
+      const template = numbered([
+        day('day-1', '2026-04-01', 'Kyoto', 'Arrivée', {
+          accommodation: ryokan,
+        }),
+        day('day-2', '2026-04-02', 'Kyoto', 'Arashiyama'),
+        day('day-3', '2026-04-03', 'Kyoto', 'Fushimi', {
+          accommodation: ryokan,
+        }),
+      ])
+      const result = retimeTemplate(template, {
+        startDate: '2026-06-01',
+        keptDayIds: ['day-2', 'day-3'],
+      })
+      expect(findStay(result, 0)?.accommodation.id).toBe('acc-k')
+      expect(findStay(result, 1)?.accommodation.id).toBe('acc-k')
+      for (const entry of result) {
+        expect(entry.accommodation).toMatchObject({
+          checkIn: '2026-06-01',
+          checkOut: '2026-06-03',
+        })
+      }
     })
 
     it('raccourcit un séjour dont une nuit est retirée', () => {
@@ -1273,6 +1361,25 @@ describe('groupDaysByCity', () => {
       ['Kyoto', 1],
       ['Tokyo', 1],
     ])
+  })
+
+  it('ne date rien quand le voyage sortirait du calendrier, comme retimeTemplate', () => {
+    const template = numbered([
+      day('d1', '2026-05-10', 'Kyoto', 'Arrivée'),
+      day('d2', '2026-05-11', 'Kyoto', 'Départ'),
+    ])
+    for (const startDate of ['9999-12-31', '9999-12-30']) {
+      const groups = groupDaysByCity(template, ['d1', 'd2'], startDate)
+      expect(groups.every((group) => group.range === null)).toBe(true)
+      expect(
+        groups
+          .flatMap((group) => group.days)
+          .every((entry) => entry.date === null),
+      ).toBe(true)
+    }
+    const [last] = groupDaysByCity(template, ['d1', 'd2'], '9999-12-29')
+    expect(last.range).toEqual({ start: '9999-12-29', end: '9999-12-30' })
+    expect(last.days.every((entry) => isIsoDate(entry.date))).toBe(true)
   })
 
   it('ne lève pas d’erreur sans date de départ valide', () => {

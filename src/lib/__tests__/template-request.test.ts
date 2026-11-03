@@ -1,5 +1,6 @@
 import { encode } from '@msgpack/msgpack'
 import { S3ndError } from '@s3nd/core'
+import { itinerary as demoItinerary } from '@/lib/itinerary-data'
 import { compressItinerary } from '@/lib/share'
 import {
   MAX_TEMPLATE_DAYS,
@@ -12,6 +13,7 @@ import {
   TEMPLATE_MAX_PAYLOAD_CHARS,
   TEMPLATE_MAX_STRING_BYTES,
   TEMPLATE_NOT_CONFIGURED,
+  nestingTooDeep,
   openTemplateStore,
   parseTemplatePatch,
   parseTemplatePublish,
@@ -61,6 +63,32 @@ function dayWithEmptyActivities(count: number): string {
     encode([{ ...day(1), activities: new Array<object>(count).fill(empty) }]),
   )
 }
+
+/**
+ * Un itinéraire valable dont une clé ignorée (`extra`) cache `depth` niveaux
+ * imbriqués : `opener` ouvre chaque niveau, nil au fond. La journée en
+ * ajoute deux (la liste des journées, puis la journée elle-même).
+ */
+function nestedInIgnoredKey(depth: number, opener: number[]): string {
+  const placeholder = 'PLACEHOLDER-PROFONDEUR'
+  const bytes = Buffer.from(encode([{ ...day(1), extra: placeholder }]))
+  const marker = Buffer.from(encode(placeholder))
+  const at = bytes.indexOf(marker)
+  const levels = Buffer.from(Array.from({ length: depth }, () => opener).flat())
+  return compressedBytes(
+    Buffer.concat([
+      bytes.subarray(0, at),
+      levels,
+      Buffer.from([0xc0]),
+      bytes.subarray(at + marker.length),
+    ]),
+  )
+}
+
+/** 0x91 : tableau d'un élément. */
+const ONE_ITEM_ARRAY = [0x91]
+/** 0x81 0x00 : objet d'une entrée, de clé 0. */
+const ONE_ENTRY_MAP = [0x81, 0x00]
 
 describe('décompression bornée', () => {
   // 64 Mio de zéros : 87 Ko une fois compressés, bien sous les 2 Mo.
@@ -127,6 +155,99 @@ describe('décompression bornée', () => {
     expect(
       failure(parseTemplatePublish({ data: wordy, country: 'JP' })),
     ).toEqual(TOO_LARGE)
+  })
+
+  it('refuse une imbrication profonde cachée dans une clé ignorée, en tableaux comme en objets', () => {
+    for (const opener of [ONE_ITEM_ARRAY, ONE_ENTRY_MAP]) {
+      // 2 Mio d'imbrication coûtaient ~340 Mo de tas avant d'être ignorés.
+      const deep = nestedInIgnoredKey(1_000_000, opener)
+      expect(deep.length).toBeLessThan(10_000)
+      const started = performance.now()
+      expect(
+        failure(parseTemplatePublish({ data: deep, country: 'JP' })),
+      ).toEqual(TOO_LARGE)
+      expect(failure(parseTemplateUpdate({ data: deep }))).toEqual(TOO_LARGE)
+      expect(performance.now() - started).toBeLessThan(500)
+    }
+  })
+
+  it('accepte 8 niveaux d’imbrication et refuse le 9ᵉ', () => {
+    for (const opener of [ONE_ITEM_ARRAY, ONE_ENTRY_MAP]) {
+      const eight = parseTemplatePublish({
+        data: nestedInIgnoredKey(6, opener),
+        country: 'JP',
+      })
+      expect(eight.ok).toBe(true)
+      // La clé ignorée ne survit pas à la remise en forme.
+      expect(eight.ok && eight.data.itinerary[0]).not.toHaveProperty('extra')
+      expect(
+        failure(
+          parseTemplatePublish({
+            data: nestedInIgnoredKey(7, opener),
+            country: 'JP',
+          }),
+        ),
+      ).toEqual(TOO_LARGE)
+    }
+  })
+
+  it('accepte le voyage de démo, le plus riche de l’app', async () => {
+    const parsed = parseTemplatePublish({
+      data: await compressItinerary(demoItinerary),
+      country: 'CN',
+    })
+    expect(parsed.ok && parsed.data.itinerary).toHaveLength(
+      demoItinerary.length,
+    )
+  })
+
+  it('mesure l’imbrication sans se tromper de longueur sur aucun type msgpack', () => {
+    // Chaque scalaire, chaîne, binaire et extension, puis 3 niveaux au bout :
+    // une seule longueur mal sautée désynchroniserait la lecture de la fin.
+    const values = [
+      0,
+      -1,
+      200,
+      -200,
+      70_000,
+      -70_000,
+      5_000_000_000,
+      -5_000_000_000,
+      1.5,
+      null,
+      true,
+      false,
+      'a',
+      'é'.repeat(40),
+      'x'.repeat(300),
+      'y'.repeat(70_000),
+      new Uint8Array(3),
+      new Uint8Array(300),
+      new Uint8Array(70_000),
+      new Date(0),
+      new Date(1_700_000_000_123),
+      Array.from({ length: 20 }, (_, i) => i),
+      Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`k${i}`, i])),
+    ]
+    expect(nestingTooDeep(encode(values), 2)).toBe(false)
+    expect(nestingTooDeep(encode([...values, [[1]]]), 2)).toBe(true)
+    expect(nestingTooDeep(encode([...values, [[1]]]), 3)).toBe(false)
+    expect(nestingTooDeep(encode([[[1]]]), 2)).toBe(true)
+    expect(nestingTooDeep(encode([[[1]]]), 3)).toBe(false)
+    // Les conteneurs vides n'ouvrent aucun niveau.
+    expect(nestingTooDeep(encode([[[]], {}]), 2)).toBe(false)
+    // Un tampon tronqué lève : l'appelant répond 400.
+    expect(() => nestingTooDeep(encode([[1, 2, 3]]).subarray(0, 3), 8)).toThrow(
+      RangeError,
+    )
+    expect(
+      failure(
+        parseTemplatePublish({
+          data: compressedBytes(Buffer.from([0x92, 0x91])),
+          country: 'JP',
+        }),
+      ),
+    ).toMatchObject({ status: 400 })
   })
 
   it('refuse des octets qui ne sont pas un itinéraire', () => {
@@ -277,6 +398,43 @@ describe('parseTemplatePublish', () => {
     expect(parsed.ok && parsed.data.title).toHaveLength(120)
   })
 
+  it('ne coupe jamais un emoji en deux à la borne du titre ou du prénom', () => {
+    const parsed = parseTemplatePublish({
+      data,
+      country: 'PT',
+      title: `${'a'.repeat(119)}😀`,
+      authorName: `${'b'.repeat(39)}😀`,
+    })
+    expect(parsed.ok && parsed.data).toMatchObject({
+      title: 'a'.repeat(119),
+      authorName: 'b'.repeat(39),
+    })
+    const updated = parseTemplateUpdate({
+      data,
+      title: `${'c'.repeat(119)}🗾`,
+    })
+    expect(updated.ok && updated.data.title).toBe('c'.repeat(119))
+    // Un emoji qui tient entier sous la borne reste.
+    const fits = parseTemplatePublish({
+      data,
+      country: 'PT',
+      title: `${'a'.repeat(118)}😀`,
+    })
+    expect(fits.ok && fits.data.title).toBe(`${'a'.repeat(118)}😀`)
+  })
+
+  it('remplace une moitié de paire isolée envoyée telle quelle', () => {
+    const parsed = parseTemplatePublish(
+      JSON.parse(
+        `{"data":"${data}","country":"PT","title":"Porto \\ud83d","authorName":"\\udc00Rui"}`,
+      ),
+    )
+    expect(parsed.ok && parsed.data).toMatchObject({
+      title: 'Porto \ufffd',
+      authorName: '\ufffdRui',
+    })
+  })
+
   it('exige un itinéraire lisible et non vide', async () => {
     expect(failure(parseTemplatePublish({ country: 'JP' }))).toMatchObject({
       status: 400,
@@ -420,6 +578,79 @@ describe('readJsonBody', () => {
       ok: false,
       status: 400,
       error: 'Requête illisible.',
+    })
+  })
+
+  /**
+   * Un envoi chunked : un flux, sans `Content-Length`. `pulled()` dit combien
+   * de morceaux le serveur a demandés.
+   */
+  function streamedRequest(parts: (string | Uint8Array)[]) {
+    const encoder = new TextEncoder()
+    let pulled = 0
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled >= parts.length) return controller.close()
+        const part = parts[pulled++]
+        controller.enqueue(
+          typeof part === 'string' ? encoder.encode(part) : part,
+        )
+      },
+    })
+    const request = new Request('http://localhost/api/templates', {
+      method: 'POST',
+      body,
+      duplex: 'half',
+    } as RequestInit)
+    expect(request.headers.get('content-length')).toBeNull()
+    return Object.assign(request, { pulled: () => pulled })
+  }
+
+  it('refuse en 413 un corps chunked trop lourd, sans le lire jusqu’au bout', async () => {
+    const chunk = 'x'.repeat(1024 * 1024)
+    const parts = [
+      '{"data":"',
+      ...Array.from({ length: 40 }, () => chunk),
+      '"}',
+    ]
+    const request = streamedRequest(parts)
+    expect(await readJsonBody(request)).toEqual(TOO_LARGE)
+    // Le plafond (2 Mio + 64 Kio) tombe au 4ᵉ morceau : le reste n'est pas lu.
+    expect(request.pulled()).toBeLessThan(6)
+  })
+
+  it('accepte un corps chunked sous le plafond, découpé n’importe où', async () => {
+    const text = JSON.stringify({ data, country: 'JP', title: 'Été 🗾' })
+    const bytes = new TextEncoder().encode(text)
+    // Coupé au milieu d'un caractère multi-octets.
+    const cut = text.indexOf('🗾') + 2
+    const request = streamedRequest([
+      bytes.subarray(0, cut),
+      bytes.subarray(cut),
+    ])
+    expect(await readJsonBody(request)).toEqual({
+      ok: true,
+      data: { data, country: 'JP', title: 'Été 🗾' },
+    })
+  })
+
+  it('refuse en 400 un corps chunked illisible ou vide', async () => {
+    const illegible = { ok: false, status: 400, error: 'Requête illisible.' }
+    expect(await readJsonBody(streamedRequest(['{"data":', '']))).toEqual(
+      illegible,
+    )
+    expect(await readJsonBody(streamedRequest([]))).toEqual(illegible)
+    expect(
+      await readJsonBody(
+        new Request('http://localhost/api/templates', { method: 'POST' }),
+      ),
+    ).toEqual(illegible)
+  })
+
+  it('lit un corps qui commence par une marque d’ordre des octets, comme request.json()', async () => {
+    expect(await readJsonBody(streamedRequest(['\ufeff{"a":1}']))).toEqual({
+      ok: true,
+      data: { a: 1 },
     })
   })
 })
