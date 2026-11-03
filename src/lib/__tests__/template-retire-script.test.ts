@@ -8,13 +8,16 @@ import {
 import {
   isTemplateIndexKey,
   templateIndexKey,
+  templateOwnerKey,
   publishTemplate,
   readIndex,
   readTemplate,
   readTemplateBySlug,
+  updateTemplate,
 } from '@/lib/template-store'
+import { createOwnerToken, hashOwnerToken } from '@/lib/template-token'
 import { createMemoryTemplateBucket } from './helpers/memory-template-bucket'
-import { japanTrip } from './helpers/template-fixtures'
+import { day, japanTrip } from './helpers/template-fixtures'
 
 const bucket = createMemoryTemplateBucket()
 const LATER = new Date('2026-11-04T08:30:00.000Z')
@@ -47,8 +50,9 @@ function versionKeys(id: string): string[] {
   return bucket.keys().filter((key) => key.startsWith(`${id}/v/`))
 }
 
-function publish(indexable = true) {
+function publish(indexable = true, ownerToken?: string) {
   return publishTemplate(bucket, {
+    ...(ownerToken ? { ownerToken } : {}),
     itinerary: japanTrip(),
     title: 'Deux semaines au Japon',
     authorName: 'Yanis',
@@ -162,6 +166,33 @@ describe('scripts/retire-template.ts', () => {
       status: 'retired',
     })
     expect(await readIndex(bucket)).toEqual([])
+  })
+
+  it('retire un modèle par un ancien slug, le signale, et le retire sur tous ses slugs', async () => {
+    const token = createOwnerToken()
+    const { meta } = await publish(true, token)
+    const { meta: longer } = await updateTemplate(bucket, meta.id, token, {
+      itinerary: [...japanTrip(), day(4, { city: 'Osaka' })],
+    })
+
+    const { code, out, err } = await run([
+      `https://tripbrain.fr/itineraires/${meta.slug}`,
+    ])
+
+    expect(err).toBe('')
+    expect(code).toBe(0)
+    expect(out).toContain(
+      `« ${meta.slug} » est un ancien slug de ce modèle : son slug actuel est ${longer.slug}.`,
+    )
+    expect(out).toContain('répond 410, anciens slugs compris')
+    for (const slug of [meta.slug, longer.slug]) {
+      expect(await readTemplateBySlug(bucket, slug)).toEqual({
+        status: 'retired',
+      })
+    }
+    // La réservation de sa publication part avec ses versions.
+    expect(bucket.keys()).not.toContain(templateOwnerKey(hashOwnerToken(token)))
+    expect(versionKeys(meta.id)).toEqual([])
   })
 
   it('retire un modèle non listé désigné par son lien /m/<id>', async () => {

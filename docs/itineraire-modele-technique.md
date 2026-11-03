@@ -29,19 +29,24 @@ Partager → Publier (A1–A4)                          /itineraires/[slug]   (I
 - **Id public** : 16 caractères dans l'alphabet base32 Crockford minuscule
   `0123456789abcdefghjkmnpqrstvwxyz`, soit 80 bits. `isTemplateId()` valide `^[0-9a-hjkmnp-tv-z]{16}$`.
   Il apparaît dans les URL : ce n'est pas un secret.
-- **Jeton propriétaire** : 32 octets aléatoires en base64url. Le serveur le génère à la
-  publication, le renvoie **une seule fois**, et n'en garde que le SHA-256 (hex). La
-  comparaison se fait en temps constant. Le jeton voyage dans `Authorization: Bearer`, jamais
-  dans l'URL ni dans le corps.
-- **Slug** : `<pays>-<n>-jours-<ville1>-<ville2>-<ville3>`. Les accents sont retirés (NFKD), le
-  résultat est en minuscules, en mots séparés par `-`, et coupé à 80 caractères sur une
-  frontière de mot. Les lettres latines que NFKD ne décompose pas sont translittérées
+- **Jeton propriétaire** : 32 octets aléatoires en base64url. Le téléphone le tire avant la
+  publication (`createOwnerTokenForClient()`, `template-api.ts`) ; à défaut, le serveur le tire.
+  Il figure dans la réponse de la publication, et chaque rejeu avec le même `Bearer` le rend de
+  nouveau (200, §4). Le serveur n'en garde que le SHA-256 (hex). La comparaison se fait en temps
+  constant. Le jeton voyage dans `Authorization: Bearer`, jamais dans l'URL ni dans le corps.
+- **Slug** : `<pays>-<n>-jours-<ville1>-<ville2>-<ville3>`, la durée accordée : `-1-jour` pour un
+  modèle d'un jour (`portugal-1-jour-lisbonne`), `-<n>-jours` à partir de 2. `isTemplateSlug()`
+  exige l'une de ces deux formes (`n` sans zéro devant), ce qu'aucun slug de pays ne contient. Les
+  accents sont retirés (NFKD), le résultat est en minuscules, en mots séparés par `-`, et coupé
+  à 80 caractères sur une frontière de mot. Les lettres latines que NFKD ne décompose pas sont
+  translittérées
   (`đ ð → d`, `ł → l`, `ø → o`, `œ → oe`, `æ → ae`, `ß → ss`, `þ → th`, `ı → i`…) :
   `Đà Nẵng` donne `da-nang`, pas `a-nang`. Une ville dont le nom ne donne aucun caractère latin
-  est ignorée. Le slug est **figé à la première publication**. En cas de collision, il prend un
-  suffixe `-2` à `-5`, puis un suffixe tiré de l'id (`-k3x9m2`, puis l'id entier), chacun
-  réservé via `slugs/<slug>` en `ifAbsent` : un parcours populaire reste toujours publiable, et
-  quelques publications ne suffisent pas à bloquer un slug pour tout le monde.
+  est ignorée. Le slug suit la durée et les 3 premières villes ; les anciens slugs mènent au
+  modèle (§4). En cas de collision, il prend un suffixe `-2` à `-5`, puis un suffixe tiré de l'id
+  (`-k3x9m2`, puis l'id entier), chacun réservé via `slugs/<slug>` en `ifAbsent` : un parcours
+  populaire reste toujours publiable, et quelques publications ne suffisent pas à bloquer un slug
+  pour tout le monde.
 
 ### 2.2 Pays
 
@@ -61,9 +66,9 @@ interface TemplateOptions {
 interface TemplateMeta {
   // modèle en ligne : stocké, jamais renvoyé tel quel
   id
-  slug
+  slug // l'actuel : il suit la durée et les 3 premières villes (§4), les anciens mènent ici
   version: number
-  title
+  title // modifiable par PUT ou PATCH
   authorName: string | null
   country: string // ISO alpha-2
   indexable: boolean // interrupteur de l'auteur
@@ -81,7 +86,7 @@ interface TemplateMeta {
 interface RetiredTemplateMeta {
   // pierre tombale : rien de ce que l'auteur a écrit ou choisi, hors du slug
   id
-  slug // reste réservé, à vie : pays, nombre de jours et jusqu'à 3 villes
+  slug // reste réservé, à vie, comme ses anciens slugs : pays, nombre de jours, 3 villes
   version: number // dernière publiée, pour supprimer les versions
   publishedAt
   retiredAt: string // ISO
@@ -93,7 +98,7 @@ type StoredTemplateMeta = TemplateMeta | RetiredTemplateMeta // `<id>/meta`
 
 type PublicTemplate = Omit<TemplateMeta, 'ownerTokenHash' | 'retiredAt'> & {
   listed: boolean // indexable && dayCount >= 2
-  itinerary: DayItinerary[] // déjà nettoyé
+  itinerary: DayItinerary[] // déjà nettoyé, dates floutées (§4)
 }
 
 interface TemplateIndexEntry {
@@ -124,7 +129,7 @@ StoredTrip.origin?: {               // côté repreneur
   templateId; version; title; authorName: string | null
   tripYear: number | null           // année du voyage de l'auteur : « prix relevés en 2025 »
   startDate: string; keptDayIds: string[]
-  base: DayItinerary[]              // modèle recalé et filtré au moment de la reprise (fusion V1.1)
+  base: DayItinerary[]              // modèle recalé et filtré au moment de la reprise : seule base de fusion V1.1
   takenAt: number
 }
 
@@ -133,7 +138,18 @@ StoredTrip.copiedFromDemo?: boolean // copie de la démo (ou d'une telle copie)
 
 - `origin` se construit avec `buildTemplateOrigin(template, retimed, input, takenAt)`
   (`template-redate.ts`, pur) : `base` est une copie profonde (JSON) du voyage recalé, et
-  `keptDayIds` est rangé dans l'ordre du modèle, sans doublon ni id inconnu.
+  `keptDayIds` est rangé dans l'ordre du modèle, sans doublon ni id inconnu. Le serveur ne garde
+  que la version publiée d'un modèle (§4) : `base` est la seule trace de la version reprise, et
+  la V1.1 fusionnera `base`, le voyage du repreneur et la dernière version (`GET [id]`).
+- **Publication rejouable** : avant le `POST`, le téléphone tire le jeton propriétaire
+  (`createOwnerTokenForClient()`, `template-api.ts`) et le range sur le voyage, puis l'envoie dans
+  `Authorization: Bearer`. Il réutilise ce même jeton à chaque nouvel essai de cette publication
+  (erreur réseau, 5xx, double appui) : le serveur rend alors le modèle déjà publié (200) au lieu
+  d'en créer un second (§4). Une fois la réponse reçue, le jeton passe dans
+  `publishedTemplate.ownerToken` ; un nouveau jeton n'est tiré que pour une nouvelle publication
+  (après un retrait, par exemple).
+- `publishedTemplate.slug` peut changer à chaque mise à jour (§4) : on le reprend de la réponse
+  du `PUT`.
 - `duplicateTrip` suit `tripCopyOf` (`trips.ts`, pur) : le programme, le titre et la provenance,
   mais ni `group`, ni `publishedTemplate` (le jeton ne se duplique jamais), ni `origin`. La copie
   de la démo prend la provenance `share` et `copiedFromDemo: true`, transmis de copie en copie.
@@ -169,15 +185,43 @@ sur le serveur** avant tout stockage.
 - Les ids (journées, activités, transports, hébergements) sont conservés à l'identique : la
   fusion V1.1 s'appuie dessus.
 
-`noteExcerpts(itinerary, limit)` sert l'écran A3. Il renvoie des extraits réels
-`{ dayNumber, text, spans }`, en privilégiant les notes qui contiennent quelque chose de
-sensible. L'extrait d'une telle note en montre toujours au moins une, même sans espace où
-couper (japonais, chinois, long lien) ; il n'est jamais coupé au milieu d'un emoji. `sensitiveSpans(text, knownPlaces)` repère :
+`noteExcerpts(itinerary, limit = 2, { tripTitle? })` sert l'écran A3. Il renvoie des extraits
+réels `{ dayId, dayNumber, source, text, spans }` (`source` : `'day'` ou `'transport'`), une note
+identique à une autre n'étant montrée qu'une fois. Les notes sont classées :
 
-- les suites de 4 chiffres ou plus (codes, digicodes) ;
+1. par gravité, la plus grave d'abord : un téléphone ou un e-mail, puis une suite de 6 chiffres ou
+   plus, puis un nom, puis un code de 4 ou 5 chiffres, puis rien ;
+2. à gravité égale, par nombre de passages surlignés ;
+3. puis par longueur.
+
+Les extraits retenus reviennent dans l'ordre du voyage. Une note longue est coupée autour de sa
+donnée la plus grave, celle qui a classé la note (à gravité égale, la première du texte) : cette
+donnée est toujours visible et surlignée, même sans espace où couper (japonais, chinois, long
+lien), et les données moins graves placées avant elle sortent de l'extrait — une note choisie pour
+un téléphone montre ce téléphone, pas seulement le prénom qui le précède. L'extrait n'est jamais
+coupé au milieu d'un emoji. `sensitiveSpans(text, knownPlaces)` repère :
+
+- les suites de 4 chiffres ou plus (codes, digicodes), sauf les chiffres d'un numéro de vol ou de
+  train, publics par nature : deux lettres majuscules (ou un chiffre et une lettre, ou `TGV`,
+  `ICE`…) puis 2 à 4 chiffres, en mot entier (`CA1590`, `AF 274`, `9C8951`, `TGV 6231`) ;
 - les numéros de téléphone et les e-mails ; un numéro qui suit un autre nombre (« Chambre 104
   06 12… », deux numéros à la suite) reste surligné en entier ;
-- les mots à majuscule qui ne sont ni en début de phrase ni un lieu connu du voyage.
+- les noms : un mot à majuscule suivi d'au moins deux minuscules (`Rui`, pas `Li` ni `VIP`), ni
+  en début de phrase, ni un lieu connu du voyage, ni un mot courant ou une marque (« Visa
+  Premier », « Google Traduction » : petite liste fixe). Après un deux-points, le premier mot
+  n'est un nom que si le libellé annonce une personne (`Hôte`, `Contact`, `Guide`, `Chauffeur`,
+  `Propriétaire`, `Rdv`…) ou qu'un second nom le suit (« Kaori Tanaka ») : « Hôte : Rui » est
+  surligné, « Note : Penser à réserver » ne l'est pas. Une suite de mots à majuscule qui touche
+  un lieu, un mot de lieu ou un service de transport (« Tobu Limited Express », « Shinkansen
+  Hikari ») est un lieu, en entier.
+
+`templateKnownPlaces(itinerary, tripTitle?)` donne ces lieux connus : le titre du voyage et ceux
+des journées, les villes, activités, hébergements, départs et arrivées, compagnies et loueurs
+(`provider`), et les adresses. Tout cela est publié de toute façon.
+
+`templateNoteStats(itinerary)` renvoie `{ total, onTransports }` : les notes non vides, de
+journée et de trajet, que l'interrupteur « notes » publierait, pour le libellé de A3 (« 25 notes,
+dont 5 sur des trajets »). Chaque note compte, même identique à une autre.
 
 ### 3.2 Recalage — `src/lib/template-redate.ts`
 
@@ -202,25 +246,40 @@ rejouer le recalage.
    porté par la seule journée d'arrivée, les soirs suivants en relevant tant que son `checkOut`
    n'est pas passé (convention de l'app et de la démo). Si la journée d'arrivée est retirée,
    l'hébergement passe sur la première nuit gardée du séjour.
-5. Trajets qui touchent une ville **entièrement** retirée (plus aucune journée gardée). La ville
-   se reconnaît aussi dans un nom de gare ou d'aéroport, comme suite de mots entiers, la plus
-   longue l'emportant (« PKX Beijing Daxing Intl. » est à Beijing ; « Narita » n'est pas à
-   Nara). Un trajet recousu ne garde que son id, son type et ses extrémités : horaires, durée,
-   compagnie, adresse de départ, détails, lien de réservation, prix, devise et notes décrivaient
-   l'ancien trajet et sont retirés (avec référence, siège, porte, terminal et statut, que le
-   nettoyage retire déjà).
-   - **Vers** une ville retirée (trajet rangé au jour du départ) : `to` devient la ville de la
+5. Trajets qui touchent une **étape** retirée. Une étape est une suite de journées consécutives
+   dans la même ville (la démo passe trois fois par Shanghai : trois étapes) ; elle est retirée
+   quand aucune de ses journées n'est gardée, même si la ville revient ailleurs dans le voyage.
+   La ville se reconnaît aussi dans un nom de gare ou d'aéroport, comme suite de mots entiers, la
+   plus longue l'emportant (« PKX Beijing Daxing Intl. » est à Beijing ; « Narita » n'est pas à
+   Nara). Une extrémité de trajet désigne l'étape de sa ville la plus proche dans le sens du
+   trajet, en partant de l'étape de la journée qui le porte : la précédente pour `from`, la
+   suivante pour `to`. Une ville sans étape de ce côté (un retour vers la ville du départ, hors
+   des étapes) ne compte comme retirée que si plus aucune de ses journées n'est gardée. Un `from`
+   qui ne nomme aucune étape (« Odawara », « Đà Nẵng », « Cần Thơ ») se déduit de la place du
+   trajet : rangé au premier jour d'une étape et arrivant dans sa ville, il vient de l'étape
+   d'avant, et il est retiré avec elle. Un trajet recousu ne garde que son id, son type et ses
+   extrémités : horaires, durée, compagnie, adresse de départ, détails, lien de réservation, prix,
+   devise et notes décrivaient l'ancien trajet et sont retirés (avec référence, siège, porte,
+   terminal et statut, que le nettoyage retire déjà). Il relie l'étape gardée précédente à la
+   suivante :
+   - **Vers** une étape retirée (trajet rangé au jour du départ) : `to` devient la ville de la
      journée gardée suivante (Tokyo → Hakone, sans Hakone, devient Tokyo → Kyoto). Le trajet est
      supprimé s'il n'y a pas de journée gardée suivante (ou qu'elle n'a pas de ville), si cette
      ville est celle de son `from` ou celle de la journée qui le porte (plus rien à parcourir),
-     si son `from` est lui aussi une ville retirée, ou si la journée suivante porte un trajet
-     venu d'une ville retirée qui sera recousu (conventions mêlées, comme dans la démo : on
+     si son `from` est lui aussi une étape retirée, ou si la journée suivante porte un trajet
+     venu d'une étape retirée qui sera recousu (conventions mêlées, comme dans la démo : on
      garde celui du jour d'arrivée, qui nomme la vraie gare d'arrivée, plutôt que deux trajets
      identiques).
-   - **Depuis** une ville retirée (trajet rangé au jour d'arrivée) : `from` devient la ville de la
+   - **Depuis** une étape retirée (trajet rangé au jour d'arrivée) : `from` devient la ville de la
      journée gardée précédente ; sans journée précédente (ou sans ville), `from` est retiré. Le
-     trajet est supprimé si cette ville précédente est celle de son `to` (Tokyo → Nikko → Tokyo,
-     sans Nikko).
+     trajet est supprimé si cette ville précédente est celle de son `to` : il ramènerait là où
+     l'on est déjà (Tokyo → Nikko → Tokyo, sans Nikko ; Cần Thơ → Saïgon sans le delta du
+     Mékong).
+   - Exemples réels : sans le 2ᵉ passage à Shanghai, le vol Shanghai → Taipei devient
+     Zhangjiajie → Taipei ; sans Hội An, le vol Đà Nẵng → Hô Chi Minh-Ville devient Baie d'Along
+     → Hô Chi Minh-Ville ; sans Hakone, le Shinkansen Odawara → Kyoto devient Tokyo → Kyoto.
+   - Un trajet rangé sur une journée retirée part avec elle, même si son étape reste au voyage
+     (retirer le jour 1 retire le vol aller).
 6. Un modèle sans date valide fonctionne de la même façon : le jour 1 prend `startDate`, et rien
    d'autre ne glisse.
 7. Le voyage doit tenir dans le calendrier `AAAA-MM-JJ` : de `startDate` au lendemain de la
@@ -228,8 +287,50 @@ rejouer le recalage.
    0000-01-01 … 9999-12-31. Sinon `retimeTemplate` lève une erreur en français, et
    `groupDaysByCity` (B4) ne date aucune journée, comme sans date de départ valide.
 
-`templateTodo(itinerary)` renvoie ce qu'il reste à réserver (B5) :
-`{ accommodations: noms distincts sans référence, transports, bookableActivities }`.
+`needsBooking(entity: Accommodation | Transport | Activity): boolean` est la seule règle de « à
+réserver », pour la pastille de chaque carte comme pour la bannière de B5 :
+
+- hébergement : ni `bookingReference` (non vide), ni statut `booked`, `checked-in` ou
+  `completed` — un hôtel marqué « Réservé » sans référence n'est plus à réserver ;
+- trajet : de même, et seulement en `train`, `plane` ou `bus` (la voiture ne se réserve pas
+  forcément) ;
+- activité : `reservationRequired === true`, et statut ni `done` ni `skipped`.
+
+L'hébergement se reconnaît à son `checkIn` (champ requis), le trajet à son type (`train`, `car`,
+`plane`, `bus`), le reste est une activité.
+
+`templateTodo(itinerary)` renvoie ce qu'il reste à réserver (B5), d'après `needsBooking` :
+`{ accommodations, transports, bookableActivities }`. `accommodations` liste, dans l'ordre du
+voyage, les noms distincts (même nom à la casse et aux espaces près) dont une nuit au moins reste
+à réserver ; les deux autres sont des comptes.
+
+`groupDaysByCity(itinerary, keptDayIds, startDate): CityGroup[]` sert B4 : une entrée par étape,
+`{ city, entries, days, range }`. `entries` liste les journées de l'étape
+(`{ id, dayNumber, title, kept, date }`, `date` étant celle que `retimeTemplate` donnera, ou
+`null`) ; `days` est le nombre de journées gardées de l'étape, affiché « 2 jours » (0 : étape
+retirée). Ce sont des journées et non des nuits : la dernière étape compte le jour du départ, et
+une excursion se dort souvent à l'étape d'avant. `range` donne la première et la dernière date
+gardées, `null` sans journée gardée ou sans date de départ valide. La fonction ne lève jamais.
+
+`suggestKeptDayIds(itinerary, count)` propose la sélection de B4 quand la reprise dure moins que
+le modèle. Elle garde un voyage complet plutôt qu'amputé de sa fin :
+
+1. le jour 1 (l'arrivée) et le dernier jour (le départ, souvent le vol retour) restent toujours —
+   le dernier dès que `count` ≥ 2 ;
+2. les journées libres ou de repos (`looksLikeRestDay` : type `free`, `rest`, `libre`… ou titre
+   « Journée libre », « Repos ») partent d'abord, en partant de la fin ;
+3. puis les plus longs séjours raccourcissent, une journée à la fois : l'étape qui garde le plus
+   de journées (la plus tardive à égalité) perd celle du milieu, jamais sa première, jamais en
+   dessous d'une journée ;
+4. quand chaque étape n'a plus qu'une journée (ou ne peut plus perdre que son arrivée ou le jour
+   du départ), des étapes entières partent, en commençant par celle qui comptait le moins de
+   journées dans le modèle (la plus tardive à égalité), jamais la première ni la dernière ;
+5. s'il faut encore raccourcir (deux ou trois jours demandés), les journées restantes partent en
+   partant de la fin.
+
+Les ids sortent dans l'ordre du modèle, tous si `count` couvre le modèle. Une durée qui n'est pas
+un entier ≥ 1 lève une erreur en français. Exemple : la démo (20 jours) raccourcie à 14 garde ses
+9 étapes et le jour du vol retour.
 
 `durationChoice(templateDays, keptDays)` sert `template_taken.duration` : `'same' | 'shorter'`.
 Les journées gardées sont prises dans le modèle, la reprise n'est jamais plus longue ; un compte
@@ -248,26 +349,67 @@ partage mais `prefix: 'templates'`. Les modèles ne sont donc **pas** sous `shar
 échappent à toute règle de cycle de vie visant les codes d'une heure. On ne passe **jamais**
 d'`expiresIn`.
 
-| Clé (sous `templates/`) | Contenu                                                        | Écriture                                 |
-| ----------------------- | -------------------------------------------------------------- | ---------------------------------------- |
-| `<id>/meta`             | `TemplateMeta`, puis `RetiredTemplateMeta` une fois retiré     | `ifAbsent` à la création, puis `ifMatch` |
-| `<id>/v/<n>`            | `{ version, title, itinerary }`, en JSON brut (s3nd le gzippe) | `ifAbsent`, immuable                     |
-| `slugs/<slug>`          | `{ id }`                                                       | `ifAbsent`, jamais réutilisé             |
-| `index/<c>`             | `{ entries: TemplateIndexEntry[] }`, modèles listés uniquement | boucle `ifMatch`, 5 tentatives           |
+| Clé (sous `templates/`) | Contenu                                                        | Écriture                                                      |
+| ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------- |
+| `<id>/meta`             | `TemplateMeta`, puis `RetiredTemplateMeta` une fois retiré     | `ifAbsent` à la création, puis `ifMatch`                      |
+| `<id>/v/<n>`            | `{ version, title, itinerary }`, en JSON brut (s3nd le gzippe) | `ifAbsent`, jamais réécrit ; supprimé par la version suivante |
+| `slugs/<slug>`          | `{ id }` ; un modèle peut en avoir plusieurs (anciens slugs)   | `ifAbsent`, jamais réutilisé ni supprimé                      |
+| `owners/<empreinte>`    | `{ id }` : publication rejouable, par l'empreinte du jeton     | `ifAbsent`, avant toute autre écriture ; supprimé au retrait  |
+| `index/<c>`             | `{ entries: TemplateIndexEntry[] }`, modèles listés uniquement | boucle `ifMatch`, 5 tentatives                                |
 
 - Ordre d'écriture : la version, puis la méta, puis l'index. La méta ne pointe donc jamais vers
   une version absente.
+- **Une seule version stockée** : une mise à jour, une fois sa version et la méta écrites,
+  supprime toutes les précédentes (`v/1` à `v/<n − 1>`, orphelines comprises). La base de fusion
+  de la V1.1 vit sur le téléphone du repreneur (`origin.base`, §2.4) : le serveur n'a plus de
+  raison de les garder, et une note ou un prix que l'auteur retire ne doit pas rester en ligne
+  dans une version antérieure. Aucune route ne sert d'ailleurs une version précise. Si la
+  suppression échoue, l'index est tout de même accordé, puis la mise à jour échoue en `versions`
+  (503 « Le modèle est à jour, mais ses versions précédentes n'ont pas pu être effacées.
+  Réessayez. ») : la nouvelle version est déjà en ligne, et rejouée, la mise à jour écrit une
+  version de plus et supprime toutes les précédentes. `version` ne fait que croître dans la
+  méta : une lecture dont la version disparaît sous une mise à jour relit la méta et sert la
+  nouvelle, jamais un 404.
+- **Dates floutées** (`blurTemplateDates`, `src/lib/template-dates.ts`, pur) : avant tout
+  stockage, publication comme mise à jour, tout l'itinéraire recule d'un nombre entier de semaines
+  pour que sa journée repère tombe entre le 1er et le 7 de son mois. Chaque date et date-heure
+  glisse du même écart (`shiftDatesDeep`) : même jour de la semaine, même mois, même année
+  (`tripYear` inchangé), mêmes durées, nuits et heures ; seul le quantième disparaît (un modèle
+  publié au samedi 3 avril a pu partir le 3, le 10, le 17 ou le 24). Le modèle d'un voyage à venir
+  ne dit donc pas quand son auteur sera absent de chez lui. Les ids ne bougent pas, même quand ils
+  ont la forme d'une date. La journée repère (`templateDateAnchor`) est la première datée
+  `AAAA-MM-JJ` — la règle de `tripYear` et du recalage —, sinon la première datée d'une date-heure
+  (`2027-04-17T00:00`) : un jour 1 « à définir » ne laisse donc pas passer les dates exactes des
+  journées suivantes. Sans aucune date de journée, rien ne bouge. La fonction est idempotente. Une
+  date écrite dans un texte libre (« Vol du 25 mai ») part telle quelle. Le repreneur recale tout
+  à ses dates (§3.2) : le flou ne change rien pour lui. **À reprendre dans les textes légaux
+  (W10)** : les dates publiées ne sont pas celles du voyage, seuls le mois, l'année et les jours
+  de la semaine le sont.
+- **Publication rejouable** : un `POST` qui porte `Authorization: Bearer <jeton>` (tiré par le
+  téléphone, §2.4) réserve d'abord `owners/<SHA-256 du jeton>` → `{ id }` en `ifAbsent`, puis
+  publie sous cet id. Un envoi qui trouve la réservation :
+  - méta en ligne : rend le modèle tel qu'il est stocké, sans rien écrire (200, `ownerToken`
+    renvoyé) — réponse perdue, double appui ;
+  - pas de méta : l'envoi précédent s'est interrompu ; celui-ci termine la publication sous le
+    même id, sa version au premier emplacement libre (au plus 10), puis supprime les versions
+    des envois interrompus une fois la méta écrite (201) ;
+  - pierre tombale : 410 (le retrait supprime d'ordinaire la réservation).
+    Des envois simultanés se départagent sur la méta en `ifAbsent` : un seul 201, les autres 200
+    avec le même modèle. Sans l'en-tête, rien ne change : le serveur tire le jeton, et chaque
+    envoi publie un modèle. L'id réservé n'est pas vérifié libre : une collision (2⁻⁸⁰) ferait
+    échouer ce jeton en 500.
 - **Réponse S3 perdue** : le SDK rejoue une écriture dont la réponse s'est perdue, et
-  l'écriture conditionnelle rejouée reçoit 412 sur la sienne. Un 412 sur la méta d'une
-  publication, sur un slug ou sur la méta d'une mise à jour est donc vérifié en relisant
-  l'objet : s'il est le nôtre (empreinte du jeton, `{ id }`, numéro de la version écrite), la
-  requête continue comme si l'écriture avait répondu. Jamais de modèle en ligne sans que son
-  auteur ait reçu le jeton.
+  l'écriture conditionnelle rejouée reçoit 412 sur la sienne. Un 412 sur une réservation de
+  publication, sur la méta d'une publication, sur un slug ou sur la méta d'une mise à jour est
+  donc vérifié en relisant l'objet : s'il est le nôtre (`{ id }`, empreinte du jeton et numéro
+  de la version écrite), la requête continue comme si l'écriture avait répondu. Jamais de modèle
+  en ligne sans que son auteur ait reçu le jeton.
 - **Index en morceaux** : 32 objets `index/<c>`, un par premier caractère de l'id. Un objet
   unique atteignait la taille maximale de s3nd (4 Mio gzippés) après ~1 800 publications
   forgées, et plus aucun modèle listé n'y entrait. Les ids sont tirés au hasard : bloquer un
-  modèle donné demande de remplir les 32. `readIndex` (et donc `GET /api/templates/index`) lit
-  les 32 en parallèle et les fusionne ; le format de la réponse ne change pas. Un morceau qui ne
+  modèle donné demande de remplir les 32. `readIndex` lit les 32 en parallèle et les fusionne ;
+  `readIndexPage(bucket, page)` en sert des pages de 500 lignes (`GET /api/templates/index`,
+  §5), pour qu'une réponse reste petite quel que soit le nombre de modèles. Un morceau qui ne
   peut plus grandir (`FILE_TOO_LARGE`) est journalisé avec l'étiquette `template_index_full`
   et l'id resté dehors, que `scripts/resync-template-index.ts` remet dans l'index une fois de la
   place faite (procédure : `docs/modeles-moderation.md` §5). L'ancien objet `index`, jamais
@@ -285,9 +427,22 @@ d'`expiresIn`.
   paire isolée envoyée telle quelle devient U+FFFD. Même règle pour les voyages de groupe.
 - **Mise à jour** : la méta reprend de la nouvelle version le titre (gardé s'il n'est pas
   envoyé), `dayCount`, `cities`, `tripYear`, `includesNotes`, `includesPrices`, et prend un
-  nouvel `updatedAt`. Le slug et le pays ne changent jamais. Mise à jour comme changement de
-  réglages réévaluent la présence dans l'index : un modèle ramené à une journée en sort (son
-  slug répond 404), un modèle rendu visible y rentre.
+  nouvel `updatedAt`. Le pays ne change jamais. Mise à jour comme changement de réglages
+  réévaluent la présence dans l'index : un modèle ramené à une journée en sort (ses slugs
+  répondent 404), un modèle rendu visible y rentre.
+- **Le slug suit la durée** : à chaque mise à jour, le slug est gardé tant qu'il est l'un de
+  ceux que le nouveau contenu aurait pu prendre (même tête `<pays>-<n>-jour(s)`, mêmes 3
+  premières villes, suffixes de collision compris). Sinon, un nouveau slug est réservé, avec les
+  mêmes règles de collision qu'à la publication, et devient `meta.slug`. L'ancien reste réservé
+  dans `slugs/<ancien>` et pointe toujours vers le modèle : `GET by-slug/<ancien>` répond le
+  modèle avec son slug **actuel**, vers lequel le site vitrine redirige en 301. L'index ne porte
+  que le slug actuel. Revenir à une durée passée reprend le slug d'alors, déjà au modèle ; un
+  slug d'une ancienne forme (`-1-jours`) est remplacé à la mise à jour suivante. Un slug réservé
+  par une mise à jour qui échoue ensuite mène lui aussi au modèle (redirection sans
+  conséquence).
+- **Titre par PATCH** : `title` renomme le modèle sans nouvelle version (écran A4), borné comme
+  à la publication ; vide ou `null`, il est tiré des étapes de la version publiée. Il ne touche
+  ni au slug ni à la version ; l'index suit.
 - **Forme des valeurs** : avant tout stockage, `normalizeItineraryShape`
   (`src/lib/template-shape.ts`) remet chaque valeur à son type. Une journée dont un champ requis
   est faux fait refuser l'itinéraire (400). Ailleurs, une valeur mal typée est retirée : activité
@@ -295,12 +450,14 @@ d'`expiresIn`.
   fini. Un hébergement nommé reste ; ses textes requis manquants deviennent `''`.
 - **Retrait** : la méta devient une pierre tombale `RetiredTemplateMeta`, qui ne garde ni titre,
   ni prénom, ni année, ni réglages, ni les champs pays et villes. Le slug, lui, reste réservé
-  pour toujours, dans la pierre tombale et dans `slugs/<slug>` : il porte le pays (son nom
-  français), le nombre de jours et jusqu'à 3 villes saisies par l'auteur, mises en forme de slug
-  (`japon-3-jours-tokyo-kyoto`). Les versions sont supprimées et l'entrée sort de l'index. Les
-  deux doivent aboutir : si l'index ne suit pas, le retrait échoue en `index` ; si la
-  suppression des versions échoue, l'index est tout de même accordé, puis le retrait échoue en
-  `versions`. Dans les deux cas la route répond 503 « Réessayez », la pierre tombale étant déjà
+  pour toujours, dans la pierre tombale et dans `slugs/<slug>`, comme les anciens slugs du
+  modèle : ils portent le pays (son nom français), le nombre de jours et jusqu'à 3 villes
+  saisies par l'auteur, mises en forme de slug (`japon-3-jours-tokyo-kyoto`), et répondent tous
+  comme le slug actuel (410 si le modèle était listé, 404 sinon). Les versions sont supprimées,
+  avec la réservation `owners/<empreinte>` si elle désigne ce modèle (le même jeton a pu
+  republier depuis un premier retrait), et l'entrée sort de l'index. Les deux doivent aboutir :
+  si l'index ne suit pas, le retrait échoue en `index` ; si la suppression échoue, l'index est
+  tout de même accordé, puis le retrait échoue en `versions`. Dans les deux cas la route répond 503 « Réessayez », la pierre tombale étant déjà
   écrite : rejoué, le retrait refait la suppression et l'index. Une mise à jour qui croise un
   retrait relit la méta juste après avoir écrit sa version : si elle trouve la pierre tombale,
   elle supprime sa version (`versions` si la suppression échoue) et répond 410. Aucune version
@@ -310,7 +467,7 @@ d'`expiresIn`.
   forme (méta entière vidée) se lit encore : `wasListed` est alors tiré d'`indexable` et
   `dayCount`.
 - **Retrait par l'opérateur** : `retireTemplateAsOperator(bucket, idOuSlug)`, sans jeton, mêmes
-  effets. Aucune route n'y mène : seul `scripts/retire-template.ts` l'appelle, avec les
+  effets ; un ancien slug désigne le modèle comme l'actuel. Aucune route n'y mène : seul `scripts/retire-template.ts` l'appelle, avec les
   identifiants R2 de production. Le script vérifie ensuite, par `readTemplateForOperator`, que
   le modèle est retiré, hors de l'index et sans aucune version stockée (`versionsLeft === 0`) ;
   sinon il sort en 1. Procédure : `docs/modeles-moderation.md`.
@@ -323,16 +480,28 @@ d'`expiresIn`.
 Toutes les routes déclarent `runtime = 'nodejs'` et `dynamic = 'force-dynamic'`. Les erreurs
 ont la forme `{ error: '<message français>' }`.
 
-| Route                               | Accès              | Réponse                                                    |
-| ----------------------------------- | ------------------ | ---------------------------------------------------------- |
-| `POST /api/templates`               | public, 10/min/IP  | 201 `{ template, ownerToken }`                             |
-| `GET /api/templates/[id]`           | public, sans cache | 200 `{ template }` · 404 · 410 `{ status: 'retired' }`     |
-| `PUT /api/templates/[id]`           | Bearer             | 200 `{ template }` (nouvelle version) · 410 · 503          |
-| `PATCH /api/templates/[id]`         | Bearer             | 200 `{ template }` (`indexable`, `authorName`) · 410 · 503 |
-| `DELETE /api/templates/[id]`        | Bearer             | 200 `{ status: 'retired' }` · 503 (index, versions)        |
-| `GET /api/templates/[id]/v/[n]`     | public             | 200 `{ version, itinerary }` (base de fusion V1.1)         |
-| `GET /api/templates/by-slug/[slug]` | public             | 200 `{ template }` **seulement si `listed`** · 404 · 410   |
-| `GET /api/templates/index`          | public             | 200 `{ entries }`                                          |
+| Route                               | Accès                          | Réponse                                                                                     |
+| ----------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
+| `POST /api/templates`               | public, 10/min/IP, Bearer opt. | 201 `{ template, ownerToken }` · 200 (même jeton : déjà publié) · 401 (jeton mal formé)     |
+| `GET /api/templates/[id]`           | public, sans cache             | 200 `{ template }` · 404 · 410 `{ status: 'retired' }`                                      |
+| `PUT /api/templates/[id]`           | Bearer                         | 200 `{ template }` (nouvelle version, précédentes supprimées) · 410 · 503 (index, versions) |
+| `PATCH /api/templates/[id]`         | Bearer                         | 200 `{ template }` (`indexable`, `authorName`, `title`) · 410 · 503                         |
+| `DELETE /api/templates/[id]`        | Bearer                         | 200 `{ status: 'retired' }` · 503 (index, versions)                                         |
+| `GET /api/templates/by-slug/[slug]` | public                         | 200 `{ template }` **seulement si `listed`**, slug actuel même par un ancien · 404 · 410    |
+| `GET /api/templates/index?page=<n>` | public                         | 200 `{ entries, nextPage }` · 400 (page invalide)                                           |
+
+- **Publication** : `Authorization: Bearer <jeton>` est facultatif ; s'il est là, il doit avoir
+  la forme d'un jeton (43 caractères base64url), sinon 401 avant toute lecture du corps et toute
+  écriture. Avec lui, la publication est rejouable (§4) : 201 au premier envoi, 200 avec le même
+  modèle et le même `ownerToken` aux suivants. Sans lui, le serveur tire le jeton (201).
+- **Index par pages** : `?page=<n>` (0 par défaut ; tout autre texte qu'un entier de 0 à
+  999 999 sans zéro en tête répond 400). Chaque page porte au plus 500 lignes, dans un ordre
+  stable : `updatedAt` décroissant, puis l'id. `nextPage` vaut la page suivante, ou `null` après
+  la dernière ; au-delà, `{ entries: [], nextPage: null }`. Le site vitrine boucle de la page 0
+  jusqu'à `nextPage: null` et dédoublonne par id : un modèle modifié entre deux pages peut en
+  changer.
+- **PATCH** : `{ indexable?, authorName?, title? }`, au moins un ; `title` est borné comme à la
+  publication, vide ou `null` il est tiré des étapes (§4).
 
 - **Écritures** : le corps porte `data`, l'itinéraire compressé au format du partage
   (`compressItinerary`). Le serveur le décompresse, remet chaque valeur à son type (§4), vérifie
@@ -350,22 +519,28 @@ ont la forme `{ error: '<message français>' }`.
   à jour envoie donc toujours ses réglages (ceux de `publishedTemplate` pour les garder).
 - **Lectures publiques** :
 
-  | Route                  | `Cache-Control`                                    | Pourquoi                                                                                     |
-  | ---------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-  | `[id]` (200, 404, 410) | `no-store`                                         | lu par l'app pour reprendre : un modèle retiré ne doit pas rester repris pendant des minutes |
-  | `[id]/v/[n]`           | `public, s-maxage=60`                              | contenu immuable ; un retrait le fait répondre 410 après une minute de cache, sans rallonge  |
-  | `by-slug`, `index`     | `public, s-maxage=300, stale-while-revalidate=300` | lus par le site vitrine, régénéré au plus toutes les heures                                  |
+  | Route                               | `Cache-Control`                                    | Pourquoi                                                                                     |
+  | ----------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+  | `[id]` (200, 404, 410)              | `no-store`                                         | lu par l'app pour reprendre : un modèle retiré ne doit pas rester repris pendant des minutes |
+  | `by-slug` (200, 410), `index` (200) | `public, s-maxage=300, stale-while-revalidate=300` | lus par le site vitrine, régénéré au plus toutes les heures                                  |
 
   Elles n'ont pas de limiteur par IP : les régénérations du site vitrine viennent de quelques
   IP Vercel, et lui ne lit que `by-slug` et `index`, en cache.
 
-- **Jamais renvoyés** : `ownerTokenHash`, `retiredAt`, ni une version autre que celle demandée.
+- **Jamais renvoyés** : `ownerTokenHash`, `retiredAt`, ni une version antérieure : aucune route
+  ne sert une version précise (l'ancienne `GET /api/templates/[id]/v/[n]` est supprimée), et le
+  serveur ne les garde pas (§4). `ownerToken` ne figure que dans les réponses à sa publication.
 - **Client** : `src/lib/template-api.ts` sur le modèle de `group-sync.ts` (`readError`,
   `cache: 'no-store'`). Erreurs typées : `TemplateNotFoundError` (404), `TemplateRetiredError`
   (410), `TemplateForbiddenError` (401, 403), `TemplateTooLargeError` (413),
-  `TemplateUnavailableError` (503, dont l'index qui n'a pas suivi et le retrait dont les versions
-  n'ont pas été supprimées ; aussi 429, 502, 504),
+  `TemplateUnavailableError` (503, dont l'index qui n'a pas suivi, et le retrait ou la mise à
+  jour dont les versions n'ont pas été supprimées ; aussi 429, 502, 504),
   `TemplateInvalidError` (400) ; les trois dernières portent le message du serveur.
+  `createOwnerTokenForClient()` tire le jeton d'une publication rejouable (32 octets de
+  `crypto.getRandomValues`, base64url) ; `publishTemplate(itinerary, input, { ownerToken? })`
+  l'envoie et rend `{ template, ownerToken, created }` (`created: false` pour un 200 :
+  publication déjà faite). `patchTemplate` accepte `title`. Il n'y a plus de
+  `fetchTemplateVersion`.
   `templateFailureReason` et `templateTakeFailureReason` en tirent la cause des événements
   `template_publish_failed` et `template_take_failed`, d'après la classe, jamais le message ;
   une `TypeError` (`fetch` n'a pas abouti) donne `network_error`.
@@ -376,7 +551,8 @@ ont la forme `{ error: '<message français>' }`.
   installée (iOS, via l'AASA), sinon la webapp.
   - La page `/m/[id]` lit le modèle côté serveur, uniquement pour l'Open Graph « Modèle
     TripBrain ». Elle porte `noindex`, avec `canonical` vers `tripbrain.fr/itineraires/<slug>`
-    quand le modèle est listé.
+    quand le modèle est listé : le slug **actuel** du modèle lu, qui peut changer à une mise à
+    jour (§4).
   - Elle bascule ensuite côté client vers `/?modele=<id>`, car la reprise doit tourner sur `/`,
     seul endroit où existent `TripProvider` et `NativeHosts`.
   - **Pas de redirection serveur vers tripbrain.fr** : dans la WebView, elle éjecterait
@@ -393,6 +569,11 @@ ont la forme `{ error: '<message français>' }`.
   suivre jusqu'à la reprise.
 - `parseNativePath` gagne une intention `template` (`/m/<id>`, `/?modele=<id>`). Un
   `TemplateTakeGate` vit à côté d'`IncomingShareGate`.
+- **Anciens slugs** : `tripbrain.fr/itineraires/<ancien slug>` reste une bonne adresse.
+  `GET by-slug/<ancien slug>` répond le modèle avec son slug actuel ; quand `template.slug`
+  diffère du slug demandé, le site vitrine redirige en 301 vers `/itineraires/<template.slug>`.
+  Un modèle retiré répond 410 (ou 404) sur tous ses slugs. Le lien `/m/<id>`, lui, ne change
+  jamais.
 - **AASA** : ajouter `/m/*` dans `paths` et `components`. À livrer tôt, car Apple met en cache.
 - **Android** : `assetlinks.json` manque aujourd'hui, ce qui casse aussi `/s/`. La route est
   ajoutée et lit les empreintes depuis `ANDROID_CERT_FINGERPRINTS` (une action du propriétaire

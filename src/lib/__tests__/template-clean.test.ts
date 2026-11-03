@@ -13,6 +13,7 @@ import {
   sensitiveSpans,
   summarizeTemplateCleaning,
   templateKnownPlaces,
+  templateNoteStats,
   type SensitiveSpan,
 } from '@/lib/template-clean'
 import {
@@ -1095,14 +1096,76 @@ describe('sensitiveSpans', () => {
       ),
     ).toEqual([])
   })
+  it.each([
+    'Escale, CA1590 SHA→PEK puis CA933.',
+    'Vol 9C8951 — Mon, May 25',
+    'TGV 6231 voiture 12, puis ICE 578 depuis Francfort.',
+    'Air France AF 274, retour TP433.',
+  ])('ne surligne pas un numéro de vol ou de train : « %s »', (text) => {
+    expect(sensitiveSpans(text)).toEqual([])
+  })
+
+  it('surligne toujours un code, même près d’un numéro de vol', () => {
+    const text = 'Vol CA1590, PIN 4471, casier 778812.'
+    expect(highlighted(text, sensitiveSpans(text))).toEqual([
+      ['digits', '4471'],
+      ['digits', '778812'],
+    ])
+  })
+
+  it.each([
+    ['Hôte : Rui, très sympa.', [['name', 'Rui']]],
+    [
+      'Contact : Kenji (gérant) 080-3312-4471',
+      [
+        ['name', 'Kenji'],
+        ['phone', '080-3312-4471'],
+      ],
+    ],
+    [
+      'Guide : Kaori Tanaka, rdv 9h devant la gare.',
+      [['name', 'Kaori Tanaka']],
+    ],
+    ['Rdv : Kaori Tanaka à 9h', [['name', 'Kaori Tanaka']]],
+    ['Hôte: Rui', [['name', 'Rui']]],
+  ])('surligne un prénom après « : » : « %s »', (text, expected) => {
+    expect(highlighted(text, sensitiveSpans(text))).toEqual(expected)
+  })
+
+  it.each([
+    'Note : Penser à réserver.',
+    'Matin : Visite du château.',
+    'Transport : Prendre le train de 9h.',
+    'Repas : Ramen à volonté.',
+    'Check-in : Après 15h.',
+    'Bon plan : Le marché du matin.',
+    'Météo : Pluie annoncée.',
+    'Dîner : Excellent !',
+  ])('ne prend pas la valeur d’un libellé pour un prénom : « %s »', (text) => {
+    expect(sensitiveSpans(text)).toEqual([])
+  })
+
+  it('ne prend ni une marque, ni un mot de deux lettres pour un prénom', () => {
+    for (const text of [
+      'Assurance refusée (couverte par la Visa Premier).',
+      'Menu traduit avec Google Traduction, payé en Apple Pay.',
+      'Prendre le Tobu Limited Express, puis le Shinkansen Hikari.',
+      'On a vu Mo et Li au marché.',
+    ]) {
+      expect(sensitiveSpans(text)).toEqual([])
+    }
+    const text = 'Rendez-vous avec Li Wei au marché.'
+    expect(highlighted(text, sensitiveSpans(text))).toEqual([['name', 'Wei']])
+  })
 })
 
 // ── templateKnownPlaces ───────────────────────────────────────────────────────
 
 describe('templateKnownPlaces', () => {
-  it('rassemble villes, activités, hébergements et trajets, sans doublon', () => {
+  it('rassemble titres, villes, activités, hébergements et trajets, sans doublon', () => {
     const places = templateKnownPlaces(japanTrip())
-    expect(places.slice(0, 3)).toEqual([
+    expect(places.slice(0, 4)).toEqual([
+      'Arrivée à Tokyo',
       'Tokyo',
       'Sanctuaire Meiji-jingu',
       '1-1 Yoyogikamizonocho, Shibuya, Tokyo',
@@ -1121,6 +1184,46 @@ describe('templateKnownPlaces', () => {
     // Deux nuits au même hôtel, la seconde en minuscules : une seule entrée.
     expect(places).not.toContain('hotel gracery shinjuku')
     expect(places.filter((place) => place === 'Tokyo')).toHaveLength(1)
+  })
+  it('compte le titre du voyage et des journées, et les compagnies, comme des lieux', () => {
+    const trip = [
+      day(1, {
+        title: 'Asakusa et Ueno',
+        transport: transport({ provider: 'Hertz', type: 'car' }),
+      }),
+    ]
+    const places = templateKnownPlaces(trip, '  Japon en famille ')
+    expect(places.slice(0, 2)).toEqual(['Japon en famille', 'Asakusa et Ueno'])
+    expect(places).toContain('Hertz')
+    const note = 'Clés chez Hertz à Asakusa, voir Ueno avec Kenji.'
+    expect(highlighted(note, sensitiveSpans(note, places))).toEqual([
+      ['name', 'Kenji'],
+    ])
+  })
+})
+
+// ── templateNoteStats ─────────────────────────────────────────────────────────
+
+describe('templateNoteStats', () => {
+  it('compte les notes de journée et de trajet, non vides', () => {
+    const trip = [
+      day(1, {
+        notes: 'Arrivée tard.',
+        transport: transport({ notes: 'Quai 3' }),
+      }),
+      day(2, { notes: '  ', transport: transport({ notes: 'Quai 3' }) }),
+      day(3, { notes: 'Arrivée tard.' }),
+      day(4, { transport: transport({ notes: '' }) }),
+    ]
+    expect(templateNoteStats(trip)).toEqual({ total: 4, onTransports: 2 })
+    expect(templateNoteStats([])).toEqual({ total: 0, onTransports: 0 })
+  })
+
+  it('annonce « 25 notes, dont 5 sur des trajets » pour la démo', () => {
+    expect(templateNoteStats(demoItinerary)).toEqual({
+      total: 25,
+      onTransports: 5,
+    })
   })
 })
 
@@ -1161,6 +1264,54 @@ describe('noteExcerpts', () => {
       ['day-3', 'day'],
     ])
     expect(noteExcerpts(trip, 0)).toEqual([])
+  })
+
+  it('classe par gravité : contact, 6 chiffres ou plus, nom, puis 4–5 chiffres', () => {
+    const trip = [
+      day(1, {
+        notes:
+          'Franchise 1200 €, assurance refusée, caution 3500 € à la remise des clés du véhicule.',
+      }),
+      day(2, { notes: 'Dîner chez Marco.' }),
+      day(3, { notes: 'Casier 778812.' }),
+      day(4, { notes: 'Taxi : 080-3312-4471' }),
+      day(5, {
+        notes: 'Vol CA1590 puis CA933, escale de deux heures.',
+      }),
+    ]
+    const ranked = [1, 2, 3, 4].map((limit) =>
+      noteExcerpts(trip, limit)
+        .map((excerpt) => excerpt.dayId)
+        .sort(),
+    )
+    expect(ranked).toEqual([
+      ['day-4'],
+      ['day-3', 'day-4'],
+      ['day-2', 'day-3', 'day-4'],
+      ['day-1', 'day-2', 'day-3', 'day-4'],
+    ])
+  })
+
+  it('à gravité égale, préfère la note qui a le plus de passages', () => {
+    const trip = [
+      day(1, {
+        notes:
+          'Dîner chez Marco, une adresse que je recommande à tous les amis de passage.',
+      }),
+      day(2, { notes: 'Avec Marco et Giulia.' }),
+    ]
+    expect(noteExcerpts(trip, 1).map((excerpt) => excerpt.dayId)).toEqual([
+      'day-2',
+    ])
+  })
+
+  it('ne prend pas les mots du titre du voyage pour des prénoms', () => {
+    const trip = [day(1, { notes: 'Toute la tribu Mouzoune est du voyage.' })]
+    expect(noteExcerpts(trip)[0].spans).toHaveLength(1)
+    expect(
+      noteExcerpts(trip, 2, { tripTitle: 'La tribu Mouzoune au Japon' })[0]
+        .spans,
+    ).toEqual([])
   })
 
   it('ne prend pas les lieux du voyage pour des noms', () => {
@@ -1205,11 +1356,11 @@ describe('noteExcerpts', () => {
 
   it('coupe une note longue sur un mot, avec « … », et rogne les passages', () => {
     const notes =
-      'Code 4471 pour la consigne. ' +
+      'Écrire à kenji@example.jp ! ' +
       'Le matin, longue marche le long de la rivière jusqu’au sanctuaire, ' +
       'puis retour par les ruelles. ' +
       'Numéro de la maison +33 6 12 34 56 78 si besoin, ' +
-      'et le mail du propriétaire est kenji@example.jp.'
+      'et le code de la boîte à clés est 4471.'
     const [excerpt] = noteExcerpts([day(1, { notes })])
 
     expect(excerpt.text.endsWith('…')).toBe(true)
@@ -1220,14 +1371,54 @@ describe('noteExcerpts', () => {
     expect(notes[kept.length]).toBe(' ')
 
     const spans = highlighted(excerpt.text, excerpt.spans)
-    expect(spans[0]).toEqual(['digits', '4471'])
-    // Le téléphone traverse la coupe : il est rogné, l'e-mail au-delà disparaît.
+    expect(spans[0]).toEqual(['email', 'kenji@example.jp'])
+    // L'e-mail, aussi grave et premier, est visible : l'extrait part du début.
+    // Le téléphone traverse la coupe : il est rogné, le code au-delà disparaît.
     expect(spans).toHaveLength(2)
     expect(spans[1][0]).toBe('phone')
     expect('+33 6 12 34 56 78'.startsWith(spans[1][1])).toBe(true)
     for (const span of excerpt.spans) {
       expect(span.end).toBeLessThanOrEqual(kept.length)
     }
+  })
+
+  it('centre l’extrait sur la donnée la plus grave, même après un prénom', () => {
+    // Choisie pour son téléphone, la note doit le montrer : le prénom du
+    // début, moins grave, sort de l'extrait (UX A3, revue n° 6).
+    const notes =
+      'Arrivée chez Rui en fin de journée, ' +
+      'on pose les sacs puis on file dîner dans le quartier, les ruelles ' +
+      'sont calmes et les restaurants ferment assez tôt le soir alors mieux ' +
+      'vaut ne pas traîner en route, ' +
+      'appeler le +33 6 12 34 56 78 avant 22 h.'
+    expect(notes.indexOf('+33')).toBeGreaterThan(NOTE_EXCERPT_LENGTH)
+    const [excerpt] = noteExcerpts(
+      [day(1, { notes: 'Dîner chez Marco.' }), day(2, { notes })],
+      1,
+    )
+
+    expect(excerpt.dayId).toBe('day-2')
+    expect(excerpt.text.startsWith('…')).toBe(true)
+    expect(excerpt.spans.map((span) => span.kind)).toContain('phone')
+    expect(highlighted(excerpt.text, excerpt.spans)).toEqual([
+      ['phone', '+33 6 12 34 56 78'],
+    ])
+    expect(notes.includes(excerpt.text.slice(1).replace(/…$/, ''))).toBe(true)
+  })
+
+  it('à gravité égale, centre l’extrait sur la première donnée du texte', () => {
+    const filler =
+      'longue route de montagne avec de nombreux arrêts photo, un pique-nique ' +
+      'au bord du lac et une baignade rapide avant de reprendre la voiture, '
+    const notes =
+      `${filler}${filler}écrire à yuki@example.jp ou ` +
+      'appeler le 080-3312-4471 pour la clé.'
+    const [excerpt] = noteExcerpts([day(1, { notes })])
+    expect(excerpt.text.startsWith('…')).toBe(true)
+    expect(highlighted(excerpt.text, excerpt.spans)).toEqual([
+      ['email', 'yuki@example.jp'],
+      ['phone', '080-3312-4471'],
+    ])
   })
 
   it.each([

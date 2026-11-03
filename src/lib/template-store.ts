@@ -5,23 +5,35 @@
 // mémoire, comme le moteur des voyages de groupe.
 //
 // Clés (sous le préfixe `templates/` de `template-bucket.ts`) :
-//   <id>/meta     TemplateMeta — `ifAbsent` à la création, puis `ifMatch`
-//   <id>/v/<n>    { version, title, itinerary } — `ifAbsent`, jamais réécrit
-//   slugs/<slug>  { id } — `ifAbsent`, jamais réutilisé
-//   index/<c>     { entries } — modèles listés dont l'id commence par `c`,
-//                 boucle `ifMatch` (32 morceaux, voir `templateIndexKey`)
+//   <id>/meta       TemplateMeta — `ifAbsent` à la création, puis `ifMatch`
+//   <id>/v/<n>      { version, title, itinerary } — `ifAbsent`, jamais
+//                   réécrit ; seule la version publiée survit à une mise à jour
+//   slugs/<slug>    { id } — `ifAbsent`, jamais réutilisé ; un modèle dont la
+//                   durée ou les villes changent en prend un nouveau, et ses
+//                   anciens slugs continuent de pointer vers lui
+//   owners/<empr.>  { id } — `ifAbsent`, réservé avant toute autre écriture
+//                   par une publication dont le téléphone a tiré le jeton :
+//                   la rejouer retrouve le même modèle (`publishTemplate`)
+//   index/<c>       { entries } — modèles listés dont l'id commence par `c`,
+//                   boucle `ifMatch` (32 morceaux, voir `templateIndexKey`)
 //
 // Ordre d'écriture : la version, puis la méta, puis l'index. La méta ne pointe
-// donc jamais vers une version absente. Retiré, un modèle ne garde qu'une
+// donc jamais vers une version absente. Une mise à jour supprime ensuite les
+// versions précédentes : la base de fusion de la V1.1 vit sur le téléphone du
+// repreneur (`StoredTrip.origin.base`), et une note ou un prix que l'auteur
+// retire ne doit pas rester en ligne. Retiré, un modèle ne garde qu'une
 // pierre tombale (`RetiredTemplateMeta`), par son auteur comme par l'opérateur
 // (`retireTemplateAsOperator`, `scripts/retire-template.ts`). L'index suit toujours la méta
 // stockée, relue au moment de l'écrire (`syncIndex`). S'il échoue sur un
 // ajout, le modèle manque au sitemap jusqu'à sa prochaine écriture ; sur une
-// sortie (masqué, retiré), la requête échoue pour que l'auteur la rejoue. Un
-// retrait dont les versions n'ont pas pu être supprimées échoue de même. Un
-// morceau d'index plein (`FILE_TOO_LARGE`) est journalisé sous une alerte
-// dédiée (`TEMPLATE_INDEX_FULL_ALERT`), et `resyncTemplateIndex` rattrape
-// ensuite les modèles restés dehors.
+// sortie (masqué, retiré), la requête échoue pour que l'auteur la rejoue. Une
+// mise à jour ou un retrait dont les versions n'ont pas pu être supprimées
+// échouent de même. Un morceau d'index plein (`FILE_TOO_LARGE`) est journalisé
+// sous une alerte dédiée (`TEMPLATE_INDEX_FULL_ALERT`), et
+// `resyncTemplateIndex` rattrape ensuite les modèles restés dehors.
+//
+// Les dates du voyage sont floutées avant tout stockage (`blurTemplateDates`) :
+// le modèle d'un voyage à venir ne dit pas quand son auteur sera absent.
 //
 // Aucune écriture ne passe `expiresIn` : un modèle reste en ligne tant que son
 // auteur ne le retire pas.
@@ -39,6 +51,7 @@ import { cleanAuthor } from '@/lib/group-sync'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { SHARE_APP } from '@/lib/share-store'
 import { cleanForTemplate } from '@/lib/template-clean'
+import { blurTemplateDates } from '@/lib/template-dates'
 import {
   MAX_TEMPLATE_TITLE_LENGTH,
   TEMPLATE_ID_ALPHABET,
@@ -67,6 +80,8 @@ import { normalizeItineraryShape } from '@/lib/template-shape'
 import {
   createOwnerToken,
   hashOwnerToken,
+  isOwnerToken,
+  isOwnerTokenHash,
   verifyOwnerToken,
 } from '@/lib/template-token'
 import { truncateText } from '@/lib/text-limit'
@@ -127,8 +142,24 @@ const META_ATTEMPTS = 2
  * la suivante passe à `n + 1` au lieu de buter dessus pour toujours.
  */
 const VERSION_SLOTS = 3
+/**
+ * Emplacements essayés pour la première version d'une publication rejouée
+ * avec le même jeton : chaque envoi interrompu entre sa version et sa méta en
+ * laisse une, qu'aucune méta ne désigne. Au-delà de 10 envois interrompus
+ * d'affilée, la publication répond 409.
+ */
+const PUBLISH_VERSION_SLOTS = 10
+/**
+ * Une lecture dont la version disparaît sous une mise à jour (qui supprime
+ * les précédentes) relit la méta et suit la nouvelle version, deux fois au
+ * plus.
+ */
+const READ_ATTEMPTS = 3
 /** Un morceau d'index est partagé par 1/32 des modèles : de la concurrence possible. */
 const INDEX_ATTEMPTS = 5
+
+/** Lignes d'une page de `GET /api/templates/index` (`readIndexPage`). */
+export const TEMPLATE_INDEX_PAGE_SIZE = 500
 
 // ── Clés ──────────────────────────────────────────────────────────────────────
 
@@ -180,6 +211,14 @@ export function templateSlugKey(slug: string): string {
   return `slugs/${slug}`
 }
 
+/**
+ * Réservation d'une publication par l'empreinte de son jeton (64 caractères
+ * hexadécimaux) : `{ id }`. Ni un id (16 caractères) ni `slugs/…`, `index/…`.
+ */
+export function templateOwnerKey(ownerTokenHash: string): string {
+  return `owners/${ownerTokenHash}`
+}
+
 // ── Erreurs ───────────────────────────────────────────────────────────────────
 
 export type TemplateStoreErrorCode =
@@ -191,8 +230,10 @@ export type TemplateStoreErrorCode =
   /** Le modèle devait sortir de l'index public, et l'index n'a pas suivi. */
   | 'index'
   /**
-   * Pierre tombale et index en place, mais les versions (le contenu de
-   * l'auteur) n'ont pas été supprimées. Le retrait rejoué les supprime.
+   * Retrait : pierre tombale et index en place, mais les versions (le contenu
+   * de l'auteur) n'ont pas été supprimées. Mise à jour : la nouvelle version
+   * est en ligne, mais les précédentes n'ont pas été supprimées. Rejouée, la
+   * requête les supprime.
    */
   | 'versions'
 
@@ -209,6 +250,10 @@ const ERROR_MESSAGES: Record<TemplateStoreErrorCode, string> = {
   versions:
     'Le modèle est retiré, mais son contenu n’a pas pu être effacé. Réessayez.',
 }
+
+/** `versions` levé par une mise à jour : le modèle, lui, est à jour. */
+const STALE_VERSIONS_MESSAGE =
+  'Le modèle est à jour, mais ses versions précédentes n’ont pas pu être effacées. Réessayez.'
 
 /** Refus prévisible du store, que la route traduit en statut HTTP. */
 export class TemplateStoreError extends Error {
@@ -373,8 +418,12 @@ function parseRetiredMeta(
   }
 }
 
-/** Contenu d'une version : ce que `GET /api/templates/<id>/v/<n>` renvoie. */
-export interface TemplateVersionData {
+/**
+ * Contenu d'une version stockée. Aucune route ne sert une version précise :
+ * seule la version publiée est lue, et son titre est celui de la méta (un
+ * PATCH peut le changer sans nouvelle version).
+ */
+interface TemplateVersionData {
   version: number
   title: string
   itinerary: DayItinerary[]
@@ -517,25 +566,70 @@ export async function assertTemplateOwner(
   if (isRetiredTemplateMeta(meta)) throw new TemplateStoreError('retired')
 }
 
+/** La version publiée d'un modèle, lue avec la méta qui la désigne. */
+type PublishedVersion =
+  | { status: 'active'; meta: TemplateMeta; itinerary: DayItinerary[] }
+  | { status: 'retired'; tombstone: RetiredTemplateMeta }
+  | { status: 'missing' }
+  /** Méta en ligne, version absente, et rien ne l'explique : incohérence (§4). */
+  | { status: 'broken'; meta: TemplateMeta }
+
 /**
- * L'itinéraire de la version publiée, pour répondre après une écriture. Un
- * retrait concurrent a pu effacer les versions entre la lecture de la méta et
- * celle-ci : la méta relue le dit, et l'on répond « retiré » (410) comme si le
- * retrait était passé avant. Une méta encore en ligne qui pointe vers une
- * version absente reste une vraie incohérence (§4) : erreur serveur.
+ * L'itinéraire de la version que désigne `meta`. Entre la lecture de la méta
+ * et celle-ci, la version a pu disparaître :
+ * - une mise à jour l'a remplacée, puis supprimée avec les précédentes : la
+ *   méta relue désigne la nouvelle, qu'on lit à sa place ;
+ * - un retrait l'a effacée : la méta relue est une pierre tombale, et l'on
+ *   répond « retiré » (410) comme si le retrait était passé avant.
+ * Une méta relue qui désigne toujours la version absente est une vraie
+ * incohérence : `broken`, que l'appelant traite.
  */
-async function publicTemplateOf(
+async function loadPublished(
   bucket: TemplateBucket,
   meta: TemplateMeta,
-): Promise<PublicTemplate> {
-  const version = await loadVersion(bucket, meta.id, meta.version)
-  if (version) return toPublicTemplate(meta, version.itinerary)
-  const latest = await loadMeta(bucket, meta.id)
-  if (!latest) throw new TemplateStoreError('missing')
-  if (isRetiredTemplateMeta(latest.meta)) {
-    throw new TemplateStoreError('retired')
+): Promise<PublishedVersion> {
+  let current = meta
+  for (let attempt = 1; attempt <= READ_ATTEMPTS; attempt++) {
+    const version = await loadVersion(bucket, current.id, current.version)
+    if (version) {
+      return { status: 'active', meta: current, itinerary: version.itinerary }
+    }
+    const latest = await loadMeta(bucket, current.id)
+    if (!latest) return { status: 'missing' }
+    if (isRetiredTemplateMeta(latest.meta)) {
+      return { status: 'retired', tombstone: latest.meta }
+    }
+    if (latest.meta.version === current.version) break
+    current = latest.meta
   }
-  throw new Error(`Version ${meta.version} absente du modèle ${meta.id}.`)
+  return { status: 'broken', meta: current }
+}
+
+/**
+ * Le modèle tel qu'il est publié, pour répondre après une écriture : avec la
+ * méta relue si une mise à jour concurrente l'a remplacée. Retiré entre-temps :
+ * `retired` (410). Incohérent : erreur serveur.
+ */
+async function currentTemplate(
+  bucket: TemplateBucket,
+  meta: TemplateMeta,
+): Promise<TemplateWriteResult> {
+  const published = await loadPublished(bucket, meta)
+  switch (published.status) {
+    case 'active':
+      return {
+        meta: published.meta,
+        template: toPublicTemplate(published.meta, published.itinerary),
+      }
+    case 'retired':
+      throw new TemplateStoreError('retired')
+    case 'missing':
+      throw new TemplateStoreError('missing')
+    case 'broken':
+      throw new Error(
+        `Version ${published.meta.version} absente du modèle ${meta.id}.`,
+      )
+  }
 }
 
 /**
@@ -565,25 +659,32 @@ interface TemplateContent {
 }
 
 /**
- * Titre saisi, borné ; à défaut, les étapes du voyage (« Tokyo et Kyoto »).
- * Coupé sur un caractère entier : c'est du texte public, indexé.
+ * Titre saisi, espaces resserrées, borné et coupé sur un caractère entier :
+ * c'est du texte public, indexé. Vide s'il n'y a rien à garder.
  */
+function typedTitle(title: string | null | undefined): string {
+  return truncateText(
+    (title ?? '').replace(/\s+/g, ' ').trim(),
+    MAX_TEMPLATE_TITLE_LENGTH,
+  ).trim()
+}
+
+/** Titre saisi ; à défaut, les étapes du voyage (« Tokyo et Kyoto »). */
 function templateTitle(
   title: string | null | undefined,
   itinerary: DayItinerary[],
 ): string {
-  const typed = truncateText(
-    (title ?? '').replace(/\s+/g, ' ').trim(),
-    MAX_TEMPLATE_TITLE_LENGTH,
-  ).trim()
   return (
-    typed || truncateText(deriveTripTitle(itinerary), MAX_TEMPLATE_TITLE_LENGTH)
+    typedTitle(title) ||
+    truncateText(deriveTripTitle(itinerary), MAX_TEMPLATE_TITLE_LENGTH)
   )
 }
 
 /**
  * Le serveur renettoie toujours, avec les réglages qu'il va stocker : le
- * nettoyage fait sur le téléphone sert l'aperçu, il ne garantit rien.
+ * nettoyage fait sur le téléphone sert l'aperçu, il ne garantit rien. Puis il
+ * floute les dates (`blurTemplateDates`) : l'aperçu A2 ne montre pas de dates,
+ * et le modèle publié ne dit pas quand son auteur part.
  */
 function prepareContent(
   itinerary: readonly DayItinerary[],
@@ -596,7 +697,7 @@ function prepareContent(
   if (!shaped) {
     throw new TemplateStoreError('invalid', 'Itinéraire illisible.')
   }
-  const cleaned = cleanForTemplate(shaped, options)
+  const cleaned = blurTemplateDates(cleanForTemplate(shaped, options))
   if (cleaned.length === 0) {
     throw new TemplateStoreError(
       'invalid',
@@ -813,6 +914,13 @@ export interface PublishTemplateInput {
   country: string
   options: TemplateOptions
   indexable: boolean
+  /**
+   * Jeton tiré par le téléphone (`createOwnerTokenForClient`) et rangé avant
+   * l'envoi : la publication rejouée avec lui retrouve le même modèle au lieu
+   * d'en créer un second. Absent : le serveur en tire un, et chaque envoi
+   * publie un nouveau modèle.
+   */
+  ownerToken?: string
   now?: Date
 }
 
@@ -824,8 +932,14 @@ export interface TemplateWriteResult {
 }
 
 export interface PublishTemplateResult extends TemplateWriteResult {
-  /** Renvoyé une seule fois, jamais stocké ni journalisé. */
+  /** Rendu à son auteur seulement, jamais stocké ni journalisé. */
   ownerToken: string
+  /**
+   * `false` : un envoi précédent avec le même jeton avait déjà publié ce
+   * modèle, rendu tel qu'il est stocké aujourd'hui (la route répond 200, pas
+   * 201). Rien n'a été écrit, hormis l'index rattrapé au besoin.
+   */
+  created: boolean
 }
 
 /**
@@ -853,24 +967,72 @@ async function claimTemplateId(
 }
 
 /**
- * `japon-14-jours-tokyo`, sinon `…-2` à `…-5`, sinon `…-<6 premiers
- * caractères de l'id>`, sinon `…-<id>` : premier slug libre. Le dernier ne
- * peut être pris que par un slug de base qui finirait par cet id ; on lève
- * alors `conflict`, et la publication rejouée tire un autre id.
+ * L'id de la publication de ce jeton, réservé dans `owners/<empreinte>` en
+ * `ifAbsent` avant toute autre écriture : un nouvel id, ou celui qu'un envoi
+ * précédent avec le même jeton a réservé — ou cet envoi lui-même, rejoué par
+ * le SDK après une réponse perdue.
+ *
+ * L'id réservé n'est pas vérifié libre : une collision avec un modèle
+ * existant (une chance sur 2^80) ferait échouer la méta, et chaque envoi
+ * rejoué avec ce jeton, en 500.
  */
-async function reserveSlug(
+async function reservePublication(
   bucket: TemplateBucket,
-  id: string,
-  base: string,
+  ownerTokenHash: string,
 ): Promise<string> {
-  const candidates = [
+  const key = templateOwnerKey(ownerTokenHash)
+  const candidate = createTemplateId()
+  try {
+    await bucket.putSnapshot(
+      key,
+      { id: candidate },
+      { ...TEMPLATE_SNAPSHOT_OPTIONS, ifAbsent: true },
+    )
+    return candidate
+  } catch (error) {
+    if (!isPreconditionFailure(error)) throw error
+  }
+  const reserved = await bucket.getSnapshot(key, READ_OPTIONS)
+  const id = reserved && isRecord(reserved.data) ? reserved.data.id : null
+  if (!isTemplateId(id)) {
+    throw new Error(`Réservation de publication illisible (${key}).`)
+  }
+  return id
+}
+
+/** Les slugs qu'un modèle peut prendre pour `base`, dans l'ordre d'essai. */
+function slugCandidates(base: string, id: string): string[] {
+  return [
     ...Array.from({ length: SLUG_ATTEMPTS }, (_, index) =>
       suffixedSlug(base, index + 1),
     ),
     idSuffixedSlug(base, id, SLUG_ID_SUFFIX_LENGTH),
     idSuffixedSlug(base, id, TEMPLATE_ID_LENGTH),
   ]
-  for (const slug of candidates) {
+}
+
+/** Le slug de base d'un contenu : pays, nombre de jours, trois premières villes. */
+function slugBase(country: string, content: TemplateContent): string {
+  return templateSlug({
+    country,
+    dayCount: content.dayCount,
+    cities: content.cities,
+  })
+}
+
+/**
+ * `japon-14-jours-tokyo`, sinon `…-2` à `…-5`, sinon `…-<6 premiers
+ * caractères de l'id>`, sinon `…-<id>` : premier slug libre, ou déjà à ce
+ * modèle (une ancienne adresse qu'il retrouve). Le dernier ne peut être pris
+ * que par un slug de base qui finirait par cet id ; on lève alors `conflict`,
+ * et la publication rejouée tire un autre id.
+ */
+async function reserveSlug(
+  bucket: TemplateBucket,
+  id: string,
+  base: string,
+): Promise<string> {
+  for (const slug of slugCandidates(base, id)) {
     try {
       await bucket.putSnapshot(
         templateSlugKey(slug),
@@ -880,7 +1042,8 @@ async function reserveSlug(
       return slug
     } catch (error) {
       if (!isPreconditionFailure(error)) throw error
-      // Réponse perdue puis rejouée par le SDK : le slug est déjà à nous.
+      // Réponse perdue puis rejouée par le SDK, ou ancien slug de ce modèle :
+      // le slug est déjà à nous.
       if (await slugBelongsTo(bucket, slug, id)) return slug
     }
   }
@@ -891,17 +1054,50 @@ async function reserveSlug(
 }
 
 /**
+ * Le modèle qu'un envoi précédent avec le même jeton a publié, tel qu'il est
+ * stocké. Retiré depuis : `retired` (410). L'index est revu au passage, au
+ * cas où cet envoi précédent se serait interrompu avant lui.
+ */
+async function alreadyPublished(
+  bucket: TemplateBucket,
+  meta: StoredTemplateMeta,
+  ownerTokenHash: string,
+): Promise<TemplateWriteResult> {
+  if (meta.ownerTokenHash !== ownerTokenHash) {
+    throw new Error(`Réservation de publication incohérente (${meta.id}).`)
+  }
+  if (isRetiredTemplateMeta(meta)) throw new TemplateStoreError('retired')
+  await syncIndex(bucket, meta.id)
+  return currentTemplate(bucket, meta)
+}
+
+/**
  * Publie un modèle : version 1, slug réservé, méta, puis index.
  *
- * Si une étape échoue après la version 1, celle-ci reste orpheline : sans
+ * Si une étape échoue après la version, celle-ci reste orpheline : sans
  * méta, aucune lecture ne l'atteint. On ne la supprime que sur un refus
  * certain (aucun slug libre) : une erreur réseau sur la méta ne prouve pas
  * qu'elle n'a pas été écrite.
  *
  * Un 412 sur la méta, lui, se vérifie : la réponse S3 perdue puis rejouée par
  * le SDK bute sur notre propre écriture. La méta relue porte alors l'empreinte
- * de notre jeton, et la publication continue (index, jeton rendu) : jamais un
- * modèle en ligne que personne ne détient (§2.1).
+ * de notre jeton et notre version, et la publication continue (index, jeton
+ * rendu) : jamais un modèle en ligne que personne ne détient (§2.1).
+ *
+ * **Avec `input.ownerToken`** (tiré par le téléphone), la publication est
+ * rejouable. `owners/<empreinte>` est réservé avant toute autre écriture et
+ * désigne l'id du modèle. Un envoi qui la trouve déjà :
+ * - méta en ligne : rend ce modèle tel qu'il est stocké, sans rien créer
+ *   (`created: false`) — la réponse du premier envoi s'était perdue, ou c'est
+ *   un double appui ;
+ * - méta absente : le premier envoi s'est interrompu en route, celui-ci
+ *   termine la publication sous le même id. Sa version prend le premier
+ *   emplacement libre (celles des envois interrompus n'ont pas de méta), et
+ *   les emplacements inférieurs sont supprimés une fois la méta écrite ;
+ * - pierre tombale : `retired` (410), le retrait ayant échoué à supprimer la
+ *   réservation (il la supprime d'ordinaire).
+ * Deux envois simultanés avec le même jeton se départagent sur la méta en
+ * `ifAbsent` : le perdant rend le modèle du gagnant.
  *
  * L'index est mis à jour au mieux : un nouvel id n'y a jamais figuré, un
  * échec ne fait que retarder son entrée au sitemap.
@@ -913,33 +1109,46 @@ export async function publishTemplate(
   if (!isCountryCode(input.country)) {
     throw new TemplateStoreError('invalid', 'Pays du voyage invalide.')
   }
+  if (input.ownerToken !== undefined && !isOwnerToken(input.ownerToken)) {
+    throw new TemplateStoreError('forbidden')
+  }
   const content = prepareContent(input.itinerary, input.options, input.title)
   const at = (input.now ?? new Date()).toISOString()
-  const ownerToken = createOwnerToken()
+  const ownerToken = input.ownerToken ?? createOwnerToken()
+  const ownerTokenHash = hashOwnerToken(ownerToken)
 
-  const id = await claimTemplateId(bucket, content)
+  let id: string
+  let version: number
+  if (input.ownerToken === undefined) {
+    id = await claimTemplateId(bucket, content)
+    version = 1
+  } else {
+    id = await reservePublication(bucket, ownerTokenHash)
+    const existing = await loadMeta(bucket, id)
+    if (existing) {
+      return {
+        ...(await alreadyPublished(bucket, existing.meta, ownerTokenHash)),
+        ownerToken,
+        created: false,
+      }
+    }
+    version = await claimVersion(bucket, id, 1, content, PUBLISH_VERSION_SLOTS)
+  }
+
   let slug: string
   try {
-    slug = await reserveSlug(
-      bucket,
-      id,
-      templateSlug({
-        country: input.country,
-        dayCount: content.dayCount,
-        cities: content.cities,
-      }),
-    )
+    slug = await reserveSlug(bucket, id, slugBase(input.country, content))
   } catch (error) {
     // Refus certain : aucune méta ne pointera jamais vers cette version.
     if (isTemplateStoreError(error)) {
-      await discard(bucket, [templateVersionKey(id, 1)])
+      await discard(bucket, [templateVersionKey(id, version)])
     }
     throw error
   }
   const meta: TemplateMeta = {
     id,
     slug,
-    version: 1,
+    version,
     authorName: cleanAuthor(input.authorName),
     country: input.country,
     indexable: input.indexable,
@@ -947,7 +1156,7 @@ export async function publishTemplate(
     publishedAt: at,
     updatedAt: at,
     retiredAt: null,
-    ownerTokenHash: hashOwnerToken(ownerToken),
+    ownerTokenHash,
   }
   try {
     await bucket.putSnapshot(templateMetaKey(id), meta, {
@@ -955,18 +1164,33 @@ export async function publishTemplate(
       ifAbsent: true,
     })
   } catch (error) {
-    // L'id vient d'être réservé par `v/1` en `ifAbsent` : seule cette requête
-    // écrit cette méta. Un 412 est donc notre écriture rejouée, si l'empreinte
-    // stockée est celle de notre jeton.
     if (!isPreconditionFailure(error)) throw error
     const stored = await loadMeta(bucket, id)
-    if (stored?.meta.ownerTokenHash !== meta.ownerTokenHash) throw error
+    if (stored?.meta.ownerTokenHash !== ownerTokenHash) throw error
+    // Même jeton, autre version : un envoi simultané avec ce jeton a publié
+    // avant nous. Notre version n'est désignée par aucune méta.
+    if (isRetiredTemplateMeta(stored.meta) || stored.meta.version !== version) {
+      await discard(bucket, [templateVersionKey(id, version)])
+      return {
+        ...(await alreadyPublished(bucket, stored.meta, ownerTokenHash)),
+        ownerToken,
+        created: false,
+      }
+    }
+    // Sinon, notre propre écriture, rejouée par le SDK : la publication
+    // continue comme si elle avait répondu.
+  }
+  if (version > 1) {
+    // Versions d'envois interrompus avec le même jeton : aucune méta ne les
+    // a jamais désignées, et un retrait les supprimerait de toute façon.
+    await discard(bucket, versionKeysBelow(id, version))
   }
   await syncIndex(bucket, id)
   return {
     meta,
     template: toPublicTemplate(meta, content.itinerary),
     ownerToken,
+    created: true,
   }
 }
 
@@ -981,14 +1205,18 @@ export interface UpdateTemplateInput {
   now?: Date
 }
 
-/** Premier emplacement libre à partir de `from`, écrit en `ifAbsent`. */
+/**
+ * Premier emplacement libre parmi les `slots` à partir de `from`, écrit en
+ * `ifAbsent`.
+ */
 async function claimVersion(
   bucket: TemplateBucket,
   id: string,
   from: number,
   content: TemplateContent,
+  slots = VERSION_SLOTS,
 ): Promise<number> {
-  for (let version = from; version < from + VERSION_SLOTS; version++) {
+  for (let version = from; version < from + slots; version++) {
     try {
       await bucket.putSnapshot(
         templateVersionKey(id, version),
@@ -1003,18 +1231,78 @@ async function claimVersion(
   throw new TemplateStoreError('conflict')
 }
 
+/** Les clés `v/1` à `v/<version − 1>` d'un modèle. */
+function versionKeysBelow(id: string, version: number): string[] {
+  return Array.from({ length: Math.max(0, version - 1) }, (_, index) =>
+    templateVersionKey(id, index + 1),
+  )
+}
+
 /**
- * Nouvelle version du contenu. Les anciennes restent lisibles : ceux qui ont
- * repris le modèle s'en serviront comme base de fusion (V1.1).
+ * Supprime toutes les versions antérieures à celle que désigne `meta`, de
+ * `v/1` à `v/<n − 1>` : une suppression précédente qui aurait échoué, et les
+ * versions orphelines de mises à jour interrompues, sont rattrapées du même
+ * coup. Ne lève jamais : dit si c'est fait, l'appelant décide.
+ *
+ * Sans risque pour une lecture ou une écriture concurrente : `version` ne
+ * fait que croître dans la méta, rien ne désignera plus ces versions. Une
+ * lecture qui en tenait une relit la méta et suit la nouvelle
+ * (`loadPublished`).
+ */
+async function deletePreviousVersions(
+  bucket: TemplateBucket,
+  meta: TemplateMeta,
+): Promise<boolean> {
+  const keys = versionKeysBelow(meta.id, meta.version)
+  if (keys.length === 0) return true
+  try {
+    await bucket.delete(keys)
+    return true
+  } catch (error) {
+    console.error('Versions précédentes du modèle non supprimées', error)
+    return false
+  }
+}
+
+/**
+ * Le slug d'un modèle après une mise à jour. Gardé tant qu'il est l'un de
+ * ceux que le nouveau contenu aurait pu prendre (`slugCandidates`) ; sinon —
+ * durée, ou l'une des trois premières villes, changée, ou slug d'une
+ * ancienne forme —, un nouveau est réservé, avec les mêmes règles de
+ * collision qu'à la publication. L'ancien reste réservé et mène toujours à ce
+ * modèle : `readTemplateBySlug` y répond avec le slug actuel, vers lequel le
+ * site vitrine redirige (301). Revenir à une durée passée reprend le slug
+ * d'alors, déjà à ce modèle.
+ */
+async function slugFor(
+  bucket: TemplateBucket,
+  meta: TemplateMeta,
+  content: TemplateContent,
+): Promise<string> {
+  const base = slugBase(meta.country, content)
+  if (slugCandidates(base, meta.id).includes(meta.slug)) return meta.slug
+  return reserveSlug(bucket, meta.id, base)
+}
+
+/**
+ * Nouvelle version du contenu, puis suppression de toutes les précédentes :
+ * la base de fusion de la V1.1 vit sur le téléphone du repreneur
+ * (`StoredTrip.origin.base`), et une note ou un prix que l'auteur retire ne
+ * doit pas rester en ligne dans une version antérieure.
  *
  * La version s'écrit en `ifAbsent`, puis la méta en `ifMatch`. Si la méta a
  * bougé entre-temps (un changement de visibilité, une autre mise à jour), on
  * relit une fois et on recommence — sans réécrire la version si elle est
  * toujours la suivante. Au second conflit : `TemplateStoreError('conflict')`.
+ * Le slug suit le contenu (`slugFor`) ; le pays, jamais.
  *
- * Un modèle ramené sous le seuil des listés sort de l'index : si l'index ne
- * suit pas, `TemplateStoreError('index')`, la nouvelle version restant en
- * ligne (voir `settleIndex`).
+ * La méta écrite, les versions précédentes sont supprimées, puis l'index est
+ * accordé. Un modèle ramené sous le seuil des listés sort de l'index : si
+ * l'index ne suit pas, `TemplateStoreError('index')` (voir `settleIndex`).
+ * Si la suppression a échoué, `TemplateStoreError('versions')`, après
+ * l'index. Dans les deux cas la nouvelle version est en ligne et la route
+ * répond 503 : rejouée, la mise à jour écrit une version de plus, supprime
+ * toutes les précédentes et refait l'index.
  */
 export async function updateTemplate(
   bucket: TemplateBucket,
@@ -1023,7 +1311,11 @@ export async function updateTemplate(
   input: UpdateTemplateInput,
 ): Promise<TemplateWriteResult> {
   const result = await writeNewVersion(bucket, id, token, input)
+  const previousDeleted = await deletePreviousVersions(bucket, result.meta)
   await settleIndex(bucket, result.meta)
+  if (!previousDeleted) {
+    throw new TemplateStoreError('versions', STALE_VERSIONS_MESSAGE)
+  }
   return result
 }
 
@@ -1103,11 +1395,12 @@ async function writeNewVersion(
         }
       }
 
-      // Le slug et le pays ne bougent jamais : l'adresse de la page est
-      // figée à la première publication. Le reste suit la nouvelle version.
+      // Le pays ne bouge jamais. Le slug suit la durée et les trois
+      // premières villes, le reste suit la nouvelle version.
       const next: TemplateMeta = {
         ...meta,
         ...contentFields(written.content),
+        slug: await slugFor(bucket, meta, written.content),
         version: written.version,
         updatedAt: at,
       }
@@ -1156,13 +1449,48 @@ export interface TemplatePatch {
   indexable?: boolean
   /** `null` efface le prénom. Absent : inchangé. */
   authorName?: string | null
+  /**
+   * Titre public (écran A4 : renommer sans republier). Absent : inchangé.
+   * `null` ou vide : tiré des étapes de la version publiée, comme à la
+   * publication.
+   */
+  title?: string | null
   now?: Date
 }
 
 /**
- * Visibilité et prénom : la méta change, pas le contenu ni sa version.
- * Masquer le modèle le sort de l'index ; si l'index ne suit pas,
- * `TemplateStoreError('index')`, et la même requête rejouée le rattrape.
+ * Le titre après un réglage : celui de la méta, le titre saisi (borné comme
+ * à la publication), ou les étapes de la version publiée.
+ */
+async function patchedTitle(
+  bucket: TemplateBucket,
+  meta: TemplateMeta,
+  title: string | null | undefined,
+): Promise<string> {
+  if (title === undefined) return meta.title
+  const typed = typedTitle(title)
+  if (typed) return typed
+  // Une mise à jour concurrente a pu remplacer la version : on tire alors le
+  // titre de la nouvelle, et l'écriture de la méta en `ifMatch` échouera et
+  // relira tout.
+  const published = await loadPublished(bucket, meta)
+  switch (published.status) {
+    case 'active':
+      return templateTitle(null, published.itinerary)
+    case 'retired':
+      throw new TemplateStoreError('retired')
+    case 'missing':
+      throw new TemplateStoreError('missing')
+    case 'broken':
+      throw new Error(`Version ${meta.version} absente du modèle ${meta.id}.`)
+  }
+}
+
+/**
+ * Visibilité, prénom et titre : la méta change, pas le contenu ni sa
+ * version. Masquer le modèle le sort de l'index ; si l'index ne suit pas,
+ * `TemplateStoreError('index')`, et la même requête rejouée le rattrape. Un
+ * nouveau titre suit dans l'index ; le slug, lui, ne dépend pas du titre.
  */
 export async function patchTemplate(
   bucket: TemplateBucket,
@@ -1180,15 +1508,26 @@ export async function patchTemplate(
       patch.authorName === undefined
         ? meta.authorName
         : cleanAuthor(patch.authorName)
+    const title = await patchedTitle(bucket, meta, patch.title)
     // Rien ne change : pas d'écriture de la méta, et `updatedAt` ne bouge
     // pas. L'index est tout de même revu : c'est ainsi qu'un « masquer »
     // rejoué après un échec de l'index finit par l'en sortir.
-    if (indexable === meta.indexable && authorName === meta.authorName) {
+    if (
+      indexable === meta.indexable &&
+      authorName === meta.authorName &&
+      title === meta.title
+    ) {
       await settleIndex(bucket, meta)
-      return { meta, template: await publicTemplateOf(bucket, meta) }
+      return currentTemplate(bucket, meta)
     }
 
-    const next: TemplateMeta = { ...meta, indexable, authorName, updatedAt: at }
+    const next: TemplateMeta = {
+      ...meta,
+      indexable,
+      authorName,
+      title,
+      updatedAt: at,
+    }
     try {
       await bucket.putSnapshot(templateMetaKey(id), next, {
         ...TEMPLATE_SNAPSHOT_OPTIONS,
@@ -1199,7 +1538,7 @@ export async function patchTemplate(
       throw error
     }
     await settleIndex(bucket, next)
-    return { meta: next, template: await publicTemplateOf(bucket, next) }
+    return currentTemplate(bucket, next)
   }
   throw new TemplateStoreError('conflict')
 }
@@ -1217,6 +1556,9 @@ export async function patchTemplate(
  * Le slug, lui, reste pour toujours, ici et dans `slugs/<slug>` : il porte le
  * pays (son nom français), le nombre de jours et jusqu'à 3 villes, telles que
  * l'auteur les a tapées, mises en forme de slug (`japon-3-jours-tokyo-kyoto`).
+ * Les slugs qu'il a portés avant une mise à jour aussi : chacun pointe
+ * toujours vers la pierre tombale, et répond comme le slug actuel (410 s'il
+ * était listé au retrait, 404 sinon).
  */
 function toTombstone(meta: TemplateMeta, at: string): RetiredTemplateMeta {
   return {
@@ -1232,8 +1574,9 @@ function toTombstone(meta: TemplateMeta, at: string): RetiredTemplateMeta {
 
 /**
  * Les clés de version qu'un retrait supprime, et que l'opérateur vérifie : de
- * 1 à la version publiée, plus les emplacements au-delà, qui couvrent un
- * éventuel orphelin (supprimer une clé absente ne coûte rien).
+ * 1 à la version publiée (une mise à jour dont la suppression a échoué en a
+ * pu laisser), plus les emplacements au-delà, qui couvrent un éventuel
+ * orphelin (supprimer une clé absente ne coûte rien).
  */
 function versionKeysOf(
   meta: Pick<StoredTemplateMeta, 'id' | 'version'>,
@@ -1241,6 +1584,33 @@ function versionKeysOf(
   const keys: string[] = []
   for (let n = 1; n <= meta.version + VERSION_SLOTS; n++) {
     keys.push(templateVersionKey(meta.id, n))
+  }
+  return keys
+}
+
+/**
+ * Ce qu'un retrait supprime : les versions, et la réservation de sa
+ * publication si elle désigne bien ce modèle. Le même jeton a pu republier
+ * depuis un premier retrait (la réservation désigne alors l'autre modèle) :
+ * un retrait rejoué ne doit pas la lui retirer. Lue avant d'être supprimée,
+ * elle ne peut pas changer entre-temps : tant qu'elle existe, une
+ * publication avec ce jeton ne fait que la relire.
+ */
+async function retiredKeysOf(
+  bucket: TemplateBucket,
+  tombstone: RetiredTemplateMeta,
+): Promise<string[]> {
+  const keys = versionKeysOf(tombstone)
+  if (isOwnerTokenHash(tombstone.ownerTokenHash)) {
+    const key = templateOwnerKey(tombstone.ownerTokenHash)
+    const reservation = await bucket.getSnapshot(key, READ_OPTIONS)
+    if (
+      reservation &&
+      isRecord(reservation.data) &&
+      reservation.data.id === tombstone.id
+    ) {
+      keys.push(key)
+    }
   }
   return keys
 }
@@ -1256,8 +1626,10 @@ interface Retirement {
  * vérifie le jeton, pour l'auteur) à chaque tentative.
  *
  * Les versions sont le contenu de l'auteur : leur suppression doit aboutir,
- * comme la sortie de l'index. Si elle échoue, l'index est tout de même
- * accordé, puis le retrait lève `TemplateStoreError('versions')` (ou
+ * comme la sortie de l'index. La réservation de sa publication
+ * (`owners/<empreinte>`) part avec elles : rejouer cette publication ne doit
+ * pas buter sur un modèle retiré. Si la suppression échoue, l'index est tout
+ * de même accordé, puis le retrait lève `TemplateStoreError('versions')` (ou
  * `'index'` d'abord, si l'index a échoué lui aussi). Rejoué, il trouve la
  * pierre tombale et refait les deux.
  */
@@ -1288,7 +1660,7 @@ async function retireStored(
     // l'auteur dans R2 derrière un retrait annoncé comme réussi.
     let versionsDeleted = true
     try {
-      await bucket.delete(versionKeysOf(tombstone))
+      await bucket.delete(await retiredKeysOf(bucket, tombstone))
     } catch (error) {
       versionsDeleted = false
       console.error('Versions du modèle non supprimées', error)
@@ -1332,9 +1704,11 @@ export interface OperatorRetirement {
 }
 
 /**
- * Le modèle que désigne `ref` — son id, ou son slug via `slugs/<slug>` —, ou
- * `null`. Par le slug, la méta doit porter ce slug : une publication
- * interrompue peut avoir réservé un slug sans jamais écrire sa méta.
+ * Le modèle que désigne `ref` — son id, ou l'un de ses slugs via
+ * `slugs/<slug>` —, ou `null`. Un slug mène au modèle même si ce n'est plus
+ * le sien (`meta.slug`) : la durée ou les villes ont changé depuis, et
+ * l'ancienne adresse redirige vers la nouvelle. Une publication interrompue
+ * peut avoir réservé un slug sans jamais écrire sa méta : `null`.
  */
 async function findTemplate(
   bucket: TemplateBucket,
@@ -1345,8 +1719,7 @@ async function findTemplate(
   const pointer = await bucket.getSnapshot(templateSlugKey(ref), READ_OPTIONS)
   const id = pointer && isRecord(pointer.data) ? pointer.data.id : null
   if (!isTemplateId(id)) return null
-  const stored = await loadMeta(bucket, id)
-  return stored && stored.meta.slug === ref ? stored : null
+  return loadMeta(bucket, id)
 }
 
 /**
@@ -1455,14 +1828,10 @@ export type TemplateReadResult =
   | { status: 'retired' }
   | { status: 'missing' }
 
-export type TemplateVersionReadResult =
-  | { status: 'active'; version: number; itinerary: DayItinerary[] }
-  | { status: 'retired' }
-  | { status: 'missing' }
-
 /**
  * `bySlug` : la lecture vient d'une page tripbrain.fr. Un modèle retiré n'y
- * répond 410 que s'il était listé (voir `readTemplateBySlug`).
+ * répond 410 que s'il était listé, et un modèle en ligne seulement s'il l'est
+ * encore (voir `readTemplateBySlug`).
  */
 async function resolveTemplate(
   bucket: TemplateBucket,
@@ -1470,22 +1839,29 @@ async function resolveTemplate(
   bySlug = false,
 ): Promise<TemplateReadResult> {
   if (isRetiredTemplateMeta(meta)) return { status: 'retired' }
-  const version = await loadVersion(bucket, meta.id, meta.version)
-  if (!version) {
-    // Un retrait concurrent a pu effacer les versions depuis la lecture de
-    // la méta : relue, sa pierre tombale fait répondre 410, pas 404.
-    const latest = await loadMeta(bucket, meta.id)
-    if (latest && isRetiredTemplateMeta(latest.meta)) {
-      return !bySlug || latest.meta.wasListed
+  const published = await loadPublished(bucket, meta)
+  switch (published.status) {
+    case 'active':
+      // Une mise à jour concurrente a pu ramener le modèle sous le seuil
+      // des listés : par le slug, il n'a alors plus de page.
+      if (bySlug && !isListed(published.meta)) return { status: 'missing' }
+      return {
+        status: 'active',
+        template: toPublicTemplate(published.meta, published.itinerary),
+      }
+    case 'retired':
+      // Un retrait concurrent a effacé les versions depuis la lecture de la
+      // méta : sa pierre tombale fait répondre 410, pas 404.
+      return !bySlug || published.tombstone.wasListed
         ? { status: 'retired' }
         : { status: 'missing' }
-    }
-    console.error(`Version ${meta.version} absente du modèle ${meta.id}.`)
-    return { status: 'missing' }
-  }
-  return {
-    status: 'active',
-    template: toPublicTemplate(meta, version.itinerary),
+    case 'missing':
+      return { status: 'missing' }
+    case 'broken':
+      console.error(
+        `Version ${published.meta.version} absente du modèle ${meta.id}.`,
+      )
+      return { status: 'missing' }
   }
 }
 
@@ -1501,32 +1877,16 @@ export async function readTemplate(
 }
 
 /**
- * Une version précise, base de fusion de la V1.1. Jamais au-delà de la
- * version publiée : une mise à jour en cours d'écriture n'est pas une version.
- */
-export async function readTemplateVersion(
-  bucket: TemplateBucket,
-  id: string,
-  version: number,
-): Promise<TemplateVersionReadResult> {
-  if (!isTemplateId(id) || !isPositiveInteger(version)) {
-    return { status: 'missing' }
-  }
-  const stored = await loadMeta(bucket, id)
-  if (!stored) return { status: 'missing' }
-  if (isRetiredTemplateMeta(stored.meta)) return { status: 'retired' }
-  if (version > stored.meta.version) return { status: 'missing' }
-  const data = await loadVersion(bucket, id, version)
-  if (!data) return { status: 'missing' }
-  return { status: 'active', version: data.version, itinerary: data.itinerary }
-}
-
-/**
  * Le modèle d'une page tripbrain.fr. **Seulement s'il est listé** : un slug
  * se devine (`japon-14-jours-tokyo`), et un modèle « lien seulement » ne doit
  * être joignable que par son id. Un modèle retiré qui était listé répond
  * `retired` (410) ; un modèle qui n'a jamais eu de page reste `missing` —
  * sans quoi un 410 sur un slug deviné trahirait qu'il a existé.
+ *
+ * Un ancien slug (le modèle en a changé à une mise à jour, sa durée ou ses
+ * villes ayant changé) mène au même modèle : `template.slug` est alors le
+ * slug actuel, différent de celui demandé, et le site vitrine redirige (301).
+ * Retiré, le modèle répond de même sur tous ses slugs.
  */
 export async function readTemplateBySlug(
   bucket: TemplateBucket,
@@ -1570,6 +1930,41 @@ export async function readIndex(
     TEMPLATE_INDEX_KEYS.map((key) => readIndexShard(bucket, key)),
   )
   return shards.flat().sort(compareIndexEntries)
+}
+
+/** Une page de l'index public : `GET /api/templates/index?page=<n>`. */
+export interface TemplateIndexPage {
+  /** Au plus `TEMPLATE_INDEX_PAGE_SIZE` lignes, dans l'ordre de `readIndex`. */
+  entries: TemplateIndexEntry[]
+  /** La page suivante, ou `null` si celle-ci est la dernière. */
+  nextPage: number | null
+}
+
+/**
+ * La page `page` (à partir de 0) de l'index : `TEMPLATE_INDEX_PAGE_SIZE`
+ * lignes au plus, du plus récemment modifié au plus ancien, l'id départageant
+ * deux dates égales. Une réponse reste ainsi petite quel que soit le nombre
+ * de modèles listés (la plateforme plafonne une réponse à 4,5 Mo). Au-delà de
+ * la dernière page : aucune ligne, `nextPage: null`.
+ *
+ * Chaque page relit les 32 morceaux : un modèle modifié entre deux pages peut
+ * en changer, et manquer ou figurer deux fois dans un parcours complet. Le
+ * site vitrine dédoublonne par id ; un manquant revient au parcours suivant.
+ */
+export async function readIndexPage(
+  bucket: TemplateBucket,
+  page: number,
+): Promise<TemplateIndexPage> {
+  if (!Number.isInteger(page) || page < 0) {
+    throw new RangeError(`Page d’index invalide : ${page}.`)
+  }
+  const all = await readIndex(bucket)
+  const start = page * TEMPLATE_INDEX_PAGE_SIZE
+  const end = start + TEMPLATE_INDEX_PAGE_SIZE
+  return {
+    entries: all.slice(start, end),
+    nextPage: end < all.length ? page + 1 : null,
+  }
 }
 
 /** Ce que l'opérateur apprend d'un rattrapage de l'index. */

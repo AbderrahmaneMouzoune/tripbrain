@@ -20,6 +20,7 @@
 
 import type {
   Accommodation,
+  Activity,
   DayItinerary,
   Transport,
 } from '@/lib/itinerary-data'
@@ -132,6 +133,8 @@ interface Stay {
 /** Ce que le recalage sait d'une journée du modèle, avant tout filtrage. */
 interface TemplateDay {
   day: DayItinerary
+  /** Rang de la journée dans le modèle (0 pour la première). */
+  index: number
   /**
    * Jour (compté depuis l'époque) où tombait la journée chez l'auteur. Une
    * journée sans date lisible se situe d'après la première journée datée ;
@@ -180,7 +183,7 @@ function readTemplate(itinerary: readonly DayItinerary[]): TemplateDay[] {
         ? null
         : origin + index
     const previous = index > 0 ? days[index - 1].stay : null
-    days.push({ day, oldDay, stay: stayOf(day, oldDay, previous) })
+    days.push({ day, index, oldDay, stay: stayOf(day, oldDay, previous) })
   })
   return days
 }
@@ -315,19 +318,22 @@ function reroute(
  *    soir de sa première journée au lendemain de sa dernière, à l'heure
  *    d'origine. Si le repreneur a retiré la journée d'arrivée qui portait
  *    l'hébergement, celui-ci passe sur la première journée gardée du séjour ;
- * 5. les trajets qui touchent une ville entièrement retirée (reconnue aussi
- *    dans un nom de gare ou d'aéroport) sont recousus : ils ne gardent de
- *    l'ancien trajet que leur id, leur type et leurs extrémités, tout le
+ * 5. les trajets qui touchent une étape retirée (des journées consécutives
+ *    dans une ville, dont aucune n'est gardée ; voir `removedEnds`) sont
+ *    recousus entre l'étape gardée précédente et la suivante. Ils ne gardent
+ *    de l'ancien trajet que leur id, leur type et leurs extrémités, tout le
  *    reste (`ROUTE_FIELDS`) part avec lui :
  *    - celui qui y va mène désormais à la ville de la journée gardée
  *      suivante (Tokyo → Hakone, sans Hakone, devient Tokyo → Kyoto). Il
  *      disparaît s'il n'y a plus de journée suivante, s'il n'y a plus à
  *      bouger (la suivante est dans sa ville de départ ou dans celle de sa
- *      journée), s'il partait lui aussi d'une ville retirée, ou si la
- *      suivante porte déjà le trajet qui arrive de la ville retirée ;
+ *      journée), s'il partait lui aussi d'une étape retirée, ou si la
+ *      suivante porte déjà le trajet qui arrive de l'étape retirée ;
  *    - celui qui en vient repart de la ville de la journée gardée
- *      précédente — et disparaît s'il repartirait de là où il arrive
- *      (Tokyo → Nikko → Tokyo, sans Nikko).
+ *      précédente (Shanghai → Taipei, sans le 2ᵉ passage à Shanghai, devient
+ *      Zhangjiajie → Taipei) — et disparaît s'il repartirait de là où il
+ *      arrive (Tokyo → Nikko → Tokyo, sans Nikko ; Cần Thơ → Saïgon pour qui
+ *      est déjà à Saïgon).
  *
  * Lève une erreur si `startDate` n'est pas une date, si aucune journée ne
  * reste, ou si le voyage sortirait du calendrier (`tripFitsCalendar`, ou une
@@ -416,13 +422,9 @@ function placeDays(
     }
   }
 
-  // 5 — trajets vers ou depuis une ville entièrement retirée.
+  // 5 — trajets vers ou depuis une étape retirée.
   const cities = cityKeys(itinerary)
-  const keptCities = new Set(days.map((day) => placeKey(day.city)))
-  const isRemovedCity = (place: string | undefined) => {
-    const city = matchCity(place, cities)
-    return city !== null && !keptCities.has(city)
-  }
+  const ends = removedEnds(itinerary, kept, cities)
   /** Le lieu désigne-t-il cette ville, ou une gare, un aéroport qui la nomme ? */
   const isIn = (place: string | undefined, city: string) => {
     const key = placeKey(city)
@@ -431,15 +433,17 @@ function placeDays(
   /** Ville de la journée gardée de ce rang ; `''` hors du voyage ou sans ville. */
   const cityAt = (rank: number) => days[rank]?.city?.trim() ?? ''
   /**
-   * Le trajet de cette journée vient d'une ville retirée et sera recousu
+   * Le trajet de cette journée vient d'une étape retirée et sera recousu
    * depuis l'étape précédente : il dit déjà comment on arrive ici.
    */
-  const arrivesFromRemovedCity = (rank: number) => {
+  const arrivesFromRemovedStop = (rank: number) => {
     const transport = days[rank]?.transport
+    const end = ends[rank]
     return (
       transport !== undefined &&
-      !isRemovedCity(transport.to) &&
-      isRemovedCity(transport.from) &&
+      end !== undefined &&
+      !end.to &&
+      end.from &&
       !isIn(transport.to, cityAt(rank - 1))
     )
   }
@@ -447,31 +451,104 @@ function placeDays(
   return days.map((day, rank) => {
     const transport = day.transport
     if (!transport) return day
+    const end = ends[rank]
 
-    // Vers une ville retirée (trajet rangé au jour du départ) : il mène
+    // Vers une étape retirée (trajet rangé au jour du départ) : il mène
     // désormais à l'étape suivante, sauf s'il n'y a plus d'étape suivante,
     // plus rien à parcourir, ou si l'étape suivante porte déjà le trajet qui
     // y arrive (conventions mêlées : on n'en garde qu'un).
-    if (isRemovedCity(transport.to)) {
+    if (end.to) {
       const next = cityAt(rank + 1)
       if (
         !next ||
-        isRemovedCity(transport.from) ||
+        end.from ||
         isIn(transport.from, next) ||
         isIn(day.city, next) ||
-        arrivesFromRemovedCity(rank + 1)
+        arrivesFromRemovedStop(rank + 1)
       ) {
         return withoutTransport(day)
       }
       return { ...day, transport: reroute(transport, { to: next }) }
     }
 
-    // Depuis une ville retirée (trajet rangé au jour d'arrivée) : il repart
+    // Depuis une étape retirée (trajet rangé au jour d'arrivée) : il repart
     // de l'étape précédente, sauf s'il y reviendrait.
-    if (!isRemovedCity(transport.from)) return day
+    if (!end.from) return day
     const previous = cityAt(rank - 1)
     if (isIn(transport.to, previous)) return withoutTransport(day)
     return { ...day, transport: reroute(transport, { from: previous }) }
+  })
+}
+
+/** Les extrémités d'un trajet qui tombent sur une étape retirée (§3.2.5). */
+interface RemovedEnds {
+  from: boolean
+  to: boolean
+}
+
+/**
+ * Pour le trajet de chaque journée gardée : son départ, son arrivée sont-ils
+ * une étape que le repreneur ne fait plus, à ce moment du voyage ?
+ *
+ * Une étape est une suite de journées consécutives dans la même ville
+ * (Shanghai, Qingdao, …, Shanghai font deux étapes de Shanghai) ; elle est
+ * retirée quand aucune de ses journées n'est gardée. Un lieu de trajet désigne
+ * l'étape de sa ville la plus proche dans le sens du trajet : la précédente
+ * pour un départ, la suivante pour une arrivée, l'étape de la journée qui le
+ * porte d'abord. Un lieu dont la ville n'a aucune étape de ce côté (un retour
+ * vers la ville du départ, hors des étapes) n'est retiré que si sa ville l'est
+ * entièrement.
+ *
+ * Un départ qui ne nomme aucune étape (« Odawara », « Cần Thơ », « Đà Nẵng »)
+ * se déduit de la place du trajet : rangé au premier jour d'une étape et
+ * arrivant dans sa ville, il vient de l'étape d'avant — retirée, son départ
+ * l'est aussi.
+ */
+function removedEnds(
+  itinerary: readonly DayItinerary[],
+  kept: readonly TemplateDay[],
+  cities: readonly string[],
+): RemovedEnds[] {
+  const stages = runsOf(itinerary, (day) => placeKey(day.city))
+  const stageOf: number[] = []
+  stages.forEach((stage, s) => {
+    for (let index = stage.first; index <= stage.last; index++) {
+      stageOf[index] = s
+    }
+  })
+  const keptStages = new Set(kept.map(({ index }) => stageOf[index]))
+  const keptCities = new Set(kept.map(({ day }) => placeKey(day.city)))
+
+  /**
+   * Le lieu, vu de l'étape `own`, est-il une étape retirée ? `step` : +1 pour
+   * une arrivée (on cherche après), −1 pour un départ (on cherche avant).
+   */
+  const isRemovedStop = (
+    place: string | undefined,
+    own: number,
+    step: 1 | -1,
+  ) => {
+    const city = matchCity(place, cities)
+    if (city === null || city === stages[own].key) return false
+    for (let s = own + step; s >= 0 && s < stages.length; s += step) {
+      if (stages[s].key === city) return !keptStages.has(s)
+    }
+    return !keptCities.has(city)
+  }
+
+  return kept.map(({ day, index }) => {
+    const transport = day.transport
+    if (!transport) return { from: false, to: false }
+    const own = stageOf[index]
+    const stage = stages[own]
+    const from =
+      isRemovedStop(transport.from, own, -1) ||
+      (matchCity(transport.from, cities) === null &&
+        matchCity(transport.to, cities) === stage.key &&
+        index === stage.first &&
+        own > 0 &&
+        !keptStages.has(own - 1))
+    return { from, to: isRemovedStop(transport.to, own, 1) }
   })
 }
 
@@ -480,13 +557,13 @@ function placeDays(
 export interface TemplateTodo {
   /**
    * Hébergements distincts (même nom à la casse et aux espaces près), dans
-   * l'ordre du voyage, dont une nuit au moins n'a pas de référence de
-   * réservation. Un hébergement sans nom n'est pas listé.
+   * l'ordre du voyage, dont une nuit au moins reste à réserver
+   * (`needsBooking`). Un hébergement sans nom n'est pas listé.
    */
   accommodations: string[]
-  /** Trajets en train, avion ou bus sans référence (la voiture ne se réserve pas forcément). */
+  /** Trajets en train, avion ou bus qui restent à réserver (`needsBooking`). */
   transports: number
-  /** Activités marquées « réservation nécessaire ». */
+  /** Activités sur réservation qui restent à réserver (`needsBooking`). */
   bookableActivities: number
 }
 
@@ -495,33 +572,82 @@ const BOOKABLE_TRANSPORTS: ReadonlySet<string> = new Set([
   'plane',
   'bus',
 ])
+const TRANSPORT_TYPES: ReadonlySet<string> = new Set([
+  ...BOOKABLE_TRANSPORTS,
+  'car',
+])
+/** Statuts d'un hébergement ou d'un trajet déjà réservé (« Réservé » et la suite). */
+const BOOKED_STATUSES: ReadonlySet<string> = new Set([
+  'booked',
+  'checked-in',
+  'completed',
+])
+/** Une activité faite ou abandonnée ne se réserve plus. */
+const SETTLED_ACTIVITY_STATUSES: ReadonlySet<string> = new Set([
+  'done',
+  'skipped',
+])
 
 function hasReference(value: string | undefined): boolean {
   return typeof value === 'string' && value.trim() !== ''
 }
 
-/** Ce que le repreneur doit encore réserver : un modèle arrive sans aucune référence. */
+/**
+ * La règle unique de « à réserver », pour la bannière de B5 (`templateTodo`)
+ * comme pour la pastille de chaque carte :
+ * - hébergement : ni référence, ni statut « Réservé » (`booked`,
+ *   `checked-in`, `completed`) ;
+ * - trajet : de même, et seulement en train, avion ou bus (la voiture ne se
+ *   réserve pas forcément) ;
+ * - activité : marquée « réservation nécessaire », et ni faite ni
+ *   abandonnée (`done`, `skipped`).
+ *
+ * L'hébergement se reconnaît à son `checkIn` (champ requis), le trajet à son
+ * type (`train`, `car`, `plane`, `bus`) ; le reste est une activité.
+ */
+export function needsBooking(
+  entity: Accommodation | Transport | Activity,
+): boolean {
+  if ('checkIn' in entity) {
+    return (
+      !hasReference(entity.bookingReference) &&
+      !BOOKED_STATUSES.has(entity.status ?? '')
+    )
+  }
+  if (TRANSPORT_TYPES.has(entity.type)) {
+    const transport = entity as Transport
+    return (
+      BOOKABLE_TRANSPORTS.has(transport.type) &&
+      !hasReference(transport.bookingReference) &&
+      !BOOKED_STATUSES.has(transport.status ?? '')
+    )
+  }
+  const activity = entity as Activity
+  return (
+    activity.reservationRequired === true &&
+    !SETTLED_ACTIVITY_STATUSES.has(activity.status ?? '')
+  )
+}
+
+/**
+ * Ce que le repreneur doit encore réserver, d'après `needsBooking` : un
+ * modèle arrive sans référence ni statut, tout y est donc à réserver ; la
+ * bannière se vide à mesure qu'il saisit une référence ou touche « Réservé ».
+ */
 export function templateTodo(itinerary: readonly DayItinerary[]): TemplateTodo {
   const accommodations = new Map<string, string>()
   let transports = 0
   let bookableActivities = 0
   for (const day of itinerary) {
     const accommodation = day.accommodation
-    if (accommodation && !hasReference(accommodation.bookingReference)) {
+    if (accommodation && needsBooking(accommodation)) {
       const name = (accommodation.name ?? '').trim()
       const key = accommodationKey(accommodation)
       if (name && !accommodations.has(key)) accommodations.set(key, name)
     }
-    const transport = day.transport
-    if (
-      transport &&
-      BOOKABLE_TRANSPORTS.has(transport.type) &&
-      !hasReference(transport.bookingReference)
-    ) {
-      transports++
-    }
+    if (day.transport && needsBooking(day.transport)) transports++
     for (const activity of day.activities) {
-      if (activity.reservationRequired === true) bookableActivities++
+      if (needsBooking(activity)) bookableActivities++
     }
   }
   return {
@@ -553,9 +679,14 @@ export interface CityGroupDay {
 export interface CityGroup {
   /** La ville telle qu'écrite sur la première journée de l'étape (peut être vide). */
   city: string
-  days: CityGroupDay[]
-  /** Nuits sur place : le nombre de journées gardées de l'étape. */
-  nights: number
+  /** Les journées de l'étape dans le modèle, gardées ou non. */
+  entries: CityGroupDay[]
+  /**
+   * Nombre de journées gardées de l'étape (« 2 jours » ; 0 : étape retirée).
+   * Des journées, pas des nuits : la dernière étape compte le jour du
+   * départ, et une excursion se dort souvent à l'étape d'avant.
+   */
+  days: number
   /**
    * Dates de la première et de la dernière journée gardée ; `null` si aucune
    * ne l'est (ou sans date de départ valide).
@@ -590,12 +721,14 @@ export function groupDaysByCity(
   })
   return runsOf(itinerary, (day) => placeKey(day.city)).map(
     ({ first, last }) => {
-      const days = entries.slice(first, last + 1)
-      const dates = days.flatMap((day) => (day.date === null ? [] : [day.date]))
+      const stage = entries.slice(first, last + 1)
+      const dates = stage.flatMap((day) =>
+        day.date === null ? [] : [day.date],
+      )
       return {
         city: (itinerary[first].city ?? '').trim(),
-        days,
-        nights: days.filter((day) => day.kept).length,
+        entries: stage,
+        days: stage.filter((day) => day.kept).length,
         range:
           dates.length > 0
             ? { start: dates[0], end: dates[dates.length - 1] }
@@ -632,11 +765,27 @@ export function looksLikeRestDay(
 
 /**
  * Sélection proposée par défaut quand la reprise dure `count` jours, moins que
- * le modèle : on retire d'abord les journées libres ou de repos (en partant de
- * la fin), puis les dernières journées. Le jour 1 reste toujours : c'est
- * l'arrivée, celle qui donne son sens au reste. Les ids sortent dans l'ordre
- * du modèle ; tous si `count` couvre le modèle. Lève une erreur si `count`
- * n'est pas un entier ≥ 1.
+ * le modèle. Le but : un voyage plus court qui garde son itinéraire, plutôt
+ * qu'un voyage amputé de sa fin.
+ *
+ * 1. Le jour 1 (l'arrivée) et le dernier jour (le départ, souvent le vol
+ *    retour) restent toujours — le dernier dès que `count` ≥ 2.
+ * 2. On retire d'abord les journées libres ou de repos (`looksLikeRestDay`),
+ *    en partant de la fin.
+ * 3. Puis on raccourcit les plus longs séjours, une journée à la fois : à
+ *    chaque tour l'étape qui garde le plus de journées (la plus tardive à
+ *    égalité) perd une journée du milieu, jamais sa première, et jamais en
+ *    dessous d'une journée.
+ * 4. Quand chaque étape n'a plus qu'une journée (ou ne peut plus perdre que
+ *    son arrivée ou le jour du départ), on retire des étapes entières, en
+ *    commençant par celle qui comptait le moins de journées dans le modèle
+ *    (la plus tardive à égalité), jamais la première ni la dernière.
+ * 5. S'il faut encore raccourcir (deux ou trois jours demandés), les
+ *    journées restantes partent en partant de la fin.
+ *
+ * Une étape est une suite de journées consécutives dans la même ville, comme
+ * en B4. Les ids sortent dans l'ordre du modèle ; tous si `count` couvre le
+ * modèle. Lève une erreur si `count` n'est pas un entier ≥ 1.
  */
 export function suggestKeptDayIds(
   itinerary: readonly DayItinerary[],
@@ -649,23 +798,79 @@ export function suggestKeptDayIds(
   }
   if (count >= itinerary.length) return itinerary.map((day) => day.id)
 
+  const last = itinerary.length - 1
+  const kept = itinerary.map(() => true)
   let toDrop = itinerary.length - count
-  const dropped = new Set<number>()
-  for (let index = itinerary.length - 1; index > 0 && toDrop > 0; index--) {
-    if (looksLikeRestDay(itinerary[index])) {
-      dropped.add(index)
-      toDrop--
+  /** Le jour 1, et le jour du départ dès qu'on garde deux journées. */
+  const locked = (index: number) =>
+    index === 0 || (index === last && count >= 2)
+  const drop = (index: number) => {
+    kept[index] = false
+    toDrop--
+  }
+
+  // 2 — journées libres ou de repos, de la fin vers le début.
+  for (let index = last; index > 0 && toDrop > 0; index--) {
+    if (!locked(index) && looksLikeRestDay(itinerary[index])) drop(index)
+  }
+
+  // 3 — les plus longs séjours perdent une journée du milieu.
+  const stages = runsOf(itinerary, (day) => placeKey(day.city))
+  const keptIn = (stage: Run) => {
+    const indexes: number[] = []
+    for (let index = stage.first; index <= stage.last; index++) {
+      if (kept[index]) indexes.push(index)
+    }
+    return indexes
+  }
+  /** La journée qu'un séjour peut céder : près du milieu, jamais la première. */
+  const middleOf = (stage: Run): number | null => {
+    const indexes = keptIn(stage)
+    const middle = Math.floor(indexes.length / 2)
+    const candidates = indexes
+      .map((index, position) => ({ index, position }))
+      .filter(({ index, position }) => position > 0 && !locked(index))
+      .sort(
+        (a, b) =>
+          Math.abs(a.position - middle) - Math.abs(b.position - middle) ||
+          b.position - a.position,
+      )
+    return candidates[0]?.index ?? null
+  }
+  while (toDrop > 0) {
+    let longest: { size: number; index: number } | null = null
+    for (let s = stages.length - 1; s >= 0; s--) {
+      const size = keptIn(stages[s]).length
+      if (longest !== null && size <= longest.size) continue
+      const index = middleOf(stages[s])
+      if (index !== null) longest = { size, index }
+    }
+    if (longest === null) break
+    drop(longest.index)
+  }
+
+  // 4 — des étapes entières, les plus courtes du modèle d'abord.
+  const removable = stages
+    .map((stage, s) => ({ stage, s }))
+    .filter(({ s }) => s > 0 && s < stages.length - 1)
+    .sort(
+      (a, b) =>
+        a.stage.last - a.stage.first - (b.stage.last - b.stage.first) ||
+        b.s - a.s,
+    )
+  for (const { stage } of removable) {
+    if (toDrop <= 0) break
+    for (const index of keptIn(stage)) {
+      if (toDrop > 0 && !locked(index)) drop(index)
     }
   }
-  for (let index = itinerary.length - 1; index > 0 && toDrop > 0; index--) {
-    if (!dropped.has(index)) {
-      dropped.add(index)
-      toDrop--
-    }
+
+  // 5 — ce qui reste, de la fin vers le début.
+  for (let index = last; index > 0 && toDrop > 0; index--) {
+    if (kept[index] && !locked(index)) drop(index)
   }
-  return itinerary
-    .filter((_, index) => !dropped.has(index))
-    .map((day) => day.id)
+
+  return itinerary.filter((_, index) => kept[index]).map((day) => day.id)
 }
 
 // ── Mesure ────────────────────────────────────────────────────────────────────

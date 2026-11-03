@@ -4,8 +4,9 @@
 // l'aperçu et la reprise, et un modèle retiré ne doit pas rester repris
 // pendant des minutes. Le site vitrine ne lit que l'index et les modèles par
 // slug, eux en cache.
-// PUT (nouvelle version), PATCH (visibilité, prénom) et DELETE (retrait)
-// exigent le jeton propriétaire dans `Authorization: Bearer`.
+// PUT (nouvelle version, les précédentes supprimées), PATCH (visibilité,
+// prénom, titre) et DELETE (retrait) exigent le jeton propriétaire dans
+// `Authorization: Bearer`.
 
 import { createRateLimiter, getClientKey } from '@/lib/rate-limit'
 import { isTemplateId } from '@/lib/template-model'

@@ -7,8 +7,8 @@ import {
   TemplateRetiredError,
   TemplateTooLargeError,
   TemplateUnavailableError,
+  createOwnerTokenForClient,
   fetchTemplate,
-  fetchTemplateVersion,
   isPublicTemplate,
   patchTemplate,
   publishTemplate,
@@ -19,6 +19,7 @@ import {
   type TemplatePublishInput,
 } from '@/lib/template-api'
 import type { PublicTemplate } from '@/lib/template-model'
+import { isOwnerToken } from '@/lib/template-token'
 import { POST } from '@/app/api/templates/route'
 import {
   DELETE,
@@ -26,7 +27,6 @@ import {
   PATCH,
   PUT,
 } from '@/app/api/templates/[id]/route'
-import { GET as getVersion } from '@/app/api/templates/[id]/v/[n]/route'
 import { memoryTemplateBucket } from './helpers/memory-template-bucket'
 import { japanTrip, transport } from './helpers/template-fixtures'
 
@@ -119,13 +119,8 @@ async function serverFetch(
   init?: RequestInit,
 ): Promise<Response> {
   const request = new Request(new URL(String(input), 'http://localhost'), init)
-  const [, , id, segment, n] = new URL(request.url).pathname
-    .split('/')
-    .filter(Boolean)
+  const [, , id] = new URL(request.url).pathname.split('/').filter(Boolean)
   if (!id) return POST(request)
-  if (segment === 'v') {
-    return getVersion(request, { params: Promise.resolve({ id, n }) })
-  }
   const context = { params: Promise.resolve({ id }) }
   switch (request.method) {
     case 'PUT':
@@ -156,7 +151,11 @@ describe('publishTemplate', () => {
 
     const result = await publishTemplate(japanTrip(), INPUT)
 
-    expect(result).toEqual({ template: template(), ownerToken: TOKEN })
+    expect(result).toEqual({
+      template: template(),
+      ownerToken: TOKEN,
+      created: true,
+    })
     const request = sentRequest(fetchMock)
     expect(request.method).toBe('POST')
     expect(new URL(request.url).pathname).toBe('/api/templates')
@@ -205,6 +204,90 @@ describe('publishTemplate', () => {
     )
     await expect(publishTemplate(japanTrip(), INPUT)).rejects.toBeInstanceOf(
       TypeError,
+    )
+  })
+})
+
+describe('publication rejouable', () => {
+  it('createOwnerTokenForClient tire 32 octets de crypto.getRandomValues, en base64url de 43 caractères', () => {
+    const random = vi.spyOn(crypto, 'getRandomValues')
+    const tokens = Array.from({ length: 200 }, createOwnerTokenForClient)
+    expect(random).toHaveBeenCalledTimes(200)
+    expect(random.mock.calls[0][0]).toHaveLength(32)
+    random.mockRestore()
+    for (const token of tokens) {
+      expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/)
+      expect(isOwnerToken(token)).toBe(true)
+      expect(Buffer.from(token, 'base64url')).toHaveLength(32)
+    }
+    expect(new Set(tokens).size).toBe(tokens.length)
+  })
+
+  it('envoie le jeton du téléphone dans Authorization, et dit si le modèle vient d’être créé', async () => {
+    const token = createOwnerTokenForClient()
+    const created = respondWith(
+      { template: template(), ownerToken: token },
+      201,
+    )
+    const first = await publishTemplate(japanTrip(), INPUT, {
+      ownerToken: token,
+    })
+    expect(first).toEqual({
+      template: template(),
+      ownerToken: token,
+      created: true,
+    })
+    const request = sentRequest(created)
+    expect(request.headers.get('Authorization')).toBe(`Bearer ${token}`)
+    expect(request.headers.get('Content-Type')).toBe('application/json')
+    expect(await request.text()).not.toContain(token)
+
+    respondWith({ template: template(), ownerToken: token }, 200)
+    const again = await publishTemplate(japanTrip(), INPUT, {
+      ownerToken: token,
+    })
+    expect(again.created).toBe(false)
+  })
+
+  it('refuse une réponse dont le jeton n’est pas celui envoyé', async () => {
+    respondWith({ template: template(), ownerToken: TOKEN }, 201)
+    await expect(
+      publishTemplate(japanTrip(), INPUT, {
+        ownerToken: createOwnerTokenForClient(),
+      }),
+    ).rejects.toThrow('Réponse du serveur illisible.')
+  })
+
+  it('contre les routes : une réponse perdue puis rejouée ne publie qu’un modèle', async () => {
+    const token = createOwnerTokenForClient()
+    let lose = true
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const response = await serverFetch(input, init)
+        if (lose) {
+          // Le serveur a publié, mais la réponse n'arrive jamais (tunnel).
+          lose = false
+          throw new TypeError('Failed to fetch')
+        }
+        return response
+      }),
+    )
+
+    await expect(
+      publishTemplate(japanTrip(), INPUT, { ownerToken: token }),
+    ).rejects.toBeInstanceOf(TypeError)
+    const retried = await publishTemplate(japanTrip(), INPUT, {
+      ownerToken: token,
+    })
+
+    expect(retried.created).toBe(false)
+    expect(retried.ownerToken).toBe(token)
+    expect(bucket.keys().filter((key) => key.endsWith('/meta'))).toEqual([
+      `${retried.template.id}/meta`,
+    ])
+    expect((await fetchTemplate(retried.template.id)).id).toBe(
+      retried.template.id,
     )
   })
 })
@@ -258,6 +341,18 @@ describe('écritures de l’auteur', () => {
     const body = await request.text()
     expect(body).not.toContain(TOKEN)
     expect(JSON.parse(body)).not.toHaveProperty('title')
+  })
+
+  it('envoie un nouveau titre par PATCH, ou `null` pour le tirer des étapes', async () => {
+    const fetchMock = respondWith({ template: template({ title: 'Japon' }) })
+    await patchTemplate(ID, TOKEN, { title: 'Japon' })
+    const request = sentRequest(fetchMock)
+    expect(request.method).toBe('PATCH')
+    expect(await request.json()).toEqual({ title: 'Japon' })
+
+    const cleared = respondWith({ template: template() })
+    await patchTemplate(ID, TOKEN, { title: null })
+    expect(await sentRequest(cleared).json()).toEqual({ title: null })
   })
 
   it('traduit 401 et 403 en TemplateForbiddenError', async () => {
@@ -544,7 +639,7 @@ describe('parcours complet contre les routes', () => {
     logged.mockRestore()
   })
 
-  it('publie, met à jour, lit l’ancienne version, masque puis retire', async () => {
+  it('publie, met à jour, renomme, masque puis retire', async () => {
     vi.stubGlobal('fetch', vi.fn(serverFetch))
 
     const { template: published, ownerToken } = await publishTemplate(
@@ -569,10 +664,18 @@ describe('parcours complet contre les routes', () => {
     )
     expect(updated.version).toBe(2)
     expect(updated.dayCount).toBe(2)
+    // Le serveur ne garde que la version publiée.
+    expect(
+      bucket.keys().filter((key) => key.startsWith(`${published.id}/v/`)),
+    ).toEqual([`${published.id}/v/2`])
 
-    const base = await fetchTemplateVersion(published.id, 1)
-    expect(base.version).toBe(1)
-    expect(base.itinerary).toHaveLength(3)
+    const renamed = await patchTemplate(published.id, ownerToken, {
+      title: 'Le Japon, version courte',
+    })
+    expect(renamed).toMatchObject({
+      title: 'Le Japon, version courte',
+      version: 2,
+    })
 
     const hidden = await patchTemplate(published.id, ownerToken, {
       indexable: false,
@@ -587,9 +690,6 @@ describe('parcours complet contre les routes', () => {
 
     await retireTemplate(published.id, ownerToken)
     await expect(fetchTemplate(published.id)).rejects.toBeInstanceOf(
-      TemplateRetiredError,
-    )
-    await expect(fetchTemplateVersion(published.id, 1)).rejects.toBeInstanceOf(
       TemplateRetiredError,
     )
     // Retirer deux fois ne fait pas d'erreur.

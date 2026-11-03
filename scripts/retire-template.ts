@@ -1,8 +1,10 @@
 // Retrait d'un itinéraire modèle par l'opérateur : contenu signalé, abus, ou
 // auteur qui a perdu son téléphone (et avec lui le jeton qui lui permettait
 // de retirer son modèle). Mêmes effets qu'un retrait par l'auteur : pierre
-// tombale, versions supprimées, sortie de l'index public, slug gardé — et
-// avec lui le pays, le nombre de jours et jusqu'à 3 villes qu'il contient.
+// tombale, versions supprimées, sortie de l'index public, slugs gardés — le
+// slug actuel et ceux d'avant une mise à jour, et avec eux le pays, le nombre
+// de jours et jusqu'à 3 villes qu'ils contiennent. Un ancien slug désigne le
+// modèle aussi bien que l'actuel.
 //
 //   bun --no-env-file scripts/retire-template.ts <id|slug|lien>
 //
@@ -93,8 +95,8 @@ export function describeState(state: OperatorTemplateState): string[] {
       `id ${meta.id} · slug ${meta.slug} · version ${meta.version}`,
       versions(versionsLeft, true),
       meta.wasListed
-        ? 'était listé : https://tripbrain.fr/itineraires/<slug> répond 410'
-        : 'n’était pas listé : https://tripbrain.fr/itineraires/<slug> répond 404',
+        ? 'était listé : https://tripbrain.fr/itineraires/<slug> répond 410, anciens slugs compris'
+        : 'n’était pas listé : https://tripbrain.fr/itineraires/<slug> répond 404, anciens slugs compris',
     ]
   }
   return [
@@ -154,6 +156,11 @@ export async function retireTemplateCommand(
     if (before.status === 'missing') {
       deps.error(`Aucun modèle pour « ${ref} ».`)
       return 1
+    }
+    if (isTemplateSlug(ref) && before.meta.slug !== ref) {
+      deps.log(
+        `« ${ref} » est un ancien slug de ce modèle : son slug actuel est ${before.meta.slug}.`,
+      )
     }
 
     const retirement = await retireTemplateAsOperator(bucket, ref, deps.now())

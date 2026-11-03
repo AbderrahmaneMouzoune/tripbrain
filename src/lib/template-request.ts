@@ -78,23 +78,16 @@ const MAX_DECODE_DEPTH = 8
 /** Corps JSON entier : le payload, plus les réglages et le titre. */
 export const TEMPLATE_MAX_BODY_BYTES = TEMPLATE_MAX_PAYLOAD_CHARS + 64 * 1024
 
-/**
- * Une version précise (`/api/templates/<id>/v/<n>`) : son contenu ne change
- * jamais, mais un retrait doit la faire répondre 410 en une minute. D'où pas
- * de `stale-while-revalidate` : le CDN servirait encore le contenu retiré
- * jusqu'à 5 minutes de plus.
- *
- * Le modèle lui-même (`/api/templates/<id>`) n'est jamais mis en cache
- * (`NO_STORE`) : c'est ce que l'app lit pour reprendre, et un modèle retiré ne
- * doit pas rester repris pendant des minutes. Le site vitrine, lui, ne lit
- * que l'index et les modèles par slug.
- */
-export const TEMPLATE_CACHE_CONTROL = 'public, s-maxage=60'
-
 /** Index et pages tripbrain.fr : régénérés au plus toutes les heures. */
 export const TEMPLATE_LISTING_CACHE_CONTROL =
   'public, s-maxage=300, stale-while-revalidate=300'
 
+/**
+ * Tout le reste. Le modèle lui-même (`/api/templates/<id>`) n'est jamais mis
+ * en cache : c'est ce que l'app lit pour reprendre, et un modèle retiré ne
+ * doit pas rester repris pendant des minutes. Le site vitrine, lui, ne lit
+ * que l'index et les modèles par slug.
+ */
 export const NO_STORE = 'no-store'
 
 export const TEMPLATE_NOT_CONFIGURED =
@@ -484,9 +477,16 @@ export interface TemplatePatchRequest {
   indexable?: boolean
   /** `null` efface le prénom. */
   authorName?: string | null
+  /** `null` (ou un titre vide) : tiré des étapes de la version publiée. */
+  title?: string | null
 }
 
-/** `PATCH /api/templates/<id>` : `{ indexable?, authorName? }`, au moins un. */
+/**
+ * `PATCH /api/templates/<id>` : `{ indexable?, authorName?, title? }`, au
+ * moins un. Le titre est borné comme à la publication (espaces resserrées,
+ * `MAX_TEMPLATE_TITLE_LENGTH`, jamais au milieu d'un emoji) : l'écran A4
+ * renomme le modèle sans republier son contenu.
+ */
 export function parseTemplatePatch(
   body: unknown,
 ): ParsedTemplateRequest<TemplatePatchRequest> {
@@ -495,13 +495,31 @@ export function parseTemplatePatch(
   if (!indexable.ok) return indexable
   const authorName = readAuthorName(body.authorName)
   if (!authorName.ok) return authorName
+  const title = readTitle(body.title)
+  if (!title.ok) return title
   const patch: TemplatePatchRequest = {}
   if (indexable.data !== undefined) patch.indexable = indexable.data
   if (authorName.data !== undefined) patch.authorName = authorName.data
+  if (title.data !== undefined) patch.title = title.data
   if (Object.keys(patch).length === 0) {
     return reject(400, 'Aucun réglage à modifier.')
   }
   return accept(patch)
+}
+
+/** `?page=` de l'index : 0 à 999 999, sans signe ni zéro en tête. */
+const INDEX_PAGE = /^(0|[1-9]\d{0,5})$/
+
+/**
+ * `GET /api/templates/index?page=<n>` : la page demandée, 0 si le paramètre
+ * est absent. Tout autre texte (vide, négatif, décimal…) : 400.
+ */
+export function parseIndexPage(
+  value: string | null,
+): ParsedTemplateRequest<number> {
+  if (value === null) return accept(0)
+  if (!INDEX_PAGE.test(value)) return reject(400, 'Page de l’index invalide.')
+  return accept(Number(value))
 }
 
 // ── Réponses ──────────────────────────────────────────────────────────────────
@@ -526,8 +544,8 @@ const STORE_STATUS: Record<TemplateStoreErrorCode, number> = {
   // Un retrait qui n'a pas atteint l'index : l'écriture est faite, il reste à
   // la rejouer. 503 dit au client d'échouer et à l'auteur de réessayer.
   index: 503,
-  // Un retrait dont les versions n'ont pas été supprimées : de même, rejoué,
-  // il les supprime.
+  // Un retrait, ou une mise à jour, dont les versions (anciennes, pour la
+  // mise à jour) n'ont pas été supprimées : de même, rejoué, il les supprime.
   versions: 503,
 }
 

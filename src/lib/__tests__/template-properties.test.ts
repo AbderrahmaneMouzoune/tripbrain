@@ -61,6 +61,7 @@ import {
   durationChoice,
   groupDaysByCity,
   looksLikeRestDay,
+  needsBooking,
   retimeTemplate,
   suggestKeptDayIds,
   templateTodo,
@@ -456,6 +457,74 @@ interface RetimeCase {
   itinerary: DayItinerary[]
   keptDayIds: string[]
   startDate: string
+}
+
+interface RefStage {
+  key: string
+  first: number
+  last: number
+}
+
+/** Étapes du modèle : suites maximales de journées consécutives de même ville. */
+function refStages(itinerary: readonly DayItinerary[]): RefStage[] {
+  const stages: RefStage[] = []
+  itinerary.forEach((day, index) => {
+    const key = refPlaceKey(day.city)
+    const current = stages[stages.length - 1]
+    if (current && current.key === key) current.last = index
+    else stages.push({ key, first: index, last: index })
+  })
+  return stages
+}
+
+/**
+ * Oracle du §3.2.5 : le départ, l'arrivée du trajet de la journée `index`
+ * tombent-ils sur une étape retirée ? Un lieu désigne l'étape de sa ville la
+ * plus proche dans le sens du trajet (celle de la journée d'abord) ; sans
+ * étape de ce côté, sa ville entière. Un départ inconnu, au premier jour d'une
+ * étape où le trajet arrive, vient de l'étape d'avant.
+ */
+function refRemovedEnds(
+  input: RetimeCase,
+  index: number,
+): { from: boolean; to: boolean } {
+  const { itinerary } = input
+  const transport = itinerary[index].transport
+  if (!transport) return { from: false, to: false }
+  const keptIds = new Set(input.keptDayIds)
+  const cities = [
+    ...new Set(itinerary.map((day) => refPlaceKey(day.city)).filter(Boolean)),
+  ]
+  const stages = refStages(itinerary)
+  const own = stages.findIndex(
+    (stage) => index >= stage.first && index <= stage.last,
+  )
+  const stageKept = (stage: RefStage) =>
+    itinerary
+      .slice(stage.first, stage.last + 1)
+      .some((day) => keptIds.has(day.id))
+  const cityKept = (city: string) =>
+    itinerary.some(
+      (day) => keptIds.has(day.id) && refPlaceKey(day.city) === city,
+    )
+  const removed = (place: string | undefined, direction: 1 | -1) => {
+    const city = refMatchCity(place, cities)
+    if (city === null || city === stages[own].key) return false
+    const side =
+      direction === 1 ? stages.slice(own + 1) : stages.slice(0, own).reverse()
+    const nearest = side.find((stage) => stage.key === city)
+    return nearest ? !stageKept(nearest) : !cityKept(city)
+  }
+  const inferred =
+    refMatchCity(transport.from, cities) === null &&
+    refMatchCity(transport.to, cities) === stages[own].key &&
+    index === stages[own].first &&
+    own > 0 &&
+    !stageKept(stages[own - 1])
+  return {
+    from: removed(transport.from, -1) || inferred,
+    to: removed(transport.to, 1),
+  }
 }
 
 function keptCount(input: RetimeCase): number {
@@ -1162,7 +1231,7 @@ describe('propriétés — retimeTemplate', () => {
   )
 
   it(
-    'ne garde aucun trajet vers ou depuis une ville entièrement retirée',
+    'ne garde aucun trajet vers ou depuis une étape retirée, ni une ville entièrement retirée',
     () => {
       checkProperty(
         'recalage : trajets',
@@ -1181,13 +1250,16 @@ describe('propriétés — retimeTemplate', () => {
             const city = refMatchCity(place, cities)
             return city !== null && !keptCities.has(city)
           }
-          for (const { rank, day, offset } of keptDays(input)) {
+          for (const { rank, index, day, offset } of keptDays(input)) {
             const out = output[rank].transport
             const source = day.transport
             if (!source) {
               expect(out).toBeUndefined()
               continue
             }
+            const ends = refRemovedEnds(input, index)
+            // Parti d'une étape retirée pour une étape retirée : il ne décrit plus rien.
+            if (ends.from && ends.to) expect(out).toBeUndefined()
             if (!out) continue
             expect(out.id).toBe(source.id)
             expect(out.type).toBe(source.type)
@@ -1195,16 +1267,13 @@ describe('propriétés — retimeTemplate', () => {
               throw new Error(`vers une ville retirée : ${out.to}`)
             if (removed(out.from))
               throw new Error(`depuis une ville retirée : ${out.from}`)
-            const touched = removed(source.to) || removed(source.from)
-            if (!touched) {
+            const moved = { ...refShiftDeep(source, offset), id: source.id }
+            if (!ends.from && !ends.to) {
               // Intact, à part le glissement des dates.
-              expect(out).toEqual({
-                ...refShiftDeep(source, offset),
-                id: source.id,
-              })
+              expect(out).toEqual(moved)
               continue
             }
-            // Recousu : il ne garde que son id, son type et ses extrémités.
+            // Recousu : il ne garde que son id, son type et ses extrémités…
             for (const key of Object.keys(out)) {
               expect([
                 'id',
@@ -1214,6 +1283,15 @@ describe('propriétés — retimeTemplate', () => {
                 'source',
                 'priority',
               ]).toContain(key)
+            }
+            // … entre l'étape gardée précédente et la suivante.
+            const cityAt = (k: number) => output[k]?.city.trim() ?? ''
+            if (ends.to) {
+              expect(out.to).toBe(cityAt(rank + 1))
+              expect(out.from).toBe(moved.from)
+            } else {
+              expect(out.to).toBe(moved.to)
+              expect(out.from ?? '').toBe(cityAt(rank - 1))
             }
             const from = refMatchCity(out.from, cities)
             const to = refMatchCity(out.to, cities)
@@ -1271,7 +1349,7 @@ describe('propriétés — groupDaysByCity, suggestKeptDayIds, durationChoice', 
             input.keptDayIds,
             input.startDate,
           )
-          const entries = groups.flatMap((group) => group.days)
+          const entries = groups.flatMap((group) => group.entries)
           expect(entries.map((entry) => entry.id)).toEqual(
             input.itinerary.map((day) => day.id),
           )
@@ -1283,15 +1361,16 @@ describe('propriétés — groupDaysByCity, suggestKeptDayIds, durationChoice', 
             entries.filter((entry) => entry.kept).map((entry) => entry.date),
           ).toEqual(retimed.map((day) => day.date))
           for (const group of groups) {
-            const kept = group.days.filter((day) => day.kept)
-            expect(group.nights).toBe(kept.length)
+            const kept = group.entries.filter((day) => day.kept)
+            expect(group.days).toBe(kept.length)
+            expect(group).not.toHaveProperty('nights')
             expect(group.range).toEqual(
               kept.length > 0
                 ? { start: kept[0].date, end: kept[kept.length - 1].date }
                 : null,
             )
             const keys = new Set(
-              group.days.map((entry) =>
+              group.entries.map((entry) =>
                 refPlaceKey(input.itinerary[entry.dayNumber - 1].city),
               ),
             )
@@ -1324,7 +1403,7 @@ describe('propriétés — groupDaysByCity, suggestKeptDayIds, durationChoice', 
           const groups = groupDaysByCity(itinerary, keptDayIds, startDate)
           for (const group of groups) {
             expect(group.range).toBeNull()
-            for (const day of group.days) expect(day.date).toBeNull()
+            for (const day of group.entries) expect(day.date).toBeNull()
           }
         },
       )
@@ -1333,7 +1412,7 @@ describe('propriétés — groupDaysByCity, suggestKeptDayIds, durationChoice', 
   )
 
   it(
-    'propose exactement min(durée, n) journées, jour 1 compris, journées libres d’abord retirées',
+    'propose exactement min(durée, n) journées : jour 1 et départ gardés, journées libres d’abord, puis les plus longs séjours, puis les étapes les plus courtes',
     () => {
       checkProperty(
         'sélection par défaut',
@@ -1343,8 +1422,12 @@ describe('propriétés — groupDaysByCity, suggestKeptDayIds, durationChoice', 
         },
         ({ itinerary, count }) => {
           const ids = suggestKeptDayIds(itinerary, count)
-          expect(ids).toHaveLength(Math.min(count, itinerary.length))
+          const n = itinerary.length
+          expect(ids).toHaveLength(Math.min(count, n))
           expect(ids[0]).toBe(itinerary[0].id)
+          expect(durationChoice(n, ids.length)).toBe(
+            count < n ? 'shorter' : 'same',
+          )
           // Ids distincts dans ces voyages : on retrouve les rangs gardés.
           const keptIndexes = ids.map((id) =>
             itinerary.findIndex((day) => day.id === id),
@@ -1352,20 +1435,84 @@ describe('propriétés — groupDaysByCity, suggestKeptDayIds, durationChoice', 
           for (let k = 1; k < keptIndexes.length; k++) {
             expect(keptIndexes[k]).toBeGreaterThan(keptIndexes[k - 1])
           }
+          if (count >= n || count === 1) return
+          const last = n - 1
+          const kept = new Set(keptIndexes)
+          // Le jour du départ reste dès qu'on garde deux journées.
+          expect(kept.has(last)).toBe(true)
+
+          const locked = (index: number) => index === 0 || index === last
+          const freeDay = (index: number) =>
+            !locked(index) && looksLikeRestDay(itinerary[index])
           const dropped = itinerary
             .map((_, index) => index)
-            .filter((index) => !keptIndexes.includes(index))
-          const restDays = itinerary
-            .map((day, index) => ({ day, index }))
-            .filter(({ day, index }) => index > 0 && looksLikeRestDay(day))
-            .map(({ index }) => index)
-          if (dropped.some((index) => !restDays.includes(index))) {
-            // On n'a sacrifié une vraie journée qu'une fois les libres parties.
-            for (const index of restDays) expect(dropped).toContain(index)
+            .filter((index) => !kept.has(index))
+          // On n'a sacrifié une vraie journée qu'une fois les libres parties.
+          if (dropped.some((index) => !freeDay(index))) {
+            for (let index = 0; index < n; index++) {
+              if (freeDay(index)) expect(kept.has(index)).toBe(false)
+            }
+          } else {
+            return
           }
-          expect(durationChoice(itinerary.length, ids.length)).toBe(
-            count < itinerary.length ? 'shorter' : 'same',
-          )
+
+          const stages = refStages(itinerary)
+          const range = (stage: RefStage) =>
+            Array.from(
+              { length: stage.last - stage.first + 1 },
+              (_, k) => stage.first + k,
+            )
+          const keptIn = (stage: RefStage) =>
+            range(stage).filter((index) => kept.has(index))
+          const sizes = stages.map((stage) => keptIn(stage).length)
+          const shortenable = (stage: RefStage) =>
+            keptIn(stage)
+              .slice(1)
+              .some((index) => !locked(index))
+          const middles = stages
+            .map((stage, s) => ({ stage, s }))
+            .filter(({ s }) => s > 0 && s < stages.length - 1)
+
+          stages.forEach((stage, s) => {
+            if (sizes[s] === 0) return
+            // Un séjour raccourci l'a été parce qu'il était parmi les plus longs.
+            const shortened = range(stage).some(
+              (index) => !kept.has(index) && !freeDay(index),
+            )
+            if (shortened) {
+              stages.forEach((other, t) => {
+                if (shortenable(other)) {
+                  expect(sizes[t]).toBeLessThanOrEqual(sizes[s] + 1)
+                }
+              })
+            }
+            // Un séjour garde son arrivée (sa première journée qui n'est pas
+            // libre) — sauf la dernière étape réduite au jour du départ,
+            // quand toutes les autres étapes sont déjà parties.
+            const arrival = range(stage).find((index) => !freeDay(index))
+            if (arrival === undefined) return
+            const lastStageReduced =
+              s === stages.length - 1 &&
+              middles.every(({ s: m }) => sizes[m] === 0)
+            if (!lastStageReduced) expect(kept.has(arrival)).toBe(true)
+          })
+
+          // Une étape entière (avec une vraie journée) ne part que quand
+          // chaque étape est à une journée, la plus courte du modèle d'abord.
+          for (const { stage, s } of middles) {
+            if (sizes[s] > 0 || range(stage).every(freeDay)) continue
+            stages.forEach((other, t) => {
+              expect(sizes[t]).toBeLessThanOrEqual(
+                t === stages.length - 1 ? 2 : 1,
+              )
+            })
+            for (const { stage: other, s: t } of middles) {
+              if (sizes[t] === 0) continue
+              const a = stage.last - stage.first
+              const b = other.last - other.first
+              expect(a < b || (a === b && s > t)).toBe(true)
+            }
+          }
         },
       )
     },
@@ -1472,6 +1619,11 @@ function randomTemplateId(rng: Rng): string {
 
 const SLUG_CHARS = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
+/** La durée accordée : `1-jour`, `2-jours`… */
+function refSlugDuration(dayCount: number): string {
+  return dayCount === 1 ? '1-jour' : `${dayCount}-jours`
+}
+
 describe('propriétés — slug', () => {
   it(
     'templateSlug donne toujours un slug de modèle valide, tête intacte',
@@ -1481,7 +1633,7 @@ describe('propriétés — slug', () => {
         slugInput,
         (input) => {
           const slug = templateSlug(input)
-          const head = `${countrySlug(input.country)}-${input.dayCount}-jours`
+          const head = `${countrySlug(input.country)}-${refSlugDuration(input.dayCount)}`
           expect(isTemplateSlug(slug)).toBe(true)
           expect(slug.length).toBeLessThanOrEqual(MAX_SLUG_LENGTH)
           expect(slug).toMatch(SLUG_CHARS)
@@ -1506,7 +1658,7 @@ describe('propriétés — slug', () => {
         }),
         ({ input, attempt, id, length }) => {
           const slug = templateSlug(input)
-          const head = `${countrySlug(input.country)}-${input.dayCount}-jours`
+          const head = `${countrySlug(input.country)}-${refSlugDuration(input.dayCount)}`
           expect(suffixedSlug(slug, 1)).toBe(slug)
           const variants = [
             [suffixedSlug(slug, attempt), `-${attempt}`],
@@ -1939,6 +2091,54 @@ describe('propriétés — sensitiveSpans et noteExcerpts', () => {
     },
     TIMEOUT,
   )
+  it(
+    'montre d’abord les notes les plus graves : contact, 6 chiffres, nom, 4–5 chiffres',
+    () => {
+      const gravity = (spans: readonly SensitiveSpan[], text: string) =>
+        Math.min(
+          4,
+          ...spans.map((span) => {
+            if (span.kind === 'phone' || span.kind === 'email') return 0
+            const slice = text.slice(span.start, span.end)
+            if (span.kind === 'digits' && slice.length >= 6) return 1
+            return span.kind === 'name' ? 2 : 3
+          }),
+        )
+      checkProperty(
+        'extraits par gravité',
+        (rng) => ({
+          itinerary: randomItinerary(rng, { maxDays: 10 }),
+          limit: rng.int(1, 4),
+        }),
+        ({ itinerary, limit }) => {
+          const places = templateKnownPlaces(itinerary)
+          const notes = new Map<string, number>()
+          for (const day of itinerary) {
+            for (const note of [day.notes, day.transport?.notes]) {
+              const text = (note ?? '').trim()
+              if (text && !notes.has(text)) {
+                notes.set(text, gravity(sensitiveSpans(text, places), text))
+              }
+            }
+          }
+          const shown = noteExcerpts(itinerary, limit).map((excerpt) =>
+            noteOf(itinerary, excerpt.dayId, excerpt.source),
+          )
+          const worstShown = Math.max(
+            -1,
+            ...shown.map((text) => notes.get(text) ?? 4),
+          )
+          for (const [text, level] of notes) {
+            if (!shown.includes(text)) {
+              expect(level).toBeGreaterThanOrEqual(worstShown)
+            }
+          }
+        },
+        { shrinkValid: (input) => isTypedItinerary(input.itinerary) },
+      )
+    },
+    TIMEOUT,
+  )
 })
 
 // ── Bornes de `templateKnownPlaces` ───────────────────────────────────────────
@@ -1949,9 +2149,25 @@ describe('propriétés — templateKnownPlaces', () => {
     () => {
       checkProperty(
         'lieux du voyage',
-        (rng) => randomItinerary(rng),
-        (itinerary) => {
-          const places = templateKnownPlaces(itinerary)
+        (rng) => ({
+          itinerary: randomItinerary(rng),
+          title: rng.bool() ? randomUnicode(rng, 30) : undefined,
+        }),
+        ({ itinerary, title }) => {
+          const places = templateKnownPlaces(itinerary, title)
+          if (title !== undefined && title.trim() !== '') {
+            expect(places[0]).toBe(title.trim())
+          }
+          for (const day of itinerary) {
+            const provider = day.transport?.provider?.trim()
+            if (provider) {
+              expect(
+                places.some(
+                  (place) => place.toLowerCase() === provider.toLowerCase(),
+                ),
+              ).toBe(true)
+            }
+          }
           for (const place of places) {
             expect(place).toBe(place.trim())
             expect(place).not.toBe('')
@@ -1966,7 +2182,11 @@ describe('propriétés — templateKnownPlaces', () => {
           )
           expect(new Set(keys).size).toBe(keys.length)
         },
-        { shrinkValid: isTypedItinerary },
+        {
+          shrinkValid: (input) =>
+            isTypedItinerary(input.itinerary) &&
+            (input.title === undefined || typeof input.title === 'string'),
+        },
       )
     },
     TIMEOUT,
@@ -2008,6 +2228,58 @@ describe('propriétés — templateTodo et tripYear', () => {
           )
         },
         { shrinkValid: isValidRetimeCase },
+      )
+    },
+    TIMEOUT,
+  )
+
+  it(
+    'une seule règle « à réserver » : la bannière compte ce que needsBooking signale',
+    () => {
+      const blank = (value: string | undefined) => (value ?? '').trim() === ''
+      const booked = (status: string | undefined) =>
+        ['booked', 'checked-in', 'completed'].includes(status ?? '')
+      checkProperty(
+        'needsBooking',
+        (rng) => randomItinerary(rng, { maxDays: 12 }),
+        (itinerary) => {
+          const hotels = new Map<string, string>()
+          let transports = 0
+          let activities = 0
+          for (const day of itinerary) {
+            const stay = day.accommodation
+            if (stay) {
+              const expected =
+                blank(stay.bookingReference) && !booked(stay.status)
+              expect(needsBooking(stay)).toBe(expected)
+              const name = stay.name.trim()
+              const key = refStayKey(stay)
+              if (expected && name && !hotels.has(key)) hotels.set(key, name)
+            }
+            const transport = day.transport
+            if (transport) {
+              const expected =
+                ['train', 'plane', 'bus'].includes(transport.type) &&
+                blank(transport.bookingReference) &&
+                !booked(transport.status)
+              expect(needsBooking(transport)).toBe(expected)
+              if (expected) transports++
+            }
+            for (const activity of day.activities) {
+              const expected =
+                activity.reservationRequired === true &&
+                !['done', 'skipped'].includes(activity.status ?? '')
+              expect(needsBooking(activity)).toBe(expected)
+              if (expected) activities++
+            }
+          }
+          expect(templateTodo(itinerary)).toEqual({
+            accommodations: [...hotels.values()],
+            transports,
+            bookableActivities: activities,
+          })
+        },
+        { shrinkValid: isTypedItinerary },
       )
     },
     TIMEOUT,
@@ -2273,7 +2545,7 @@ describe('défauts corrigés (anciens it.fails, gardés en non-régression)', ()
         options.keptDayIds,
         options.startDate,
       )
-      for (const entry of groups.flatMap((group) => group.days)) {
+      for (const entry of groups.flatMap((group) => group.entries)) {
         if (entry.date !== null) expect(isIsoDate(entry.date)).toBe(true)
       }
 

@@ -16,7 +16,7 @@
 // attendu. Le jour où il est corrigé, le test passe au rouge : remplacer
 // `it.fails` par `it`.
 
-import { createHash, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { inspect } from 'node:util'
 import { encode } from '@msgpack/msgpack'
 import { POST } from '@/app/api/templates/route'
@@ -26,7 +26,6 @@ import {
   PATCH,
   PUT,
 } from '@/app/api/templates/[id]/route'
-import { GET as getVersion } from '@/app/api/templates/[id]/v/[n]/route'
 import { GET as getBySlug } from '@/app/api/templates/by-slug/[slug]/route'
 import { GET as getIndex } from '@/app/api/templates/index/route'
 import type { DayItinerary } from '@/lib/itinerary-data'
@@ -80,7 +79,6 @@ vi.mock('@/lib/template-bucket', async () => {
 const bucket = memoryTemplateBucket
 
 const NO_STORE = 'no-store'
-const VERSION_CACHE = 'public, s-maxage=60'
 const LISTING_CACHE = 'public, s-maxage=300, stale-while-revalidate=300'
 const NOT_ALLOWED = 'Cet appareil n’est pas autorisé à modifier ce modèle.'
 
@@ -168,11 +166,9 @@ function read(id: string) {
   )
 }
 
-function readVersion(id: string, n: string) {
-  return getVersion(
-    new Request(`http://localhost/api/templates/${id}/v/${n}`),
-    { params: Promise.resolve({ id, n }) },
-  )
+/** `GET /api/templates/index`, avec sa requête (`?page=1`) au besoin. */
+function readIndex(query = '') {
+  return getIndex(new Request(`http://localhost/api/templates/index${query}`))
 }
 
 function readBySlug(slug: string) {
@@ -224,23 +220,16 @@ async function surface(name: string, response: Response): Promise<Surface> {
   }
 }
 
-/** Tout ce que l'API publique répond sur un modèle : par id, versions, slug, index. */
-async function publicSurfaces(
-  id: string,
-  slug: string,
-  versions: number,
-): Promise<Surface[]> {
-  const surfaces = [
+/**
+ * Tout ce que l'API publique répond sur un modèle : par id, slug, index.
+ * Aucune route ne sert une version précise : seule la publiée existe.
+ */
+async function publicSurfaces(id: string, slug: string): Promise<Surface[]> {
+  return [
     await surface(`GET /api/templates/${id}`, await read(id)),
     await surface(`GET by-slug/${slug}`, await readBySlug(slug)),
-    await surface('GET index', await getIndex()),
+    await surface('GET index', await readIndex()),
   ]
-  for (let n = 1; n <= versions; n++) {
-    surfaces.push(
-      await surface(`GET ${id}/v/${n}`, await readVersion(id, String(n))),
-    )
-  }
-  return surfaces
 }
 
 /** Chaque objet du bucket, sérialisé : ce qu'une fuite de R2 donnerait. */
@@ -532,7 +521,7 @@ describe('(a) aucune donnée retirée ne ressort d’un modèle publié', () => 
         cacheControl: null,
         text: published.text,
       },
-      ...(await publicSurfaces(id, slug, 1)),
+      ...(await publicSurfaces(id, slug)),
       ...bucketSurfaces(),
     ]
     expect(surfaces.filter((s) => s.status >= 400)).toEqual([])
@@ -761,7 +750,7 @@ async function leakedLinks(
 ): Promise<string[]> {
   const { template } = await publish(linkTrip(cases), extra)
   const surfaces = [
-    ...(await publicSurfaces(template.id, template.slug, 1)),
+    ...(await publicSurfaces(template.id, template.slug)),
     ...bucketSurfaces(),
   ]
   const texts = surfaces.flatMap((s) =>
@@ -892,62 +881,108 @@ describe('(a) notes, prix et dates', () => {
     const { template } = await publish(tripWithNotes())
     expect(template.includesNotes).toBe(false)
     const surfaces = [
-      ...(await publicSurfaces(template.id, template.slug, 1)),
+      ...(await publicSurfaces(template.id, template.slug)),
       ...bucketSurfaces(),
     ]
     expect(plantedLeaks(surfaces)).toEqual([])
   })
 
-  it.fails(
-    'défaut : une mise à jour qui retire les notes ne les laisse pas publiques dans l’ancienne version',
-    async () => {
-      const { template, ownerToken } = await publish(tripWithNotes(), {
-        options: { includeNotes: true, includePrices: true },
-      })
-      expect(JSON.stringify(template)).toContain('PRIV-note')
-      // L'auteur se ravise : notes et prix retirés.
-      const updated = await put(
-        template.id,
-        {
-          data: await compressItinerary(tripWithNotes()),
-          options: { includeNotes: false, includePrices: false },
-        },
-        bearer(ownerToken),
-      )
-      expect(updated.status).toBe(200)
-      expect(await (await read(template.id)).text()).not.toContain('PRIV-note')
-      // La version 1, publique et en cache CDN, sert encore les notes et le prix.
-      const v1 = await (await readVersion(template.id, '1')).text()
-      expect(v1).not.toContain('PRIV-note')
-      expect(v1).not.toContain('987654')
-    },
-  )
+  it('une mise à jour qui retire les notes ne les laisse nulle part, ni en ligne ni dans R2', async () => {
+    const { template, ownerToken } = await publish(tripWithNotes(), {
+      options: { includeNotes: true, includePrices: true },
+    })
+    expect(JSON.stringify(template)).toContain('PRIV-note')
+    // L'auteur se ravise : notes et prix retirés.
+    const updated = await put(
+      template.id,
+      {
+        data: await compressItinerary(tripWithNotes()),
+        options: { includeNotes: false, includePrices: false },
+      },
+      bearer(ownerToken),
+    )
+    expect(updated.status).toBe(200)
+    expect(await (await read(template.id)).text()).not.toContain('PRIV-note')
+    // La version 1 est supprimée : la base de fusion de la V1.1 vit sur le
+    // téléphone du repreneur, rien ne sert plus une ancienne version.
+    expect(
+      bucket.keys().filter((key) => key.startsWith(`${template.id}/v/`)),
+    ).toEqual([templateVersionKey(template.id, 2)])
+    const surfaces = [
+      ...(await publicSurfaces(template.id, template.slug)),
+      ...bucketSurfaces(),
+    ]
+    expect(plantedLeaks(surfaces)).toEqual([])
+    expect(surfaces.filter((s) => s.text.includes('987654'))).toEqual([])
+  })
 
-  it.fails(
-    'défaut : les réponses publiques ne donnent pas les dates exactes d’un voyage à venir',
-    async () => {
-      // Voyage préparé, pas encore fait (spec §2 : « ou l'a préparé »).
-      const { template } = await publish([
-        day(1, {
-          date: '2027-04-03',
-          accommodation: hotel({
-            checkIn: '2027-04-03T15:00',
-            checkOut: '2027-04-05T11:00',
-          }),
+  it('les réponses publiques ne donnent pas les dates exactes d’un voyage à venir', async () => {
+    // Voyage préparé, pas encore fait (spec §2 : « ou l'a préparé »), au
+    // départ le samedi 17 avril 2027. Publié, il recule de deux semaines
+    // (`blurTemplateDates`) : samedi 3 avril. Un voyage parti le 3 aurait
+    // donné le même modèle — c'est ce qui cache le vrai quantième.
+    const { template } = await publish([
+      day(1, {
+        date: '2027-04-17',
+        accommodation: hotel({
+          checkIn: '2027-04-17T15:00',
+          checkOut: '2027-04-19T11:00',
         }),
-        day(2, {
-          date: '2027-04-04',
-          transport: transport({ departureTime: '2027-04-04T09:12' }),
+      }),
+      day(2, {
+        date: '2027-04-18',
+        transport: transport({ departureTime: '2027-04-18T09:12' }),
+      }),
+    ])
+    expect(template.listed).toBe(true)
+    expect(template.tripYear).toBe(2027)
+    expect(template.itinerary.map((d) => d.date)).toEqual([
+      '2027-04-03',
+      '2027-04-04',
+    ])
+    for (const s of [
+      ...(await publicSurfaces(template.id, template.slug)),
+      ...bucketSurfaces(),
+    ]) {
+      // Les maquettes B2 et C1 n'affichent que « avr. 2027 ».
+      expect(s.text, s.name).not.toMatch(/2027-04-1[789]/)
+    }
+  })
+
+  it('ni quand le jour 1 n’a pas de date : le flou se repère sur la première journée datée', async () => {
+    // Jour 1 « à définir », puis les 18 et 19 avril 2027 : sans ce repère,
+    // les dates exactes (et la nuit d'hôtel) partaient telles quelles.
+    const { template } = await publish([
+      day(1, { date: '' }),
+      day(2, {
+        date: '2027-04-18',
+        accommodation: hotel({
+          checkIn: '2027-04-18T15:00',
+          checkOut: '2027-04-19T11:00',
         }),
-      ])
-      expect(template.listed).toBe(true)
-      expect(template.tripYear).toBe(2027)
-      for (const s of await publicSurfaces(template.id, template.slug, 1)) {
-        // Les maquettes B2 et C1 n'affichent que « avr. 2027 ».
-        expect(s.text, s.name).not.toMatch(/2027-04-0[345]/)
-      }
-    },
-  )
+      }),
+      day(3, {
+        date: '2027-04-19',
+        transport: transport({ departureTime: '2027-04-19T09:12' }),
+      }),
+    ])
+    expect(template.tripYear).toBe(2027)
+    expect(template.itinerary.map((d) => d.date)).toEqual([
+      '',
+      '2027-04-04',
+      '2027-04-05',
+    ])
+    const surfaces = [
+      ...(await publicSurfaces(template.id, template.slug)),
+      ...bucketSurfaces(),
+    ]
+    for (const s of surfaces) {
+      expect(s.text, s.name).not.toMatch(/2027-04-1[89]/)
+    }
+    for (const key of bucket.keys()) {
+      expect(key).not.toMatch(/2027-04-1[89]/)
+    }
+  })
 })
 
 // ── (b) Jeton propriétaire ────────────────────────────────────────────────────
@@ -975,12 +1010,12 @@ describe('(b) jeton propriétaire', () => {
         'PATCH',
         await patch(id, { authorName: 'Léa' }, bearer(token)),
       ),
-      ...(await publicSurfaces(id, slug, 2)),
+      ...(await publicSurfaces(id, slug)),
       await surface('DELETE', await remove(id, bearer(token))),
-      ...(await publicSurfaces(id, slug, 2)),
+      ...(await publicSurfaces(id, slug)),
     ]
     expect(surfaces.map((s) => s.status)).toEqual([
-      200, 200, 200, 200, 200, 200, 200, 200, 410, 410, 200, 410, 410,
+      200, 200, 200, 200, 200, 200, 410, 410, 200,
     ])
     for (const s of surfaces) {
       expect(s.text, s.name).not.toContain(token)
@@ -994,9 +1029,40 @@ describe('(b) jeton propriétaire', () => {
     })
   })
 
+  it('jeton tiré par le téléphone : seulement dans les réponses à sa publication, jamais stocké', async () => {
+    const token = randomBytes(32).toString('base64url')
+    const hash = createHash('sha256').update(token).digest('hex')
+    const send = async () =>
+      POST(
+        jsonRequest(
+          '/api/templates',
+          'POST',
+          { data: await compressItinerary(twoDays()), country: 'JP' },
+          bearer(token),
+        ),
+      )
+    const first = await surface('POST', await send())
+    const replay = await surface('POST rejoué', await send())
+    expect([first.status, replay.status]).toEqual([201, 200])
+    for (const s of [first, replay]) {
+      expect(JSON.parse(s.text).ownerToken).toBe(token)
+      expect(s.text).not.toContain(hash)
+    }
+    const { id, slug } = JSON.parse(first.text).template
+    for (const s of await publicSurfaces(id, slug)) {
+      expect(s.text, s.name).not.toContain(token)
+      expect(s.text, s.name).not.toContain(hash)
+    }
+    for (const s of bucketSurfaces()) {
+      expect(s.text, s.name).not.toContain(token)
+    }
+    // L'empreinte, elle, nomme la réservation et reste dans la méta.
+    expect(bucket.peek(`owners/${hash}`)).toEqual({ id })
+  })
+
   it('les réglages de publication et la réponse de lecture ne portent ni jeton ni empreinte', async () => {
     const { template, ownerToken } = await publish()
-    const index = await (await getIndex()).text()
+    const index = await (await readIndex()).text()
     const meta = await (await read(template.id)).text()
     for (const text of [index, meta]) {
       expect(text).not.toContain(ownerToken)
@@ -1244,7 +1310,10 @@ describe('(c) énumération', () => {
     // Un slug malformé non plus ne dit rien de plus.
     expect(await notFoundShape('JAPON-2-jours')).toEqual(unknown)
     // L'index ne liste aucun d'eux.
-    expect(await (await getIndex()).json()).toEqual({ entries: [] })
+    expect(await (await readIndex()).json()).toEqual({
+      entries: [],
+      nextPage: null,
+    })
   })
 
   it('un modèle listé puis retiré répond 410 par son slug (page à sortir des moteurs)', async () => {
@@ -1384,12 +1453,12 @@ describe('(d) contenu injecté que les pages SEO afficheront', () => {
     expect(first.images).toEqual([{ url: quotedImage, caption: ONERROR }])
     expect(first.transport?.bookingUrl).toBe(quotedUrl)
 
-    const index = (await (await getIndex()).json()).entries
+    const index = (await (await readIndex()).json()).entries
     expect(index[0].title).toBe(`Japon ${SCRIPT}`)
     // Un schéma dangereux ne reste que dans du texte libre (nom d'activité,
     // conseil), jamais dans un champ d'URL, ni dans le bucket ni en réponse.
     const surfaces = [
-      ...(await publicSurfaces(template.id, template.slug, 1)),
+      ...(await publicSurfaces(template.id, template.slug)),
       ...bucketSurfaces(),
     ]
     const schemes = surfaces.flatMap((s) =>
@@ -1423,6 +1492,30 @@ describe('(e) Cache-Control de chaque réponse', () => {
     note('POST', response201)
     const { template, ownerToken } = await response201.json()
     const id: string = template.id
+    // Publication rejouable : jeton tiré par le téléphone.
+    const clientToken = 'C'.repeat(43)
+    const replayable = async () =>
+      POST(
+        jsonRequest(
+          '/api/templates',
+          'POST',
+          { data: await compressItinerary(twoDays()), country: 'JP' },
+          bearer(clientToken),
+        ),
+      )
+    note('POST avec jeton', await replayable())
+    note('POST avec jeton rejoué', await replayable())
+    note(
+      'POST jeton mal formé',
+      await POST(
+        jsonRequest(
+          '/api/templates',
+          'POST',
+          { data: await compressItinerary(twoDays()), country: 'JP' },
+          bearer('court'),
+        ),
+      ),
+    )
     note(
       'POST corps illisible',
       await POST(jsonRequest('/api/templates', 'POST', 'x')),
@@ -1480,12 +1573,11 @@ describe('(e) Cache-Control de chaque réponse', () => {
     // Lectures
     note('GET id', await read(id))
     note('GET id inconnu', await read('0000000000000000'))
-    note('GET v/1', await readVersion(id, '1'))
-    note('GET v/9', await readVersion(id, '9'))
-    note('GET v/0', await readVersion(id, '0'))
     note('GET slug', await readBySlug(template.slug))
     note('GET slug inconnu', await readBySlug('japon-9-jours'))
-    note('GET index', await getIndex())
+    note('GET index', await readIndex())
+    note('GET index page 1', await readIndex('?page=1'))
+    note('GET index page invalide', await readIndex('?page=-1'))
 
     // Écritures du propriétaire
     const data = await compressItinerary(twoDays())
@@ -1501,6 +1593,12 @@ describe('(e) Cache-Control de chaque réponse', () => {
       await put(id, { data: 'x' }, bearer(ownerToken)),
     )
     note('PATCH', await patch(id, { authorName: 'Léa' }, bearer(ownerToken)))
+    note('PATCH titre', await patch(id, { title: 'Titre' }, bearer(ownerToken)))
+    bucket.beforeDelete = () => {
+      throw new Error('suppression indisponible')
+    }
+    note('PUT, versions en panne', await put(id, { data }, bearer(ownerToken)))
+    bucket.beforeDelete = null
     note('PATCH vide', await patch(id, {}, bearer(ownerToken)))
     bucket.beforePut = (key) => {
       if (isTemplateIndexKey(key)) throw new Error('index indisponible')
@@ -1520,7 +1618,6 @@ describe('(e) Cache-Control de chaque réponse', () => {
 
     // Après le retrait
     note('GET id retiré', await read(id))
-    note('GET v/1 retiré', await readVersion(id, '1'))
     // Masqué juste avant son retrait : il n'a plus de page.
     note('GET slug retiré non listé', await readBySlug(template.slug))
     note('GET slug retiré listé', await readBySlug(listed.template.slug))
@@ -1533,15 +1630,17 @@ describe('(e) Cache-Control de chaque réponse', () => {
     // Pannes de lecture : rien d'illisible en cache
     const other = await publish(twoDays(), { title: 'Autre' })
     bucket.poke(templateVersionKey(other.template.id, 1), { illisible: true })
-    note('GET v/1 illisible', await readVersion(other.template.id, '1'))
     note('GET id illisible', await read(other.template.id))
     bucket.poke(templateMetaKey(other.template.id), { illisible: true })
     note('GET slug méta illisible', await readBySlug(other.template.slug))
     bucket.poke(templateIndexKey(other.template.id), { illisible: true })
-    note('GET index illisible', await getIndex())
+    note('GET index illisible', await readIndex())
 
     expect(rows).toEqual([
       `POST → 201 ${NO_STORE}`,
+      `POST avec jeton → 201 ${NO_STORE}`,
+      `POST avec jeton rejoué → 200 ${NO_STORE}`,
+      `POST jeton mal formé → 401 ${NO_STORE}`,
       `POST corps illisible → 400 ${NO_STORE}`,
       `POST trop gros → 413 ${NO_STORE}`,
       `POST limité → 429 ${NO_STORE}`,
@@ -1549,32 +1648,30 @@ describe('(e) Cache-Control de chaque réponse', () => {
       `POST panne → 500 ${NO_STORE}`,
       `GET id → 200 ${NO_STORE}`,
       `GET id inconnu → 404 ${NO_STORE}`,
-      `GET v/1 → 200 ${VERSION_CACHE}`,
-      `GET v/9 → 404 ${NO_STORE}`,
-      `GET v/0 → 404 ${NO_STORE}`,
       `GET slug → 200 ${LISTING_CACHE}`,
       `GET slug inconnu → 404 ${NO_STORE}`,
       `GET index → 200 ${LISTING_CACHE}`,
+      `GET index page 1 → 200 ${LISTING_CACHE}`,
+      `GET index page invalide → 400 ${NO_STORE}`,
       `PUT → 200 ${NO_STORE}`,
       `PUT sans jeton → 401 ${NO_STORE}`,
       `PUT mauvais jeton → 403 ${NO_STORE}`,
       `PUT id inconnu → 404 ${NO_STORE}`,
       `PUT corps illisible → 400 ${NO_STORE}`,
       `PATCH → 200 ${NO_STORE}`,
+      `PATCH titre → 200 ${NO_STORE}`,
+      `PUT, versions en panne → 503 ${NO_STORE}`,
       `PATCH vide → 400 ${NO_STORE}`,
       `PATCH masquer, index en panne → 503 ${NO_STORE}`,
       `DELETE, index en panne → 503 ${NO_STORE}`,
       `DELETE → 200 ${NO_STORE}`,
       `DELETE rejoué → 200 ${NO_STORE}`,
       `GET id retiré → 410 ${NO_STORE}`,
-      // Une minute de cache, sans rallonge : voulu (design §5).
-      `GET v/1 retiré → 410 ${VERSION_CACHE}`,
       `GET slug retiré non listé → 404 ${NO_STORE}`,
       // Le site vitrine garde le 410 en cache : voulu (design §5).
       `GET slug retiré listé → 410 ${LISTING_CACHE}`,
       `PUT retiré → 410 ${NO_STORE}`,
       `PATCH retiré → 410 ${NO_STORE}`,
-      `GET v/1 illisible → 500 ${NO_STORE}`,
       `GET id illisible → 500 ${NO_STORE}`,
       `GET slug méta illisible → 500 ${NO_STORE}`,
       `GET index illisible → 500 ${NO_STORE}`,
@@ -1677,7 +1774,7 @@ describe('(f) abus de ressources', () => {
       day(i + 1, { city: `${i}-${long}` }),
     )
     const { template } = await publish(days, { title: 'T'.repeat(5000) })
-    const entry = (await (await getIndex()).json()).entries[0]
+    const entry = (await (await readIndex()).json()).entries[0]
     for (const cities of [template.cities as string[], entry.cities]) {
       expect(cities).toHaveLength(10)
       expect(
@@ -1728,7 +1825,7 @@ describe('(f) abus de ressources', () => {
     }
     // Puis de petits modèles comblent la place restante, jusqu'au refus.
     const indexIds = async (): Promise<string[]> =>
-      (await (await getIndex()).json()).entries.map(
+      (await (await readIndex()).json()).entries.map(
         (entry: { id: string }) => entry.id,
       )
     for (let n = 0; n < 40; n++) {
@@ -1824,7 +1921,7 @@ describe('(g) retrait : il ne reste que la pierre tombale et le slug', () => {
       ).map((entry) => entry.id),
     ).toEqual([neighbour.template.id])
     expect(plantedLeaks(bucketSurfaces())).toEqual([])
-    expect(plantedLeaks(await publicSurfaces(id, slug, 2))).toEqual([])
+    expect(plantedLeaks(await publicSurfaces(id, slug))).toEqual([])
     // Le voisin n'a rien perdu.
     expect((await read(neighbour.template.id)).status).toBe(200)
   })
@@ -1855,7 +1952,7 @@ describe('(g) retrait : il ne reste que la pierre tombale et le slug', () => {
         .status,
     ).toBe(200)
     expect(JSON.stringify(bucket.peek(shard))).not.toContain('PRIV')
-    expect(await (await getIndex()).text()).not.toContain('PRIV')
+    expect(await (await readIndex()).text()).not.toContain('PRIV')
   })
 
   it('une mise à jour concurrente ne laisse pas de version dans R2 après un retrait réussi', async () => {

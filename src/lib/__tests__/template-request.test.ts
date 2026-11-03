@@ -5,6 +5,7 @@ import { compressItinerary } from '@/lib/share'
 import {
   MAX_TEMPLATE_DAYS,
   MAX_TEMPLATE_DAY_ACTIVITIES,
+  MAX_TEMPLATE_TITLE_LENGTH,
 } from '@/lib/template-model'
 import {
   RETIRED_BODY,
@@ -15,6 +16,7 @@ import {
   TEMPLATE_NOT_CONFIGURED,
   nestingTooDeep,
   openTemplateStore,
+  parseIndexPage,
   parseTemplatePatch,
   parseTemplatePublish,
   parseTemplateUpdate,
@@ -554,6 +556,75 @@ describe('parseTemplatePatch', () => {
       status: 400,
     })
   })
+
+  it('lit le titre comme à la publication : espaces resserrées, borné sans couper un emoji', () => {
+    expect(parseTemplatePatch({ title: '  Le Japon \n en vrai ' })).toEqual({
+      ok: true,
+      data: { title: 'Le Japon en vrai' },
+    })
+    const long = `${'a'.repeat(MAX_TEMPLATE_TITLE_LENGTH - 1)}🗾 fin`
+    expect(parseTemplatePatch({ title: long })).toEqual({
+      ok: true,
+      data: { title: 'a'.repeat(MAX_TEMPLATE_TITLE_LENGTH - 1) },
+    })
+    expect(
+      parseTemplatePatch({ title: 'Japon', indexable: true, authorName: null }),
+    ).toEqual({
+      ok: true,
+      data: { title: 'Japon', indexable: true, authorName: null },
+    })
+  })
+
+  it('un titre vide ou nul sera tiré des étapes ; un titre qui n’est pas un texte est refusé', () => {
+    for (const title of ['', '   ', null]) {
+      expect(parseTemplatePatch({ title })).toEqual({
+        ok: true,
+        data: { title: null },
+      })
+    }
+    for (const title of [42, ['Japon'], { fr: 'Japon' }, true]) {
+      expect(failure(parseTemplatePatch({ title }))).toEqual({
+        ok: false,
+        status: 400,
+        error: 'Titre du modèle invalide.',
+      })
+    }
+  })
+})
+
+describe('parseIndexPage', () => {
+  it('prend la page 0 sans paramètre, et toute page entière positive', () => {
+    expect(parseIndexPage(null)).toEqual({ ok: true, data: 0 })
+    for (const [value, page] of [
+      ['0', 0],
+      ['1', 1],
+      ['42', 42],
+      ['999999', 999_999],
+    ] as const) {
+      expect(parseIndexPage(value)).toEqual({ ok: true, data: page })
+    }
+  })
+
+  it('refuse en 400 tout le reste', () => {
+    for (const value of [
+      '',
+      '-1',
+      '+1',
+      '1.5',
+      '1e3',
+      '01',
+      ' 1',
+      'abc',
+      '1000000',
+      '0x10',
+    ]) {
+      expect(failure(parseIndexPage(value))).toEqual({
+        ok: false,
+        status: 400,
+        error: 'Page de l’index invalide.',
+      })
+    }
+  })
 })
 
 describe('readJsonBody', () => {
@@ -762,6 +833,7 @@ describe('messages d’erreur', () => {
           'conflict',
           'invalid',
           'index',
+          'versions',
         ] as const
       ).map((code) => new TemplateStoreError(code).message),
       templateErrorReply(new S3ndError('FILE_TOO_LARGE', ''), '').body.error,
@@ -785,6 +857,8 @@ describe('messages d’erreur', () => {
       }),
       parseTemplatePublish({ data: compressedZeros(4_000_000), country: 'JP' }),
       parseTemplatePatch({}),
+      parseTemplatePatch({ title: 1 }),
+      parseIndexPage('-1'),
     ]
     for (const result of rejected) {
       if (!result.ok) messages.push(result.error)

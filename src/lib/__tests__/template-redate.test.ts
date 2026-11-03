@@ -13,6 +13,7 @@ import {
   durationChoice,
   groupDaysByCity,
   looksLikeRestDay,
+  needsBooking,
   retimeTemplate,
   suggestKeptDayIds,
   templateTodo,
@@ -844,6 +845,148 @@ describe('retimeTemplate', () => {
       expect(result[1]).not.toHaveProperty('transport')
     })
 
+    it('retire un des deux passages dans une ville : le trajet qui en partait repart de l’étape gardée précédente', () => {
+      // Tokyo, Kyoto, Tokyo, Osaka : le repreneur saute le retour à Tokyo.
+      const template = numbered([
+        day('a', '2025-05-01', 'Tokyo', 'Arrivée'),
+        day('b', '2025-05-02', 'Kyoto', 'Gion', {
+          transport: train('tr-kyoto', 'Tokyo', 'Kyoto'),
+        }),
+        day('c', '2025-05-03', 'Tokyo', 'Retour à Tokyo', {
+          transport: train('tr-retour', 'Kyoto', 'Tokyo Station', {
+            provider: 'JR Central',
+          }),
+        }),
+        day('d', '2025-05-04', 'Osaka', 'Dotonbori', {
+          transport: train('tr-osaka', 'Tokyo', 'Shin-Osaka', {
+            departureTime: '2025-05-04T08:00',
+            provider: 'JR Central',
+            price: 14000,
+            currency: 'JPY',
+          }),
+        }),
+      ])
+      const result = retimeTemplate(template, {
+        startDate: '2026-05-01',
+        keptDayIds: ['a', 'b', 'd'],
+      })
+      // Tokyo reste au voyage (jour 1), mais pas à ce moment-là : on part de Kyoto.
+      expect(byId(result, 'd').transport).toEqual({
+        id: 'tr-osaka',
+        type: 'train',
+        from: 'Kyoto',
+        to: 'Shin-Osaka',
+      })
+      expect(byId(result, 'b').transport).toEqual(
+        train('tr-kyoto', 'Tokyo', 'Kyoto'),
+      )
+    })
+
+    it('retire un des deux passages, trajet rangé au jour du départ : il mène à l’étape suivante', () => {
+      const template = numbered([
+        day('a', '2025-05-01', 'Tokyo', 'Arrivée', {
+          transport: train('tr-kyoto', 'Tokyo', 'Kyoto', { provider: 'JR' }),
+        }),
+        day('b', '2025-05-02', 'Kyoto', 'Gion', {
+          transport: train('tr-retour', 'Kyoto', 'Tokyo', { provider: 'JR' }),
+        }),
+        day('c', '2025-05-03', 'Tokyo', 'Retour à Tokyo', {
+          transport: train('tr-osaka', 'Tokyo', 'Osaka', { provider: 'JR' }),
+        }),
+        day('d', '2025-05-04', 'Osaka', 'Dotonbori'),
+      ])
+      const result = retimeTemplate(template, {
+        startDate: '2026-05-01',
+        keptDayIds: ['a', 'b', 'd'],
+      })
+      expect(byId(result, 'b').transport).toEqual({
+        id: 'tr-retour',
+        type: 'train',
+        from: 'Kyoto',
+        to: 'Osaka',
+      })
+      // Le premier passage à Tokyo, gardé, ne bouge pas.
+      expect(byId(result, 'a').transport?.provider).toBe('JR')
+    })
+
+    it('un départ qui ne nomme aucune étape vient de l’étape d’avant : retirée, il est recousu', () => {
+      // « Odawara » n'est pas une étape : rangé au premier jour de Kyoto, le
+      // Shinkansen vient de Hakone.
+      const template = japanTemplate().map((entry) =>
+        entry.id === 'jp-06'
+          ? {
+              ...entry,
+              transport: { ...entry.transport!, from: 'Odawara' },
+            }
+          : entry,
+      )
+      const result = retimeTemplate(template, {
+        startDate: '2026-07-14',
+        keptDayIds: idsWithout('jp-05'),
+      })
+      expect(byId(result, 'jp-06').transport).toEqual({
+        id: 'tr-hakone-kyoto',
+        type: 'train',
+        from: 'Tokyo',
+        to: 'Kyoto',
+      })
+      // Hakone gardé : le trajet reste tel quel, horaires et prix compris.
+      const intact = retimeTemplate(template, {
+        startDate: '2026-07-14',
+        keptDayIds: ALL_IDS,
+      })
+      expect(byId(intact, 'jp-06').transport).toMatchObject({
+        from: 'Odawara',
+        provider: 'JR Central',
+        price: 11000,
+      })
+    })
+
+    it('supprime le trajet qui ramènerait là où l’on est déjà (Cần Thơ → Saïgon)', () => {
+      const template = numbered([
+        day('s1', '2025-11-26', 'Hô Chi Minh-Ville', 'Saïgon'),
+        day('m1', '2025-11-27', 'Delta du Mékong', 'Marchés flottants', {
+          transport: {
+            id: 'tr-aller',
+            type: 'bus',
+            from: 'Hô Chi Minh-Ville',
+            to: 'Cần Thơ',
+          },
+        }),
+        day('s2', '2025-11-28', 'Hô Chi Minh-Ville', 'Départ', {
+          transport: {
+            id: 'tr-retour',
+            type: 'bus',
+            from: 'Cần Thơ',
+            to: 'Hô Chi Minh-Ville',
+            duration: '3h30',
+          },
+        }),
+      ])
+      const result = retimeTemplate(template, {
+        startDate: '2026-01-10',
+        keptDayIds: ['s1', 's2'],
+      })
+      expect(result.map((entry) => entry.transport)).toEqual([
+        undefined,
+        undefined,
+      ])
+      // Le premier passage à Saïgon retiré, l'aller part de nulle part de connu.
+      const withoutFirst = retimeTemplate(template, {
+        startDate: '2026-01-10',
+        keptDayIds: ['m1', 's2'],
+      })
+      expect(withoutFirst[0].transport).toEqual({
+        id: 'tr-aller',
+        type: 'bus',
+        to: 'Cần Thơ',
+      })
+      expect(withoutFirst[1].transport).toMatchObject({
+        from: 'Cần Thơ',
+        duration: '3h30',
+      })
+    })
+
     it('ignore l’ordre et les ids inconnus de keptDayIds', () => {
       const kept = idsWithout('jp-05', 'jp-11')
       const ordered = retimeTemplate(japanTemplate(), {
@@ -1249,6 +1392,31 @@ describe('templateTodo', () => {
     expect(templateTodo(days).accommodations).toEqual(['Gracery'])
   })
 
+  it('ne compte plus ce qui est marqué « Réservé », ni une visite faite ou abandonnée', () => {
+    const result = retimeTemplate(japanTemplate(), {
+      startDate: '2026-07-14',
+      keptDayIds: ALL_IDS,
+    })
+    const marked = result.map((entry) => ({
+      ...entry,
+      ...(entry.accommodation && {
+        accommodation: { ...entry.accommodation, status: 'booked' as const },
+      }),
+      ...(entry.transport && {
+        transport: { ...entry.transport, status: 'checked-in' as const },
+      }),
+      activities: entry.activities.map((item) => ({
+        ...item,
+        status: 'done' as const,
+      })),
+    }))
+    expect(templateTodo(marked)).toEqual({
+      accommodations: [],
+      transports: 0,
+      bookableActivities: 0,
+    })
+  })
+
   it('ne trouve rien dans un voyage vide', () => {
     expect(templateTodo([])).toEqual({
       accommodations: [],
@@ -1258,41 +1426,93 @@ describe('templateTodo', () => {
   })
 })
 
+// ── needsBooking ──────────────────────────────────────────────────────────────
+
+describe('needsBooking', () => {
+  const stay = (extra: Partial<Accommodation> = {}) =>
+    hotel('h', 'Gracery', '2026-05-10', '2026-05-12', extra)
+
+  it('un hébergement reste à réserver sans référence ni statut « Réservé »', () => {
+    expect(needsBooking(stay())).toBe(true)
+    expect(needsBooking(stay({ status: 'planned' }))).toBe(true)
+    expect(needsBooking(stay({ bookingReference: '  ' }))).toBe(true)
+    expect(needsBooking(stay({ bookingReference: 'GRC-1' }))).toBe(false)
+    for (const status of ['booked', 'checked-in', 'completed'] as const) {
+      expect(needsBooking(stay({ status }))).toBe(false)
+    }
+  })
+
+  it('un trajet en train, avion ou bus de même ; une voiture jamais', () => {
+    for (const type of ['train', 'plane', 'bus'] as const) {
+      const transport: Transport = { id: 't', type, from: 'Tokyo', to: 'Kyoto' }
+      expect(needsBooking(transport)).toBe(true)
+      expect(needsBooking({ ...transport, status: 'planned' })).toBe(true)
+      expect(needsBooking({ ...transport, status: 'booked' })).toBe(false)
+      expect(needsBooking({ ...transport, status: 'completed' })).toBe(false)
+      expect(needsBooking({ ...transport, bookingReference: 'Q7XK2P' })).toBe(
+        false,
+      )
+    }
+    expect(needsBooking({ id: 't', type: 'car', from: 'Rome' })).toBe(false)
+  })
+
+  it('une activité sur réservation, ni faite ni abandonnée', () => {
+    const visit = activity('a', 'Musée Ghibli', { reservationRequired: true })
+    expect(needsBooking(visit)).toBe(true)
+    expect(needsBooking({ ...visit, status: 'planned' })).toBe(true)
+    expect(needsBooking({ ...visit, status: 'done' })).toBe(false)
+    expect(needsBooking({ ...visit, status: 'skipped' })).toBe(false)
+    expect(needsBooking(activity('b', 'Gion'))).toBe(false)
+    expect(
+      needsBooking(activity('c', 'Gion', { reservationRequired: false })),
+    ).toBe(false)
+    // Une activité de type « transport » reste une activité.
+    expect(
+      needsBooking(
+        activity('d', 'Ropeway', {
+          type: 'transport',
+          reservationRequired: true,
+        }),
+      ),
+    ).toBe(true)
+  })
+})
+
 // ── groupDaysByCity ───────────────────────────────────────────────────────────
 
 describe('groupDaysByCity', () => {
   it('regroupe les journées par étape, avec leurs nouvelles dates', () => {
     const groups = groupDaysByCity(japanTemplate(), ALL_IDS, '2026-07-14')
     expect(
-      groups.map(({ city, nights, range }) => ({ city, nights, range })),
+      groups.map(({ city, days, range }) => ({ city, days, range })),
     ).toEqual([
       {
         city: 'Tokyo',
-        nights: 4,
+        days: 4,
         range: { start: '2026-07-14', end: '2026-07-17' },
       },
       {
         city: 'Hakone',
-        nights: 1,
+        days: 1,
         range: { start: '2026-07-18', end: '2026-07-18' },
       },
       {
         city: 'Kyoto',
-        nights: 5,
+        days: 5,
         range: { start: '2026-07-19', end: '2026-07-23' },
       },
       {
         city: 'Nara',
-        nights: 1,
+        days: 1,
         range: { start: '2026-07-24', end: '2026-07-24' },
       },
       {
         city: 'Osaka',
-        nights: 3,
+        days: 3,
         range: { start: '2026-07-25', end: '2026-07-27' },
       },
     ])
-    expect(groups[1].days).toEqual([
+    expect(groups[1].entries).toEqual([
       {
         id: 'jp-05',
         dayNumber: 5,
@@ -1303,6 +1523,21 @@ describe('groupDaysByCity', () => {
     ])
   })
 
+  it('compte des journées, pas des nuits : le jour du départ compte pour la dernière étape', () => {
+    // Osaka : 3 nuits au Cross Hotel, mais 3 journées gardées dont le départ.
+    const groups = groupDaysByCity(
+      japanTemplate(),
+      idsWithout('jp-12'),
+      '2026-07-14',
+    )
+    expect(groups.at(-1)).toMatchObject({
+      city: 'Osaka',
+      days: 2,
+      range: { start: '2026-07-25', end: '2026-07-26' },
+    })
+    expect(groups.at(-1)).not.toHaveProperty('nights')
+  })
+
   it('resserre les dates quand une journée est décochée', () => {
     const groups = groupDaysByCity(
       japanTemplate(),
@@ -1311,7 +1546,7 @@ describe('groupDaysByCity', () => {
     )
     expect(groups[1]).toEqual({
       city: 'Hakone',
-      days: [
+      entries: [
         {
           id: 'jp-05',
           dayNumber: 5,
@@ -1320,12 +1555,12 @@ describe('groupDaysByCity', () => {
           date: null,
         },
       ],
-      nights: 0,
+      days: 0,
       range: null,
     })
-    expect(groups[2].nights).toBe(4)
+    expect(groups[2].days).toBe(4)
     expect(groups[2].range).toEqual({ start: '2026-07-18', end: '2026-07-21' })
-    expect(groups[2].days.map((entry) => entry.date)).toEqual([
+    expect(groups[2].entries.map((entry) => entry.date)).toEqual([
       '2026-07-18',
       '2026-07-19',
       null,
@@ -1341,7 +1576,7 @@ describe('groupDaysByCity', () => {
       keptDayIds: kept,
     })
     const announced = groupDaysByCity(japanTemplate(), kept, '2026-12-29')
-      .flatMap((group) => group.days)
+      .flatMap((group) => group.entries)
       .filter((entry) => entry.kept)
     expect(announced.map(({ id, date }) => ({ id, date }))).toEqual(
       retimed.map(({ id, date }) => ({ id, date })),
@@ -1356,7 +1591,7 @@ describe('groupDaysByCity', () => {
       day('d', '2026-05-13', 'Tokyo', 'Retour'),
     ])
     const groups = groupDaysByCity(days, ['a', 'b', 'c', 'd'], '2026-05-10')
-    expect(groups.map((group) => [group.city, group.nights])).toEqual([
+    expect(groups.map((group) => [group.city, group.days])).toEqual([
       ['Tokyo', 2],
       ['Kyoto', 1],
       ['Tokyo', 1],
@@ -1373,22 +1608,22 @@ describe('groupDaysByCity', () => {
       expect(groups.every((group) => group.range === null)).toBe(true)
       expect(
         groups
-          .flatMap((group) => group.days)
+          .flatMap((group) => group.entries)
           .every((entry) => entry.date === null),
       ).toBe(true)
     }
     const [last] = groupDaysByCity(template, ['d1', 'd2'], '9999-12-29')
     expect(last.range).toEqual({ start: '9999-12-29', end: '9999-12-30' })
-    expect(last.days.every((entry) => isIsoDate(entry.date))).toBe(true)
+    expect(last.entries.every((entry) => isIsoDate(entry.date))).toBe(true)
   })
 
   it('ne lève pas d’erreur sans date de départ valide', () => {
     const groups = groupDaysByCity(japanTemplate(), ALL_IDS, '')
-    expect(groups.map((group) => group.nights)).toEqual([4, 1, 5, 1, 3])
+    expect(groups.map((group) => group.days)).toEqual([4, 1, 5, 1, 3])
     expect(groups.every((group) => group.range === null)).toBe(true)
     expect(
       groups
-        .flatMap((group) => group.days)
+        .flatMap((group) => group.entries)
         .every((entry) => entry.date === null),
     ).toBe(true)
   })
@@ -1409,15 +1644,69 @@ describe('suggestKeptDayIds', () => {
     )
   })
 
-  it('retire ensuite les dernières journées', () => {
+  it('raccourcit ensuite les plus longs séjours par le milieu, sans toucher au départ', () => {
+    // Kyoto (5 → 4 journées) perd jp-09, puis Osaka, à égalité avec Tokyo et
+    // Kyoto mais la plus tardive, perd jp-13 : le jour du vol retour reste.
     expect(suggestKeptDayIds(japanTemplate(), 10)).toEqual(
-      idsWithout('jp-04', 'jp-08', 'jp-13', 'jp-14'),
+      idsWithout('jp-04', 'jp-08', 'jp-09', 'jp-13'),
     )
+    // Puis chaque séjour descend à une journée — son arrivée — et les étapes
+    // les plus courtes du modèle partent les premières (Nara, puis Hakone).
+    expect(suggestKeptDayIds(japanTemplate(), 5)).toEqual([
+      'jp-01',
+      'jp-05',
+      'jp-06',
+      'jp-12',
+      'jp-14',
+    ])
     expect(suggestKeptDayIds(japanTemplate(), 3)).toEqual([
       'jp-01',
-      'jp-02',
-      'jp-03',
+      'jp-12',
+      'jp-14',
     ])
+    expect(suggestKeptDayIds(japanTemplate(), 2)).toEqual(['jp-01', 'jp-14'])
+  })
+
+  it('ne retire une étape entière que quand chaque étape est à une journée', () => {
+    const days = numbered([
+      day('t1', '2026-05-10', 'Tokyo', 'Arrivée'),
+      day('t2', '2026-05-11', 'Tokyo', 'Asakusa'),
+      day('t3', '2026-05-12', 'Tokyo', 'Shibuya'),
+      day('h1', '2026-05-13', 'Hakone', 'Onsen'),
+      day('k1', '2026-05-14', 'Kyoto', 'Gion'),
+      day('k2', '2026-05-15', 'Kyoto', 'Arashiyama'),
+      day('n1', '2026-05-16', 'Nara', 'Daims'),
+      day('o1', '2026-05-17', 'Osaka', 'Départ'),
+    ])
+    // Tokyo (3) perd sa journée du milieu, puis Kyoto (2) sa dernière.
+    expect(suggestKeptDayIds(days, 7)).toEqual([
+      't1',
+      't3',
+      'h1',
+      'k1',
+      'k2',
+      'n1',
+      'o1',
+    ])
+    expect(suggestKeptDayIds(days, 5)).toEqual(['t1', 'h1', 'k1', 'n1', 'o1'])
+    // Tout est à une journée : Nara (1 journée, la plus tardive) part avant
+    // Hakone (1 journée), puis Kyoto (2) ; jamais Tokyo ni Osaka.
+    expect(suggestKeptDayIds(days, 4)).toEqual(['t1', 'h1', 'k1', 'o1'])
+    expect(suggestKeptDayIds(days, 3)).toEqual(['t1', 'k1', 'o1'])
+  })
+
+  it('garde chaque étape et le jour du départ de la démo raccourcie à 14 jours', () => {
+    const ids = suggestKeptDayIds(demoItinerary, 14)
+    const kept = demoItinerary.filter((entry) => ids.includes(entry.id))
+    expect(ids).toHaveLength(14)
+    expect(ids.at(-1)).toBe('day-20')
+    const groups = groupDaysByCity(demoItinerary, ids, '2027-05-01')
+    expect(groups.map((group) => group.days)).toEqual([
+      2, 1, 2, 2, 2, 1, 1, 1, 2,
+    ])
+    // Chaque étape garde sa journée d'arrivée.
+    for (const group of groups) expect(group.entries[0].kept).toBe(true)
+    expect(kept.map((entry) => entry.city)).toContain('Taipei')
   })
 
   it('ne retire jamais le jour 1, même libre', () => {

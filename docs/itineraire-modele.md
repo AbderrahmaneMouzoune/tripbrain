@@ -73,7 +73,8 @@ Les modèles servent aussi au référencement du site vitrine.
 
 - **Où** : site vitrine (`tripbrain-landing`), `tripbrain.fr/itineraires/<slug>`. Le slug
   est généré depuis le pays, la durée et les villes : `japon-14-jours-tokyo-kyoto-osaka`,
-  suffixé en cas de doublon, figé à la première publication.
+  suffixé en cas de doublon ; il suit la durée et les 3 premières villes, et les anciens
+  slugs mènent au modèle (le site vitrine redirige en 301).
 - **Lien partagé par l'auteur** : `app.tripbrain.fr/m/<id>`. Il ouvre l'app si elle est
   installée, sinon l'aperçu dans la webapp. Il n'est jamais indexé ; quand le modèle est
   listé, il désigne la page tripbrain.fr comme page canonique.

@@ -9,7 +9,9 @@
 // (`templateFailureReason`, `templateTakeFailureReason`), jamais du message.
 //
 // Le jeton propriétaire ne voyage que dans `Authorization: Bearer`, jamais
-// dans l'URL ni dans le corps.
+// dans l'URL ni dans le corps. Pour publier, le téléphone le tire lui-même
+// (`createOwnerTokenForClient`) et le range avant l'envoi : une publication
+// dont la réponse s'est perdue se rejoue avec lui sans créer de doublon.
 
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { compressItinerary } from '@/lib/share'
@@ -64,7 +66,8 @@ export class TemplateTooLargeError extends Error {
  * - 503 : publication non configurée, ou modèle sorti de la liste publique
  *   de tripbrain.fr sans que celle-ci ait suivi (retrait, masquage, passage à
  *   une journée : la modification est faite, rejouer la termine), ou retrait
- *   dont le contenu n'a pas pu être effacé (rejouer l'efface) ;
+ *   dont le contenu n'a pas pu être effacé, ou mise à jour dont les versions
+ *   précédentes n'ont pas pu l'être (rejouer les efface) ;
  * - 429 : trop de tentatives ;
  * - 502, 504 : la plateforme n'a pas obtenu de réponse du serveur.
  */
@@ -282,18 +285,61 @@ export interface TemplatePublishInput {
 
 export interface TemplatePublication {
   template: PublicTemplate
-  /** À ranger dans `StoredTrip.publishedTemplate` : le serveur ne le redonnera jamais. */
+  /**
+   * À ranger dans `StoredTrip.publishedTemplate`. Celui de
+   * `TemplatePublishOptions.ownerToken` quand il est donné ; sinon tiré par
+   * le serveur, qui ne le redonnera jamais.
+   */
   ownerToken: string
+  /**
+   * `false` : un envoi précédent avec le même jeton avait déjà publié ce
+   * modèle (réponse perdue, double appui), rendu tel qu'il est en ligne.
+   */
+  created: boolean
 }
 
-/** Publie un voyage comme modèle (écran A3). */
+export interface TemplatePublishOptions {
+  /**
+   * Jeton tiré par `createOwnerTokenForClient`, rangé sur le voyage **avant**
+   * l'envoi et réutilisé à chaque nouvel essai de la même publication : le
+   * serveur rend alors le modèle déjà publié au lieu d'en créer un second.
+   * Absent : le serveur tire le jeton, et rejouer publie un doublon.
+   */
+  ownerToken?: string
+}
+
+/** 32 octets = 256 bits, comme le jeton tiré par le serveur. */
+const OWNER_TOKEN_BYTES = 32
+
+/**
+ * Nouveau jeton propriétaire, tiré sur le téléphone : 32 octets de
+ * `crypto.getRandomValues`, en base64url sans remplissage (43 caractères),
+ * le format que le serveur attend. Un par publication : à ranger avant
+ * `publishTemplate`, à oublier une fois le modèle retiré.
+ */
+export function createOwnerTokenForClient(): string {
+  const bytes = new Uint8Array(OWNER_TOKEN_BYTES)
+  crypto.getRandomValues(bytes)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+/**
+ * Publie un voyage comme modèle (écran A3). Avec `options.ownerToken`, la
+ * même publication rejouée (erreur réseau, `TemplateUnavailableError`, double
+ * appui) rend le même modèle : réessayer ne crée jamais de doublon.
+ */
 export async function publishTemplate(
   itinerary: readonly DayItinerary[],
   input: TemplatePublishInput,
+  options: TemplatePublishOptions = {},
 ): Promise<TemplatePublication> {
   const response = await fetch(TEMPLATES_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: options.ownerToken
+      ? ownerHeaders(options.ownerToken)
+      : { 'Content-Type': 'application/json' },
     cache: 'no-store',
     body: JSON.stringify({
       data: await payload(itinerary, input.options),
@@ -315,11 +361,16 @@ export async function publishTemplate(
     !isRecord(body) ||
     !isPublicTemplate(body.template) ||
     typeof body.ownerToken !== 'string' ||
-    !body.ownerToken
+    !body.ownerToken ||
+    (options.ownerToken !== undefined && body.ownerToken !== options.ownerToken)
   ) {
     throw unreadable()
   }
-  return { template: body.template, ownerToken: body.ownerToken }
+  return {
+    template: body.template,
+    ownerToken: body.ownerToken,
+    created: response.status !== 200,
+  }
 }
 
 /** Le modèle dans sa dernière version (aperçu B2, écran A4). */
@@ -330,36 +381,6 @@ export async function fetchTemplate(id: string): Promise<PublicTemplate> {
     throw await failure(response, 'Lecture du modèle impossible. Réessayez.')
   }
   return readTemplateBody(response)
-}
-
-export interface TemplateVersion {
-  version: number
-  itinerary: DayItinerary[]
-}
-
-/** Une version précise : la base de fusion de la V1.1. */
-export async function fetchTemplateVersion(
-  id: string,
-  version: number,
-): Promise<TemplateVersion> {
-  if (!isTemplateId(id) || !isVersionNumber(version)) {
-    throw new TemplateNotFoundError()
-  }
-  const response = await fetch(`${templateUrl(id)}/v/${version}`, {
-    cache: 'no-store',
-  })
-  if (!response.ok) {
-    throw await failure(response, 'Lecture du modèle impossible. Réessayez.')
-  }
-  const body = await readBody(response)
-  if (
-    !isRecord(body) ||
-    !isVersionNumber(body.version) ||
-    !isItinerary(body.itinerary)
-  ) {
-    throw unreadable()
-  }
-  return { version: body.version, itinerary: body.itinerary }
 }
 
 export interface TemplateUpdateInput {
@@ -378,7 +399,11 @@ export interface TemplateUpdateInput {
   options: TemplateOptions
 }
 
-/** « Mettre le modèle à jour » : une nouvelle version, sans prévenir personne. */
+/**
+ * « Mettre le modèle à jour » : une nouvelle version, sans prévenir personne.
+ * Les versions précédentes sont supprimées du serveur ; un repreneur garde la
+ * sienne sur son téléphone (`StoredTrip.origin.base`).
+ */
 export async function updateTemplate(
   id: string,
   ownerToken: string,
@@ -409,9 +434,11 @@ export interface TemplatePatchInput {
   indexable?: boolean
   /** `null` efface le prénom. */
   authorName?: string | null
+  /** Nouveau titre public. `null` ou vide : tiré des étapes du modèle. */
+  title?: string | null
 }
 
-/** Visibilité ou prénom, sans nouvelle version du contenu. */
+/** Visibilité, prénom ou titre (écran A4), sans nouvelle version du contenu. */
 export async function patchTemplate(
   id: string,
   ownerToken: string,

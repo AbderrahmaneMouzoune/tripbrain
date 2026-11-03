@@ -89,7 +89,10 @@ export const DEFAULT_TEMPLATE_OPTIONS: TemplateOptions = {
  */
 export interface TemplateMeta {
   id: string
-  /** Figé à la première publication. */
+  /**
+   * Le slug actuel : il suit la durée et les 3 premières villes ; les anciens
+   * slugs mènent au modèle (§4).
+   */
   slug: string
   /** 1 à la publication, +1 à chaque mise à jour du contenu. */
   version: number
@@ -632,17 +635,23 @@ function truncateSlug(slug: string, max: number): string {
   )
 }
 
+/** La durée dans un slug, accordée : `1-jour`, `2-jours`, `14-jours`. */
+function slugDuration(dayCount: number): string {
+  return dayCount === 1 ? '1-jour' : `${dayCount}-jours`
+}
+
 /**
  * `japon-14-jours-tokyo-kyoto-osaka` : pays, durée, trois premières villes.
- * Une ville sans caractère latin (東京) ne donne rien et est sautée ; le slug
- * reste valable avec le pays et la durée seuls.
+ * La durée s'accorde : `portugal-1-jour-lisbonne`. Une ville sans caractère
+ * latin (東京) ne donne rien et est sautée ; le slug reste valable avec le
+ * pays et la durée seuls.
  */
 export function templateSlug(input: {
   country: string
   dayCount: number
   cities: readonly string[]
 }): string {
-  const head = `${countrySlug(input.country)}-${input.dayCount}-jours`
+  const head = `${countrySlug(input.country)}-${slugDuration(input.dayCount)}`
   const cities = input.cities
     .map(slugify)
     .filter(Boolean)
@@ -661,9 +670,9 @@ export function suffixedSlug(slug: string, attempt: number): string {
 /**
  * Variante tirée de l'id du modèle, quand les suffixes lisibles sont tous
  * pris : `…-osaka-k3x9m2`. L'id est en `[0-9a-z]`, le résultat reste un slug
- * valide, et la tête `<pays>-<n>-jours` n'est jamais coupée (80 caractères
- * laissent toujours de la place). Avec l'id entier (`length` = 16), deux
- * modèles ne peuvent plus tomber sur le même slug.
+ * valide, et la tête `<pays>-<n>-jours` (ou `<pays>-1-jour`) n'est jamais
+ * coupée (80 caractères laissent toujours de la place). Avec l'id entier
+ * (`length` = 16), deux modèles ne peuvent plus tomber sur le même slug.
  */
 export function idSuffixedSlug(slug: string, id: string, length = 6): string {
   const suffix = `-${id.slice(0, length)}`
@@ -671,17 +680,19 @@ export function idSuffixedSlug(slug: string, id: string, length = 6): string {
 }
 
 const TEMPLATE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+/** `1-jour`, ou `<n>-jours` pour n ≥ 2 (sans zéro devant), en mots entiers. */
+const SLUG_DURATION = /(?:^|-)(?:1-jour|(?:[2-9]|[1-9]\d+)-jours)(?:-|$)/
 
 /**
- * Slug de modèle : il contient toujours `-<n>-jours`, ce qu'un slug de pays
- * (`japon`, `cote-d-ivoire`) ne contient jamais — c'est ce qui permet à
- * `/itineraires/[slug]` de servir les deux.
+ * Slug de modèle : il contient toujours sa durée, `-1-jour` ou `-<n>-jours`
+ * (n ≥ 2), ce qu'un slug de pays (`japon`, `cote-d-ivoire`) ne contient
+ * jamais — c'est ce qui permet à `/itineraires/[slug]` de servir les deux.
  */
 export function isTemplateSlug(value: unknown): value is string {
   return (
     typeof value === 'string' &&
     value.length <= MAX_SLUG_LENGTH &&
     TEMPLATE_SLUG.test(value) &&
-    /(^|-)\d+-jours(-|$)/.test(value)
+    SLUG_DURATION.test(value)
   )
 }

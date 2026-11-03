@@ -39,6 +39,7 @@ import {
   buildTemplateOrigin,
   durationChoice,
   groupDaysByCity,
+  needsBooking,
   retimeTemplate,
   suggestKeptDayIds,
   templateTodo,
@@ -1341,7 +1342,9 @@ describe('scénario réel : Japon 14 jours écrit à la main', () => {
   it('reprise en 11 jours au 3 avril 2027 : du 3 au 13 avril, heures intactes (critère de B3)', async () => {
     const template = await publishAndRead(japanTrip(), 'JP')
     const keptDayIds = suggestKeptDayIds(template.itinerary, 11)
-    expect(idsWithout(template.itinerary, [8, 13, 14])).toEqual(keptDayIds)
+    // La journée libre, puis un jour au milieu des deux plus longs séjours
+    // (Osaka, Tokyo) : le jour du vol retour reste.
+    expect(idsWithout(template.itinerary, [3, 8, 13])).toEqual(keptDayIds)
     const retimed = retimeTemplate(template.itinerary, {
       startDate: '2027-04-03',
       keptDayIds,
@@ -1353,12 +1356,13 @@ describe('scénario réel : Japon 14 jours écrit à la main', () => {
       ]),
     )
     expect(byId(retimed, 'jp-d6').transport).toMatchObject({
-      departureTime: '2027-04-08T10:12:00+09:00',
-      arrivalTime: '2027-04-08T12:15:00+09:00',
+      departureTime: '2027-04-07T10:12:00+09:00',
+      arrivalTime: '2027-04-07T12:15:00+09:00',
     })
     expect(byId(retimed, 'jp-d10').transport?.departureTime).toBe(
-      '2027-04-11 08:40',
+      '2027-04-10 08:40',
     )
+    expect(retimed.at(-1)?.id).toBe('jp-d14')
     expect(durationChoice(template.itinerary.length, retimed.length)).toBe(
       'shorter',
     )
@@ -1406,7 +1410,7 @@ describe('scénario réel : Japon 14 jours écrit à la main', () => {
       keptDayIds,
       '2027-04-03',
     ).find((group) => group.city === 'Hakone')
-    expect(hakone).toMatchObject({ nights: 0, range: null })
+    expect(hakone).toMatchObject({ days: 0, range: null })
   })
 
   it('retirer la journée libre resserre le séjour à Kyoto', async () => {
@@ -1623,7 +1627,7 @@ describe('scénario réel : week-end à Lisbonne (2 jours)', () => {
     expect(weekend.itinerary[0].accommodation?.bookingUrl).toBe('')
     const oneDay = await publishAndRead(lisbonWeekend().slice(0, 1), 'PT')
     expect(oneDay).toMatchObject({
-      slug: 'portugal-1-jours-lisbonne',
+      slug: 'portugal-1-jour-lisbonne',
       listed: false,
     })
   })
@@ -1751,10 +1755,12 @@ describe('scénario réel : voyage tiré du générateur (Viêt Nam, 10 jours)',
     ])
   })
 
-  it('suggère de retirer d’abord la journée de repos, puis les dernières', async () => {
+  it('suggère de retirer d’abord la journée de repos, puis un jour du plus long séjour, jamais le départ', async () => {
     const template = await publishAndRead(generatedVietnam(), 'VN')
+    // La plage à Hội An (repos), puis le 2ᵉ jour à Saïgon : le plus tardif des
+    // séjours de deux jours. Le delta du Mékong et le départ restent.
     expect(suggestKeptDayIds(template.itinerary, 8)).toEqual(
-      idsWithout(template.itinerary, [6, 10]),
+      idsWithout(template.itinerary, [6, 8]),
     )
   })
 
@@ -1838,7 +1844,7 @@ describe.each(SCENARIOS)(
             }
           })
           const announced = groupDaysByCity(template, keptDayIds, startDate)
-            .flatMap((group) => group.days)
+            .flatMap((group) => group.entries)
             .filter((day) => day.kept)
             .map((day) => [day.id, day.date])
           expect(announced).toEqual(retimed.map((day) => [day.id, day.date]))
@@ -1848,104 +1854,151 @@ describe.each(SCENARIOS)(
   },
 )
 
-// ── Défauts relevés par ces scénarios ─────────────────────────────────────────
+// ── Défauts relevés par ces scénarios, corrigés ───────────────────────────────
 //
-// Chaque test décrit le comportement attendu et échoue aujourd'hui : `it.fails`
-// le garde vert. Une fois le défaut corrigé, il se met à « réussir » et Vitest le
-// signale : passer alors `it.fails` en `it`.
+// Anciens `it.fails` de la campagne de test, gardés en non-régression.
 
-describe('défauts relevés (à passer en `it` une fois corrigés)', () => {
-  it.fails(
-    'B5 : un trajet ou un hôtel marqué « Réservé » sans référence ne reste pas à réserver',
-    async () => {
-      const template = await publishAndRead(japanTrip(), 'JP')
-      const retimed = retimeTemplate(template.itinerary, {
-        startDate: '2027-04-03',
-        keptDayIds: template.itinerary.map((day) => day.id),
-      })
-      // Le repreneur touche « Réservé » sur chaque trajet et chaque hôtel
-      // (transport-screen.tsx), sans saisir de référence.
-      const booked = retimed.map((day) => ({
-        ...day,
-        ...(day.accommodation && {
-          accommodation: { ...day.accommodation, status: 'booked' as const },
-        }),
-        ...(day.transport && {
-          transport: { ...day.transport, status: 'booked' as const },
-        }),
-      }))
-      expect(templateTodo(booked)).toMatchObject({
-        accommodations: [],
-        transports: 0,
-      })
-    },
-  )
+describe('défauts corrigés (anciens it.fails, gardés en non-régression)', () => {
+  it('B5 : un trajet ou un hôtel marqué « Réservé » sans référence ne reste pas à réserver', async () => {
+    const template = await publishAndRead(japanTrip(), 'JP')
+    const retimed = retimeTemplate(template.itinerary, {
+      startDate: '2027-04-03',
+      keptDayIds: template.itinerary.map((day) => day.id),
+    })
+    // Le repreneur touche « Réservé » sur chaque trajet et chaque hôtel
+    // (transport-screen.tsx), sans saisir de référence.
+    const booked = retimed.map((day) => ({
+      ...day,
+      ...(day.accommodation && {
+        accommodation: { ...day.accommodation, status: 'booked' as const },
+      }),
+      ...(day.transport && {
+        transport: { ...day.transport, status: 'booked' as const },
+      }),
+    }))
+    expect(templateTodo(booked)).toEqual({
+      accommodations: [],
+      transports: 0,
+      // Les visites ne sont ni faites ni abandonnées : elles restent.
+      bookableActivities: 3,
+    })
+    // Bannière et pastilles disent la même chose.
+    for (const day of booked) {
+      if (day.accommodation) expect(needsBooking(day.accommodation)).toBe(false)
+      if (day.transport) expect(needsBooking(day.transport)).toBe(false)
+    }
+  })
 
-  it.fails(
-    'retirer le 2e passage à Shanghai ne laisse pas un vol au départ de Shanghai après Zhangjiajie',
-    async () => {
-      const template = await publishAndRead(demoItinerary, 'CN')
-      const retimed = retimeTemplate(template.itinerary, {
-        startDate: '2027-05-01',
-        keptDayIds: idsWithout(template.itinerary, [14, 15]),
-      })
-      const taipei = byId(retimed, 'day-16')
-      expect(retimed[retimed.indexOf(taipei) - 1].city).toBe('Zhangjiajie')
-      expect(taipei.transport?.from).not.toBe('Shanghai')
-    },
-  )
+  it('retirer le 2e passage à Shanghai recoud Zhangjiajie → Taipei, sans le vol 9C8951', async () => {
+    const template = await publishAndRead(demoItinerary, 'CN')
+    const retimed = retimeTemplate(template.itinerary, {
+      startDate: '2027-05-01',
+      keptDayIds: idsWithout(template.itinerary, [14, 15]),
+    })
+    const taipei = byId(retimed, 'day-16')
+    expect(retimed[retimed.indexOf(taipei) - 1].city).toBe('Zhangjiajie')
+    expect(taipei.transport).toEqual({
+      id: 'tr-day16',
+      type: 'plane',
+      from: 'Zhangjiajie',
+      to: 'Taipei',
+    })
+    // Le 3ᵉ passage, lui, garde son vol Taipei → Shanghai.
+    expect(byId(retimed, 'day-19').transport).toMatchObject({
+      from: 'Taipei',
+      to: 'Shanghai',
+      provider: 'Spring Airlines',
+    })
+    expect(templateTodo(retimed).accommodations).not.toContain(
+      'Xin Hui City Hotel (Shanghai Railway Station Changshou Road Subway Station Branch)',
+    )
+  })
 
-  it.fails(
-    'retirer Hội An ne laisse pas un vol au départ de Đà Nẵng',
-    async () => {
-      const template = await publishAndRead(generatedVietnam(), 'VN')
-      const retimed = retimeTemplate(template.itinerary, {
-        startDate: '2027-01-10',
-        keptDayIds: idsWithout(template.itinerary, [4, 5, 6]),
-      })
-      expect(byId(retimed, 'day-7').transport?.from).not.toBe('Đà Nẵng')
-    },
-  )
+  it('retirer Taipei : le vol Taipei → Shanghai disparaît, on est déjà à Shanghai', async () => {
+    const template = await publishAndRead(demoItinerary, 'CN')
+    const retimed = retimeTemplate(template.itinerary, {
+      startDate: '2027-05-01',
+      keptDayIds: idsWithout(template.itinerary, [16, 17, 18]),
+    })
+    expect(byId(retimed, 'day-19')).not.toHaveProperty('transport')
+    expect(JSON.stringify(retimed)).not.toContain('Taipei')
+  })
 
-  it.fails(
-    'retirer le delta du Mékong ne laisse pas un bus Cần Thơ → Saïgon à qui est déjà à Saïgon',
-    async () => {
-      const template = await publishAndRead(generatedVietnam(), 'VN')
-      const retimed = retimeTemplate(template.itinerary, {
-        startDate: '2027-01-10',
-        keptDayIds: idsWithout(template.itinerary, [9]),
-      })
-      expect(byId(retimed, 'day-10').transport).toBeUndefined()
-    },
-  )
+  it('retirer Hội An recoud Baie d’Along → Hô Chi Minh-Ville, sans le vol de Đà Nẵng', async () => {
+    const template = await publishAndRead(generatedVietnam(), 'VN')
+    const retimed = retimeTemplate(template.itinerary, {
+      startDate: '2027-01-10',
+      keptDayIds: idsWithout(template.itinerary, [4, 5, 6]),
+    })
+    const saigon = byId(retimed, 'day-7')
+    expect(saigon.transport).toMatchObject({
+      type: 'plane',
+      from: 'Baie d’Along',
+      to: 'Hô Chi Minh-Ville',
+    })
+    // Le générateur marque ses trajets `source: 'ai'` : rien d'autre ne reste.
+    expect(Object.keys(saigon.transport!).sort()).toEqual([
+      'from',
+      'id',
+      'source',
+      'to',
+      'type',
+    ])
+  })
 
-  it.fails(
-    'retirer Hakone ne garde pas le Shinkansen d’Odawara, ses horaires et son prix',
-    async () => {
-      const template = await publishAndRead(japanTrip(), 'JP')
-      const retimed = retimeTemplate(template.itinerary, {
-        startDate: '2027-04-03',
-        keptDayIds: idsWithout(template.itinerary, [5]),
-      })
-      expect(byId(retimed, 'jp-d6').transport?.from).not.toBe('Odawara')
-    },
-  )
+  it('retirer le delta du Mékong ne laisse pas un bus Cần Thơ → Saïgon à qui est déjà à Saïgon', async () => {
+    const template = await publishAndRead(generatedVietnam(), 'VN')
+    const retimed = retimeTemplate(template.itinerary, {
+      startDate: '2027-01-10',
+      keptDayIds: idsWithout(template.itinerary, [9]),
+    })
+    expect(byId(retimed, 'day-10').transport).toBeUndefined()
+    // Le premier passage à Saïgon retiré, le bus du delta repart de Hội An.
+    const withoutSaigon = retimeTemplate(template.itinerary, {
+      startDate: '2027-01-10',
+      keptDayIds: idsWithout(template.itinerary, [7, 8]),
+    })
+    expect(byId(withoutSaigon, 'day-9').transport).toMatchObject({
+      from: 'Hội An',
+      to: 'Cần Thơ',
+    })
+    expect(byId(withoutSaigon, 'day-9').transport).not.toHaveProperty(
+      'duration',
+    )
+  })
 
-  it.fails(
-    'B4 : la dernière étape ne compte pas de nuit pour le jour du départ',
-    async () => {
-      const template = await publishAndRead(japanTrip(), 'JP')
-      const groups = groupDaysByCity(
-        template.itinerary,
-        template.itinerary.map((day) => day.id),
-        '2027-04-03',
-      )
-      // Cross Hotel Osaka : du 13 au 16 avril, soit 3 nuits ; le 16, on s'envole.
-      expect(groups.at(-1)).toMatchObject({ city: 'Osaka', nights: 3 })
-    },
-  )
+  it('retirer Hakone recoud Tokyo → Kyoto, sans le Shinkansen d’Odawara, ses horaires ni son prix', async () => {
+    const template = await publishAndRead(japanTrip(), 'JP')
+    const retimed = retimeTemplate(template.itinerary, {
+      startDate: '2027-04-03',
+      keptDayIds: idsWithout(template.itinerary, [5]),
+    })
+    expect(byId(retimed, 'jp-d6').transport).toEqual({
+      id: 'jp-tr-shinkansen',
+      type: 'train',
+      from: 'Tokyo',
+      to: 'Kyoto',
+    })
+  })
 
-  it.fails('A3 : un prénom après « : » est surligné (« Hôte : Rui »)', () => {
+  it('B4 : compte des journées, pas des nuits (Osaka · 4 jours, départ compris)', async () => {
+    const template = await publishAndRead(japanTrip(), 'JP')
+    const groups = groupDaysByCity(
+      template.itinerary,
+      template.itinerary.map((day) => day.id),
+      '2027-04-03',
+    )
+    expect(groups.map((group) => [group.city, group.days])).toEqual([
+      ['Tokyo', 4],
+      ['Hakone', 1],
+      ['Kyoto', 4],
+      ['Nara', 1],
+      ['Osaka', 4],
+    ])
+    expect(groups.at(-1)).not.toHaveProperty('nights')
+  })
+
+  it('A3 : un prénom après « : » est surligné (« Hôte : Rui »)', () => {
     expect(
       highlights(
         'Hôte : Rui, très sympa.',
@@ -1954,21 +2007,22 @@ describe('défauts relevés (à passer en `it` une fois corrigés)', () => {
     ).toContain('name:Rui')
   })
 
-  it.fails(
-    'A3 : un lieu nommé dans un titre du voyage n’est pas un prénom (Asakusa)',
-    () => {
-      const trip = japanTrip()
-      expect(noteHighlights(trip[3].notes!, trip)).not.toContain('name:Asakusa')
-    },
-  )
+  it('A3 : un lieu nommé dans un titre du voyage n’est pas un prénom (Asakusa)', () => {
+    const trip = japanTrip()
+    expect(noteHighlights(trip[3].notes!, trip)).not.toContain('name:Asakusa')
+    // « Tobu Limited Express » : un service de train, pas une personne.
+    expect(noteHighlights(trip[3].notes!, trip)).toEqual([])
+  })
 
-  it.fails(
-    'A3 : l’extrait montré n’est pas fait que de faux noms (« Visa Premier »)',
-    () => {
-      const marks = noteExcerpts(italyRoadTrip()).flatMap((excerpt) =>
-        highlights(excerpt.text, excerpt.spans),
-      )
-      expect(marks).not.toContain('name:Premier')
-    },
-  )
+  it('A3 : l’extrait montré n’est pas fait que de faux noms (« Visa Premier »)', () => {
+    const excerpts = noteExcerpts(italyRoadTrip())
+    const marks = excerpts.flatMap((excerpt) =>
+      highlights(excerpt.text, excerpt.spans),
+    )
+    expect(marks).not.toContain('name:Premier')
+    expect(marks).not.toContain('name:Hertz')
+    // Les deux notes qui portent un vrai prénom passent devant la franchise.
+    expect(excerpts.map((excerpt) => excerpt.dayId)).toEqual(['it-d1', 'it-d5'])
+    expect(marks).toContain('name:Marco')
+  })
 })

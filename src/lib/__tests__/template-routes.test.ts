@@ -6,6 +6,7 @@ import {
   templateMetaKey,
   templateVersionKey,
 } from '@/lib/template-store'
+import { createOwnerToken } from '@/lib/template-token'
 import { POST } from '@/app/api/templates/route'
 import {
   DELETE,
@@ -13,7 +14,6 @@ import {
   PATCH,
   PUT,
 } from '@/app/api/templates/[id]/route'
-import { GET as getVersion } from '@/app/api/templates/[id]/v/[n]/route'
 import { GET as getBySlug } from '@/app/api/templates/by-slug/[slug]/route'
 import { GET as getIndex } from '@/app/api/templates/index/route'
 import type { DayItinerary } from '@/lib/itinerary-data'
@@ -34,8 +34,6 @@ vi.mock('@/lib/template-bucket', async () => {
 
 const bucket = memoryTemplateBucket
 
-/** Une version précise : en cache CDN une minute, sans rallonge. */
-const VERSION_CACHE = 'public, s-maxage=60'
 const LISTING_CACHE = 'public, s-maxage=300, stale-while-revalidate=300'
 
 // Chaque requête vient d'une IP différente : les limiteurs des routes vivent
@@ -120,17 +118,19 @@ function readBySlug(slug: string) {
   )
 }
 
-function readVersion(id: string, n: string) {
-  return getVersion(
-    new Request(`http://localhost/api/templates/${id}/v/${n}`),
-    { params: Promise.resolve({ id, n }) },
-  )
+/** `GET /api/templates/index`, avec sa requête (`?page=1`) au besoin. */
+function readIndex(query = '') {
+  return getIndex(new Request(`http://localhost/api/templates/index${query}`))
 }
 
 async function indexIds(): Promise<string[]> {
-  const response = await getIndex()
+  const response = await readIndex()
   const body = await response.json()
   return body.entries.map((entry: { id: string }) => entry.id)
+}
+
+function versionKeysOf(id: string): string[] {
+  return bucket.keys().filter((key) => key.startsWith(`${id}/v/`))
 }
 
 beforeEach(() => {
@@ -181,7 +181,7 @@ describe('cycle de vie d’un modèle', () => {
     expect((await bySlug.json()).template.id).toBe(id)
     expect(await indexIds()).toEqual([id])
 
-    // Mise à jour : version 2, la version 1 reste lisible
+    // Mise à jour : version 2, la version 1 supprimée, et un slug à 2 jours
     const updated = await PUT(
       jsonRequest(
         `/api/templates/${id}`,
@@ -196,20 +196,14 @@ describe('cycle de vie d’un modèle', () => {
     expect(updatedBody.template).toMatchObject({
       version: 2,
       dayCount: 2,
-      slug,
+      slug: 'japon-2-jours-tokyo',
       title: 'Japon en trois jours',
     })
-
-    const v1 = await readVersion(id, '1')
-    expect(v1.status).toBe(200)
-    const v1Body = await v1.json()
-    expect(v1Body.version).toBe(1)
-    expect(v1Body.itinerary).toHaveLength(3)
-    expect(Object.keys(v1Body).sort()).toEqual(['itinerary', 'version'])
-    expect((await (await readVersion(id, '2')).json()).itinerary).toHaveLength(
-      2,
-    )
-    expect((await readVersion(id, '3')).status).toBe(404)
+    expect(versionKeysOf(id)).toEqual([templateVersionKey(id, 2)])
+    // L'ancien slug mène au modèle, avec son slug actuel.
+    const oldSlug = await readBySlug(slug)
+    expect(oldSlug.status).toBe(200)
+    expect((await oldSlug.json()).template.slug).toBe('japon-2-jours-tokyo')
 
     // Masqué : plus de page tripbrain.fr, toujours joignable par son id
     const patched = await PATCH(
@@ -228,6 +222,7 @@ describe('cycle de vie d’un modèle', () => {
       version: 2,
     })
     expect((await readBySlug(slug)).status).toBe(404)
+    expect((await readBySlug('japon-2-jours-tokyo')).status).toBe(404)
     expect(await indexIds()).toEqual([])
     expect((await read(id)).status).toBe(200)
 
@@ -250,7 +245,7 @@ describe('cycle de vie d’un modèle', () => {
     // toujours pas. Un 410 dirait qu'il a existé.
     const goneBySlug = await readBySlug(slug)
     expect(goneBySlug.status).toBe(404)
-    expect((await readVersion(id, '1')).status).toBe(410)
+    expect(versionKeysOf(id)).toEqual([])
   })
 
   it('répond 410 par son slug pour un modèle retiré alors qu’il était listé', async () => {
@@ -282,22 +277,34 @@ describe('cache des lectures', () => {
     ])
   })
 
-  it('garde une version en cache une minute, et la fait répondre 410 une fois retirée', async () => {
+  it('répond par un ancien slug comme par l’actuel : 200 en cache, puis 410 sur les deux', async () => {
     const { template, ownerToken } = await publish()
-    const v1 = await readVersion(template.id, '1')
-    expect(v1.status).toBe(200)
-    expect(v1.headers.get('Cache-Control')).toBe(VERSION_CACHE)
-    // `stale-while-revalidate` laisserait le CDN servir le contenu retiré
-    // jusqu'à 5 minutes de plus après la minute promise.
-    expect(v1.headers.get('Cache-Control')).not.toContain(
-      'stale-while-revalidate',
+    const updated = await PUT(
+      jsonRequest(
+        `/api/templates/${template.id}`,
+        'PUT',
+        { data: await compressItinerary([...japanTrip(), day(4)]) },
+        bearer(ownerToken),
+      ),
+      idContext(template.id),
     )
+    const current = (await updated.json()).template.slug
+    expect(current).toBe('japon-4-jours-tokyo-kyoto')
+
+    const old = await readBySlug(template.slug)
+    expect(old.status).toBe(200)
+    expect(old.headers.get('Cache-Control')).toBe(LISTING_CACHE)
+    expect((await old.json()).template).toMatchObject({
+      id: template.id,
+      slug: current,
+    })
 
     await retire(template.id, ownerToken)
-    const gone = await readVersion(template.id, '1')
-    expect(gone.status).toBe(410)
-    expect(gone.headers.get('Cache-Control')).toBe(VERSION_CACHE)
-    expect(await gone.json()).toMatchObject({ status: 'retired' })
+    for (const slug of [template.slug, current]) {
+      const gone = await readBySlug(slug)
+      expect(gone.status).toBe(410)
+      expect(gone.headers.get('Cache-Control')).toBe(LISTING_CACHE)
+    }
   })
 })
 
@@ -537,7 +544,7 @@ describe('forme des valeurs', () => {
     expect(bucket.keys()).toEqual([])
   })
 
-  it('ne change jamais le slug ni le pays d’une mise à jour, même s’ils sont envoyés', async () => {
+  it('ne change jamais le pays d’une mise à jour, et tire le slug du contenu, même s’ils sont envoyés', async () => {
     const { template, ownerToken } = await publish()
     const response = await PUT(
       jsonRequest(
@@ -557,7 +564,7 @@ describe('forme des valeurs', () => {
     )
     expect(response.status).toBe(200)
     expect((await response.json()).template).toMatchObject({
-      slug: 'japon-3-jours-tokyo-kyoto',
+      slug: 'japon-2-jours-lisbonne-porto',
       country: 'JP',
       cities: ['Lisbonne', 'Porto'],
       dayCount: 2,
@@ -583,7 +590,7 @@ describe('visibilité', () => {
   it('liste un modèle visible de deux jours', async () => {
     const { template } = await publish([day(1), day(2, { city: 'Kyoto' })])
     expect(template.listed).toBe(true)
-    const response = await getIndex()
+    const response = await readIndex()
     expect(response.headers.get('Cache-Control')).toBe(LISTING_CACHE)
     expect((await response.json()).entries).toEqual([
       {
@@ -603,8 +610,6 @@ describe('lectures publiques', () => {
   it('répond 404 sans toucher au bucket pour un id ou un slug mal formé', async () => {
     expect((await read('INDEX')).status).toBe(404)
     expect((await readBySlug('japon')).status).toBe(404)
-    expect((await readVersion('0123456789abcdef', '0')).status).toBe(404)
-    expect((await readVersion('0123456789abcdef', '1.5')).status).toBe(404)
     expect(getTemplateStore).not.toHaveBeenCalled()
   })
 
@@ -627,16 +632,16 @@ describe('lectures publiques', () => {
   })
 
   it('renvoie un index vide tant que rien n’est publié', async () => {
-    const response = await getIndex()
+    const response = await readIndex()
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ entries: [] })
+    expect(await response.json()).toEqual({ entries: [], nextPage: null })
     expect(bucket.keys()).toEqual([])
   })
 
   it('répond 500 sans cache sur un index illisible, au lieu d’une liste vide', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     bucket.poke(TEMPLATE_INDEX_KEYS[3], { notEntries: true })
-    const response = await getIndex()
+    const response = await readIndex()
     expect(response.status).toBe(500)
     expect(response.headers.get('Cache-Control')).toBe('no-store')
     expect(await response.json()).toEqual({
@@ -723,5 +728,214 @@ describe('retrait et index public', () => {
     expect(retried.status).toBe(200)
     expect(versionKeys()).toEqual([])
     logged.mockRestore()
+  })
+})
+
+describe('publication rejouable : jeton tiré par le téléphone', () => {
+  async function publishWith(
+    token: string,
+    itinerary?: DayItinerary[],
+  ): Promise<Response> {
+    return POST(
+      jsonRequest(
+        '/api/templates',
+        'POST',
+        await publishBody(itinerary),
+        bearer(token),
+      ),
+    )
+  }
+
+  function metaKeys(): string[] {
+    return bucket.keys().filter((key) => key.endsWith('/meta'))
+  }
+
+  it('201 au premier envoi, 200 et le même modèle au second : un seul modèle', async () => {
+    const token = createOwnerToken()
+    const first = await publishWith(token)
+    expect(first.status).toBe(201)
+    expect(first.headers.get('Cache-Control')).toBe('no-store')
+    const firstBody = await first.json()
+    expect(firstBody.ownerToken).toBe(token)
+
+    const second = await publishWith(token)
+    expect(second.status).toBe(200)
+    expect(second.headers.get('Cache-Control')).toBe('no-store')
+    const secondBody = await second.json()
+    expect(secondBody).toEqual(firstBody)
+    expect(metaKeys()).toEqual([templateMetaKey(firstBody.template.id)])
+    expect(await indexIds()).toEqual([firstBody.template.id])
+  })
+
+  it('réponse perdue : l’envoi rejoué termine la publication interrompue, sans doublon', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const token = createOwnerToken()
+    // La connexion tombe pendant l'écriture de la méta : le téléphone ne
+    // reçoit qu'une erreur.
+    let failMeta = true
+    bucket.beforePut = (key) => {
+      if (failMeta && key.endsWith('/meta')) {
+        failMeta = false
+        throw new Error('ECONNRESET')
+      }
+    }
+    const lost = await publishWith(token)
+    expect(lost.status).toBe(500)
+    expect(metaKeys()).toEqual([])
+
+    const retried = await publishWith(token)
+    expect(retried.status).toBe(201)
+    const { template, ownerToken } = await retried.json()
+    expect(ownerToken).toBe(token)
+    expect(template.slug).toBe('japon-3-jours-tokyo-kyoto')
+    expect((await read(template.id)).status).toBe(200)
+
+    const again = await publishWith(token)
+    expect(again.status).toBe(200)
+    expect(metaKeys()).toEqual([templateMetaKey(template.id)])
+    expect(versionKeysOf(template.id)).toEqual([
+      templateVersionKey(template.id, template.version),
+    ])
+    logged.mockRestore()
+  })
+
+  it('deux jetons différents publient deux modèles', async () => {
+    const a = await (await publishWith(createOwnerToken())).json()
+    const b = await (await publishWith(createOwnerToken())).json()
+    expect(a.template.id).not.toBe(b.template.id)
+    expect(b.template.slug).toBe('japon-3-jours-tokyo-kyoto-2')
+    expect(metaKeys()).toHaveLength(2)
+  })
+
+  it('répond 401 à un en-tête Authorization mal formé, sans toucher au bucket', async () => {
+    for (const authorization of [
+      'Bearer 1234',
+      `Basic ${createOwnerToken()}`,
+      `Bearer ${createOwnerToken()}x`,
+      'Bearer',
+      '',
+    ]) {
+      const response = await POST(
+        jsonRequest('/api/templates', 'POST', await publishBody(), {
+          Authorization: authorization,
+        }),
+      )
+      expect(response.status, authorization).toBe(401)
+      expect(response.headers.get('Cache-Control')).toBe('no-store')
+      expect(await response.json()).toEqual({
+        error: 'Cet appareil n’est pas autorisé à modifier ce modèle.',
+      })
+    }
+    expect(getTemplateStore).not.toHaveBeenCalled()
+    expect(bucket.keys()).toEqual([])
+  })
+
+  it('sans en-tête, le serveur tire le jeton : chaque envoi publie un modèle', async () => {
+    const a = await publish()
+    const b = await publish()
+    expect(a.ownerToken).not.toBe(b.ownerToken)
+    expect(a.template.id).not.toBe(b.template.id)
+  })
+})
+
+describe('PATCH du titre', () => {
+  function patchTitle(id: string, token: string, title: unknown) {
+    return PATCH(
+      jsonRequest(`/api/templates/${id}`, 'PATCH', { title }, bearer(token)),
+      idContext(id),
+    )
+  }
+
+  it('renomme sans nouvelle version, et l’index suit', async () => {
+    const { template, ownerToken } = await publish()
+    const response = await patchTitle(
+      template.id,
+      ownerToken,
+      '  Le Japon  en vrai ',
+    )
+    expect(response.status).toBe(200)
+    expect((await response.json()).template).toMatchObject({
+      title: 'Le Japon en vrai',
+      version: 1,
+      slug: template.slug,
+    })
+    const index = await (await readIndex()).json()
+    expect(index.entries[0].title).toBe('Le Japon en vrai')
+  })
+
+  it('tire le titre des étapes s’il est vide, et refuse un titre qui n’est pas un texte', async () => {
+    const { template, ownerToken } = await publish()
+    const derived = await patchTitle(template.id, ownerToken, '')
+    expect((await derived.json()).template.title).toBe('Tokyo et Kyoto')
+    const invalid = await patchTitle(template.id, ownerToken, 42)
+    expect(invalid.status).toBe(400)
+    expect(await invalid.json()).toEqual({
+      error: 'Titre du modèle invalide.',
+    })
+  })
+})
+
+describe('mise à jour : versions précédentes', () => {
+  it('répond 503 quand les versions précédentes n’ont pas été effacées, et la mise à jour rejouée les efface', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { template, ownerToken } = await publish()
+    bucket.beforeDelete = () => {
+      throw new Error('R2 indisponible')
+    }
+    const update = async () =>
+      PUT(
+        jsonRequest(
+          `/api/templates/${template.id}`,
+          'PUT',
+          { data: await compressItinerary(japanTrip()) },
+          bearer(ownerToken),
+        ),
+        idContext(template.id),
+      )
+
+    const failed = await update()
+    expect(failed.status).toBe(503)
+    expect(failed.headers.get('Cache-Control')).toBe('no-store')
+    expect(await failed.json()).toEqual({
+      error:
+        'Le modèle est à jour, mais ses versions précédentes n’ont pas pu être effacées. Réessayez.',
+    })
+    expect((await (await read(template.id)).json()).template.version).toBe(2)
+
+    bucket.beforeDelete = null
+    const retried = await update()
+    expect(retried.status).toBe(200)
+    expect(versionKeysOf(template.id)).toEqual([
+      templateVersionKey(template.id, 3),
+    ])
+    logged.mockRestore()
+  })
+})
+
+describe('index par pages', () => {
+  it('répond par pages : `nextPage` dit la suivante, `null` après la dernière', async () => {
+    const { template } = await publish()
+    const first = await readIndex('?page=0')
+    expect(first.status).toBe(200)
+    expect(first.headers.get('Cache-Control')).toBe(LISTING_CACHE)
+    expect(await first.json()).toEqual({
+      entries: [expect.objectContaining({ id: template.id })],
+      nextPage: null,
+    })
+    const beyond = await readIndex('?page=1')
+    expect(beyond.status).toBe(200)
+    expect(await beyond.json()).toEqual({ entries: [], nextPage: null })
+  })
+
+  it('répond 400 sans cache à une page invalide, sans toucher au bucket', async () => {
+    for (const page of ['-1', '1.5', 'abc', '01', '', '1e3', '1000000']) {
+      const response = await readIndex(`?page=${page}`)
+      expect(response.status, page).toBe(400)
+      expect(response.headers.get('Cache-Control')).toBe('no-store')
+      expect(await response.json()).toEqual({
+        error: 'Page de l’index invalide.',
+      })
+    }
+    expect(getTemplateStore).not.toHaveBeenCalled()
   })
 })

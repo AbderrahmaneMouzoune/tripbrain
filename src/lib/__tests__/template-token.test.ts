@@ -2,6 +2,7 @@ import {
   createOwnerToken,
   hashOwnerToken,
   isOwnerToken,
+  isOwnerTokenHash,
   readBearerToken,
   verifyOwnerToken,
 } from '@/lib/template-token'
@@ -38,6 +39,24 @@ describe('hashOwnerToken', () => {
     const token = createOwnerToken()
     expect(hashOwnerToken(token)).toMatch(/^[0-9a-f]{64}$/)
     expect(hashOwnerToken(token)).not.toContain(token)
+  })
+})
+
+describe('isOwnerTokenHash', () => {
+  it('reconnaît une empreinte telle que hashOwnerToken l’écrit, rien d’autre', () => {
+    expect(isOwnerTokenHash(hashOwnerToken(createOwnerToken()))).toBe(true)
+    for (const value of [
+      '',
+      'a'.repeat(63),
+      'a'.repeat(65),
+      'A'.repeat(64),
+      `${'a'.repeat(63)}/`,
+      '../meta',
+      42,
+      null,
+    ]) {
+      expect(isOwnerTokenHash(value)).toBe(false)
+    }
   })
 })
 

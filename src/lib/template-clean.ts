@@ -707,6 +707,13 @@ const INTERNATIONAL_PHONE =
  * final force à prendre le numéro entier plutôt qu'un préfixe collé à la suite.
  */
 const NATIONAL_PHONE = /0\d{1,4}(?:[ .\-\u00a0\u202f]?\d{2,4}){1,5}(?!\d)/g
+/**
+ * Numéros de vol ou de train : `CA1590`, `AF 274`, `9C8951`, `TGV 6231`,
+ * `ICE 578`. Publics par nature (horaires affichés partout), ils ne sont pas
+ * surlignés, ni leurs chiffres.
+ */
+const SERVICE_NUMBER =
+  /\b(?:[A-Z]{2}\s?|\d[A-Z]|(?:TGV|ICE|TER|AVE|KTX|SRT|THSR|RJX|EST)\s?)\d{2,4}\b/g
 const URL_LIKE = /(?:https?:\/\/|www\.)\S+/gi
 /** Un mot, apostrophes et traits d'union compris : `Xi’an`, `Jean-Pierre`. */
 const WORD = /[\p{L}\p{M}]+(?:['’-][\p{L}\p{M}]+)*/gu
@@ -751,10 +758,29 @@ const STOP_WORDS = wordSet(`
   alipay wechat didi uber grab airbnb booking expedia agoda google maps waze
   whatsapp line telegram instagram facebook suica pasmo icoca klook trip ctrip
   tripadvisor tabelog visa mastercard amex revolut wise paypal apple android
-  iphone tripbrain shinkansen pass rail eurail metro métro euro euros yen yens yuan
+  iphone tripbrain pass rail eurail metro métro euro euros yen yens yuan
   français anglais japonais chinois coréen coréens taïwanais thaï vietnamien
   européen européens américain américains english french japanese chinese korean
   the and all this my your our we you they
+  premier premium gold platinum infinite classic business economy
+  prime plus pro lite translate traduction lens drive wallet pay special
+  lounge
+`)
+/*
+ * Les deux dernières lignes : gammes de cartes et d'abonnements (« Visa
+ * Premier »), produits d'applis (« Google Traduction ») — des marques, pas des
+ * personnes.
+ */
+
+/**
+ * Libellés qui annoncent une personne : après « Hôte : », « Contact : »,
+ * « Guide : », le mot à majuscule est un prénom, pas un début de phrase.
+ */
+const PERSON_LABELS = wordSet(`
+  hôte hôtes hôtesse host hosts contact contacts guide guides chauffeur
+  chauffeurs driver propriétaire proprio owner gérant gérante manager
+  responsable interlocuteur interlocutrice référent référente nom name prénom
+  rdv rendez-vous appeler contacter demander
 `)
 
 /**
@@ -779,6 +805,7 @@ const PLACE_WORDS = wordSet(`
   restaurant café bar brasserie bistrot izakaya monument mémorial memorial
   mausolée mausoleum tombeau tomb statue observatoire observatory belvédère
   terrasse onsen spa hutong hutongs international intl
+  shinkansen express limited rapid ferry
   nord sud est ouest north south east west central grand grande petit petite
   vieux vieille nouveau nouvelle saint sainte san santa new old upper lower
   haut haute
@@ -787,9 +814,11 @@ const PLACE_WORDS = wordSet(`
   montpellier rennes bruxelles genève lausanne montréal québec londres
 `)
 /*
- * Les dernières lignes ci-dessus : continents, et les villes de départ les plus
- * probables d'un auteur francophone (« vol retour vers Paris »), qui ne sont
- * souvent pas des étapes du voyage.
+ * Les dernières lignes ci-dessus : services de train ou de bateau, nommés
+ * comme des lieux (« Tobu Limited Express », « Shinkansen Hikari ») ;
+ * continents, et les villes de départ les plus probables d'un auteur
+ * francophone (« vol retour vers Paris »), qui ne sont souvent pas des étapes
+ * du voyage.
  */
 
 /**
@@ -858,6 +887,28 @@ function isHonorificBefore(text: string, dot: number): boolean {
   return HONORIFICS.has(normalizeWord(text.slice(start, dot)))
 }
 
+/**
+ * Le mot qui commence en `index` suit-il un deux-points (« Hôte : Rui ») ?
+ * Renvoie alors le libellé, le mot juste avant les deux-points (normalisé,
+ * `''` s'il n'y en a pas) ; `null` s'il n'y a pas de deux-points.
+ */
+function colonLabel(text: string, index: number): string | null {
+  let colon = index - 1
+  while (
+    colon >= 0 &&
+    ((/\s/.test(text[colon]) && text[colon] !== '\n' && text[colon] !== '\r') ||
+      OPENERS.includes(text[colon]))
+  ) {
+    colon -= 1
+  }
+  if (colon < 0 || text[colon] !== ':') return null
+  let end = colon
+  while (end > 0 && /[^\S\n\r]/.test(text[end - 1])) end -= 1
+  let start = end
+  while (start > 0 && /[\p{L}\p{M}'’-]/u.test(text[start - 1])) start -= 1
+  return normalizeWord(text.slice(start, end))
+}
+
 /** Le mot qui commence en `index` ouvre-t-il une phrase (ou une ligne) ? */
 function isSentenceStart(text: string, index: number): boolean {
   for (let i = index - 1; i >= 0; i -= 1) {
@@ -878,6 +929,11 @@ interface Token {
   end: number
   norm: string
   capitalized: boolean
+  /**
+   * Peut-il être un nom de personne ? Une majuscule suivie d'au moins deux
+   * minuscules : ni sigle (`PKX`, `VIP`), ni mot de deux lettres (`Le`, `Mo`).
+   */
+  nameLike: boolean
 }
 
 function tokenize(text: string): Token[] {
@@ -886,13 +942,15 @@ function tokenize(text: string): Token[] {
     const rawStart = match.index ?? 0
     const elision = ELISION.exec(match[0])?.[0].length ?? 0
     const word = match[0].slice(elision)
+    // Tout en capitales (`PKX`, `VIP`, `JR`) : un sigle, pas un nom.
+    const capitalized = /^\p{Lu}/u.test(word) && /\p{Ll}/u.test(word)
     tokens.push({
       rawStart,
       start: rawStart + elision,
       end: rawStart + match[0].length,
       norm: normalizeWord(word),
-      // Tout en capitales (`PKX`, `VIP`, `JR`) : un sigle, pas un nom.
-      capitalized: /^\p{Lu}/u.test(word) && /\p{Ll}/u.test(word),
+      capitalized,
+      nameLike: capitalized && (word.match(/\p{Ll}/gu)?.length ?? 0) >= 2,
     })
   }
   return tokens
@@ -912,12 +970,17 @@ function insideAny(ranges: readonly [number, number][], at: number): boolean {
 /**
  * Noms propres hors lieux : un indice pour l'auteur, pas une garantie. On
  * préfère en manquer un que surligner des mots ordinaires, d'où les règles :
- * - un mot en début de phrase ou de ligne n'est jamais surligné ;
+ * - un nom a une majuscule et au moins deux minuscules (`Rui`, pas `Li` ni
+ *   `VIP`) ;
+ * - un mot en début de phrase ou de ligne n'est jamais surligné, sauf après
+ *   un deux-points quand le libellé annonce une personne (« Hôte : Rui ») ou
+ *   qu'un second nom le suit (« Rdv : Kaori Tanaka ») ;
  * - une suite de mots à majuscule (« Taiwan Taoyuan International Airport »)
  *   qui touche un lieu du voyage ou un mot de lieu est un lieu, en entier ;
  * - de même après un mot de lieu en minuscules (« le restaurant Jiro ») ou
  *   une préposition de lieu (« au Japon ») ; un pays n'est jamais surligné ;
- * - mots courants (`STOP_WORDS`), sigles et mots dans une URL ignorés.
+ * - mots courants, marques et gammes (`STOP_WORDS` : « Visa Premier »),
+ *   sigles et mots dans une URL ignorés.
  */
 function nameSpans(text: string, places: PlaceIndex): SensitiveSpan[] {
   const tokens = tokenize(text)
@@ -945,12 +1008,25 @@ function nameSpans(text: string, places: PlaceIndex): SensitiveSpan[] {
           inWordSet(token.norm, PLACE_WORDS),
       )
     if (!isPlace) {
+      const candidate = (token: Token) =>
+        token.nameLike &&
+        !inWordSet(token.norm, STOP_WORDS) &&
+        !insideAny(urls, token.start)
+      // Après « Libellé : », le premier mot ouvre la valeur. C'est un prénom
+      // si le libellé annonce une personne (« Hôte : Rui ») ou si un second
+      // nom le suit (« Guide : Kaori Tanaka ») ; sinon un début de phrase
+      // (« Note : Penser à réserver »).
+      const label = colonLabel(text, sequence[0].rawStart)
+      const opensValue =
+        label !== null &&
+        (inWordSet(label, PERSON_LABELS) ||
+          (sequence.length > 1 && candidate(sequence[1])))
       let current: SensitiveSpan | null = null
-      for (const token of sequence) {
+      for (const [position, token] of sequence.entries()) {
         const flagged =
-          !isSentenceStart(text, token.rawStart) &&
-          !inWordSet(token.norm, STOP_WORDS) &&
-          !insideAny(urls, token.start)
+          (!isSentenceStart(text, token.rawStart) ||
+            (position === 0 && opensValue)) &&
+          candidate(token)
         if (!flagged) {
           current = null
         } else if (current) {
@@ -1042,6 +1118,8 @@ function containsContact(text: string): boolean {
 }
 
 function findSpans(text: string, places: PlaceIndex): SensitiveSpan[] {
+  // Les chiffres d'un numéro de vol ou de train (« CA1590 ») ne sont pas un code.
+  const services = rangesOf(text, SERVICE_NUMBER)
   const candidates: SensitiveSpan[] = [
     ...rangesOf(text, EMAIL).map(([start, end]) => ({
       start,
@@ -1049,11 +1127,13 @@ function findSpans(text: string, places: PlaceIndex): SensitiveSpan[] {
       kind: 'email' as const,
     })),
     ...phoneSpans(text),
-    ...rangesOf(text, DIGITS).map(([start, end]) => ({
-      start,
-      end,
-      kind: 'digits' as const,
-    })),
+    ...rangesOf(text, DIGITS)
+      .filter(([start]) => !insideAny(services, start))
+      .map(([start, end]) => ({
+        start,
+        end,
+        kind: 'digits' as const,
+      })),
     ...nameSpans(text, places),
   ]
   candidates.sort(
@@ -1104,7 +1184,8 @@ function findSpans(text: string, places: PlaceIndex): SensitiveSpan[] {
 
 /**
  * Données sensibles d'un texte libre, triées et sans chevauchement :
- * - `digits` : 4 chiffres ou plus à la suite (codes, digicodes, numéros) ;
+ * - `digits` : 4 chiffres ou plus à la suite (codes, digicodes, numéros),
+ *   sauf ceux d'un numéro de vol ou de train (`CA1590`, `TGV 6231`) ;
  * - `phone` : numéros internationaux (`+33 6…`) ou nationaux (`06…`, `080-…`) ;
  * - `email` ;
  * - `name` : mots à majuscule hors début de phrase, hors lieux du voyage
@@ -1121,12 +1202,15 @@ export function sensitiveSpans(
 }
 
 /**
- * Lieux du voyage, pour ne pas les prendre pour des noms de personne : villes,
- * activités, hébergements, départs et arrivées, et les adresses (des lieux,
- * elles aussi). Dans l'ordre du voyage, sans doublon.
+ * Lieux du voyage, pour ne pas les prendre pour des noms de personne : titre
+ * du voyage (`tripTitle`) et des journées (« Asakusa et Ueno »), villes,
+ * activités, hébergements, départs et arrivées, compagnies et loueurs
+ * (« Hertz », « Tobu »), et les adresses (des lieux, elles aussi). Tout cela
+ * part publié de toute façon. Dans l'ordre du voyage, sans doublon.
  */
 export function templateKnownPlaces(
   itinerary: readonly DayItinerary[],
+  tripTitle?: string,
 ): string[] {
   const seen = new Set<string>()
   const places: string[] = []
@@ -1138,7 +1222,9 @@ export function templateKnownPlaces(
     seen.add(key)
     places.push(place)
   }
+  add(tripTitle)
   for (const day of itinerary) {
+    add(day.title)
     add(day.city)
     for (const activity of day.activities) {
       add(activity.name)
@@ -1149,8 +1235,37 @@ export function templateKnownPlaces(
     add(day.transport?.from)
     add(day.transport?.to)
     add(day.transport?.departureAddress)
+    add(day.transport?.provider)
   }
   return places
+}
+
+/** Notes du voyage, pour le libellé de A3 : « 25 notes, dont 5 sur des trajets ». */
+export interface TemplateNoteStats {
+  /** Notes non vides, de journée et de trajet. */
+  total: number
+  /** Parmi elles, les notes de trajet (`Transport.notes`). */
+  onTransports: number
+}
+
+/**
+ * Compte les notes que l'interrupteur « notes » de A3 publierait : celles des
+ * journées et celles des trajets (§5 de la spec), non vides. Chaque note
+ * compte, même identique à une autre.
+ */
+export function templateNoteStats(
+  itinerary: readonly DayItinerary[],
+): TemplateNoteStats {
+  let total = 0
+  let onTransports = 0
+  for (const day of itinerary) {
+    if (hasText(day.notes)) total += 1
+    if (hasText(day.transport?.notes)) {
+      total += 1
+      onTransports += 1
+    }
+  }
+  return { total, onTransports }
 }
 
 // ── Écran A3 : extraits de notes ──────────────────────────────────────────────
@@ -1189,8 +1304,10 @@ function cutPoint(text: string): number {
 
 /**
  * Coupe une note autour de ce qui compte : depuis le début, ou un peu avant la
- * première donnée sensible si elle tomberait au-delà de la coupe — un extrait
- * choisi pour ses données sensibles doit les montrer.
+ * donnée la plus grave (`spanLevel` ; à égalité, la première du texte) si elle
+ * tomberait au-delà de la coupe — un extrait choisi pour un téléphone doit
+ * montrer ce téléphone, pas seulement le prénom qui le précède. Les données
+ * moins graves placées avant elle sortent alors de l'extrait.
  *
  * Le début de l'extrait est alors pris sur une espace, si l'une tombe dans les
  * `EXCERPT_LEAD` caractères qui précèdent le contexte gardé ; sinon (japonais
@@ -1204,9 +1321,13 @@ function clip(
   if (text.length <= NOTE_EXCERPT_LENGTH) return { text, spans: [...spans] }
 
   let from = 0
-  const first = spans[0]
-  if (first && first.end > cutPoint(text)) {
-    const lead = Math.max(0, first.start - EXCERPT_LEAD)
+  // Les passages sont dans l'ordre du texte : `<` garde le premier à égalité.
+  const anchor = spans.reduce<SensitiveSpan | undefined>(
+    (best, span) => (!best || spanLevel(span) < spanLevel(best) ? span : best),
+    undefined,
+  )
+  if (anchor && anchor.end > cutPoint(text)) {
+    const lead = Math.max(0, anchor.start - EXCERPT_LEAD)
     const space = text.lastIndexOf(' ', lead)
     from = space >= 0 && lead - space <= EXCERPT_LEAD ? space + 1 : lead
     // Jamais au milieu d'un emoji.
@@ -1234,17 +1355,45 @@ function clip(
 }
 
 /**
+ * Gravité d'un passage, de 0 (le plus grave) à 3 : un téléphone ou un e-mail,
+ * puis une suite de 6 chiffres ou plus, puis un nom, puis un code de 4 ou 5
+ * chiffres.
+ */
+function spanLevel(span: SensitiveSpan): number {
+  return span.kind === 'phone' || span.kind === 'email'
+    ? 0
+    : span.kind === 'digits' && span.end - span.start >= 6
+      ? 1
+      : span.kind === 'name'
+        ? 2
+        : 3
+}
+
+/** Gravité d'une note : celle de son passage le plus grave, 4 sans passage. */
+function severity(spans: readonly SensitiveSpan[]): number {
+  return Math.min(4, ...spans.map(spanLevel))
+}
+
+/**
  * Extraits réels des notes du voyage pour l'écran A3, où l'auteur décide s'il
- * les publie. On montre d'abord les notes qui contiennent une donnée sensible,
- * puis les plus longues ; les extraits retenus reviennent dans l'ordre du
- * voyage. Une note identique à une autre n'est montrée qu'une fois.
+ * les publie. On montre d'abord les notes les plus graves (`severity` :
+ * téléphone ou e-mail, puis 6 chiffres ou plus, puis un nom, puis 4–5
+ * chiffres), puis celles qui ont le plus de passages surlignés, puis les plus
+ * longues ; les extraits retenus reviennent dans l'ordre du voyage. Une note
+ * longue est coupée autour de la donnée qui l'a fait choisir (`clip`) : elle
+ * est toujours visible et surlignée dans l'extrait. Une note identique à une
+ * autre n'est montrée qu'une fois. `tripTitle` : le titre du voyage, dont les
+ * mots ne sont pas des prénoms (`templateKnownPlaces`).
  */
 export function noteExcerpts(
   itinerary: readonly DayItinerary[],
   limit = 2,
+  options: { tripTitle?: string } = {},
 ): NoteExcerpt[] {
   if (limit <= 0) return []
-  const places = buildPlaceIndex(templateKnownPlaces(itinerary))
+  const places = buildPlaceIndex(
+    templateKnownPlaces(itinerary, options.tripTitle),
+  )
   const seen = new Set<string>()
   const notes: (NoteExcerpt & { order: number })[] = []
 
@@ -1271,9 +1420,11 @@ export function noteExcerpts(
   }
 
   return notes
+    .map((note) => ({ ...note, severity: severity(note.spans) }))
     .sort(
       (a, b) =>
-        Number(b.spans.length > 0) - Number(a.spans.length > 0) ||
+        a.severity - b.severity ||
+        b.spans.length - a.spans.length ||
         b.text.length - a.text.length ||
         a.order - b.order,
     )

@@ -91,10 +91,40 @@ describe('templateSlug', () => {
       'japon-14-jours-tokyo-kyoto-osaka',
     ],
     ['JP', 2, ['東京', 'Kyoto'], 'japon-2-jours-kyoto'],
+    ['PT', 1, ['Lisbonne'], 'portugal-1-jour-lisbonne'],
+    ['PT', 1, [], 'portugal-1-jour'],
   ])('%s, %i jours, %j → %s', (country, dayCount, cities, expected) => {
     const slug = templateSlug({ country, dayCount, cities })
     expect(slug).toBe(expected)
     expect(isTemplateSlug(slug)).toBe(true)
+  })
+})
+
+describe('isTemplateSlug', () => {
+  it.each([
+    'portugal-1-jour',
+    'portugal-1-jour-lisbonne',
+    'portugal-1-jour-lisbonne-2',
+    'japon-2-jours',
+    'japon-14-jours-tokyo-kyoto-osaka',
+    'japon-180-jours-tokyo-k3x9m2',
+  ])('reconnaît « %s »', (slug) => {
+    expect(isTemplateSlug(slug)).toBe(true)
+  })
+
+  it.each([
+    'portugal-1-jours-lisbonne',
+    'japon-2-jour-kyoto',
+    'japon-0-jours',
+    'japon-01-jours',
+    'japon-11-jour',
+    'japon-jours',
+    'japon',
+    'cote-d-ivoire',
+    'Japon-2-jours',
+    'japon--2-jours',
+  ])('refuse « %s »', (slug) => {
+    expect(isTemplateSlug(slug)).toBe(false)
   })
 })
 

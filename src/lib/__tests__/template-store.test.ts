@@ -4,6 +4,7 @@ import type { DayItinerary } from '@/lib/itinerary-data'
 import {
   createTemplateId,
   isTemplateSlug,
+  templateSlug,
   type TemplateMeta,
 } from '@/lib/template-model'
 import {
@@ -16,15 +17,17 @@ import {
   patchTemplate,
   publishTemplate,
   readIndex,
+  readIndexPage,
   readTemplate,
   readTemplateBySlug,
   readTemplateForOperator,
-  readTemplateVersion,
   resyncTemplateIndex,
   retireTemplate,
   retireTemplateAsOperator,
   templateIndexKey,
+  TEMPLATE_INDEX_PAGE_SIZE,
   templateMetaKey,
+  templateOwnerKey,
   templateSlugKey,
   templateVersionKey,
   updateTemplate,
@@ -32,6 +35,7 @@ import {
   type TemplateBucket,
   type TemplateStoreErrorCode,
 } from '@/lib/template-store'
+import { createOwnerToken } from '@/lib/template-token'
 import { createMemoryTemplateBucket } from './helpers/memory-template-bucket'
 import {
   activity,
@@ -518,7 +522,7 @@ describe('publishTemplate', () => {
 })
 
 describe('updateTemplate', () => {
-  it('ajoute la version 2 sans toucher la version 1', async () => {
+  it('ajoute la version 2, puis supprime la version 1', async () => {
     const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
     const shorter = japanTrip().slice(0, 2)
 
@@ -534,11 +538,11 @@ describe('updateTemplate', () => {
       cities: ['Tokyo'],
       publishedAt: '2026-11-03T10:00:00.000Z',
       updatedAt: '2026-11-04T08:30:00.000Z',
-      slug: meta.slug,
     })
     expect(updated.template.itinerary).toHaveLength(2)
-    const v1 = await readTemplateVersion(bucket, meta.id, 1)
-    expect(v1.status === 'active' && v1.itinerary).toHaveLength(3)
+    // La base de fusion de la V1.1 vit sur le téléphone du repreneur : le
+    // serveur ne garde que la version publiée.
+    expect(versionKeys(meta.id)).toEqual([templateVersionKey(meta.id, 2)])
     const current = await readTemplate(bucket, meta.id)
     expect(current.status === 'active' && current.template.version).toBe(2)
   })
@@ -756,9 +760,6 @@ describe('retireTemplate', () => {
     await retireTemplate(bucket, meta.id, ownerToken)
 
     expect(await readTemplate(bucket, meta.id)).toEqual({ status: 'retired' })
-    expect(await readTemplateVersion(bucket, meta.id, 1)).toEqual({
-      status: 'retired',
-    })
     expect(await readTemplateBySlug(bucket, meta.slug)).toEqual({
       status: 'retired',
     })
@@ -819,14 +820,16 @@ describe('lectures publiques', () => {
 
   it('ne sert jamais une version au-delà de la version publiée', async () => {
     const { meta } = await publishTemplate(bucket, publishInput())
-    expect((await readTemplateVersion(bucket, meta.id, 1)).status).toBe(
-      'active',
-    )
-    expect(await readTemplateVersion(bucket, meta.id, 2)).toEqual({
-      status: 'missing',
+    // Une mise à jour en cours a écrit sa version, pas encore la méta.
+    bucket.poke(templateVersionKey(meta.id, 2), {
+      version: 2,
+      title: 'En cours',
+      itinerary: [day(1, { city: 'Osaka' })],
     })
-    expect(await readTemplateVersion(bucket, meta.id, 0)).toEqual({
-      status: 'missing',
+    const result = await readTemplate(bucket, meta.id)
+    expect(result.status === 'active' && result.template).toMatchObject({
+      version: 1,
+      dayCount: 3,
     })
   })
 
@@ -840,7 +843,9 @@ describe('lectures publiques', () => {
     const bySlug = await readTemplateBySlug(bucket, japan.meta.slug)
     expect(bySlug.status === 'active' && bySlug.template.id).toBe(japan.meta.id)
     // Une journée : visible, mais jamais listé.
-    expect(lisbon.meta.slug).toBe('portugal-1-jours-lisbonne')
+    expect(lisbon.meta.slug).toBe(
+      templateSlug({ country: 'PT', dayCount: 1, cities: ['Lisbonne'] }),
+    )
     expect(await readTemplateBySlug(bucket, lisbon.meta.slug)).toEqual({
       status: 'missing',
     })
@@ -849,12 +854,22 @@ describe('lectures publiques', () => {
     })
   })
 
-  it('ignore un slug réservé qui pointe vers un autre modèle', async () => {
+  it('par un slug qui n’est plus le sien, rend le modèle avec son slug actuel', async () => {
     const { meta } = await publishTemplate(bucket, publishInput())
-    bucket.poke(templateSlugKey('japon-3-jours-tokyo-osaka'), { id: meta.id })
-    expect(
-      await readTemplateBySlug(bucket, 'japon-3-jours-tokyo-osaka'),
-    ).toEqual({ status: 'missing' })
+    // Ancien slug : il pointe toujours vers le modèle, qui en a changé.
+    bucket.poke(templateSlugKey('japon-2-jours-tokyo'), { id: meta.id })
+    const result = await readTemplateBySlug(bucket, 'japon-2-jours-tokyo')
+    expect(result.status === 'active' && result.template).toMatchObject({
+      id: meta.id,
+      slug: 'japon-3-jours-tokyo-kyoto',
+    })
+    // Un slug réservé par une publication qui n'a jamais écrit sa méta.
+    bucket.poke(templateSlugKey('japon-2-jours-osaka'), {
+      id: createTemplateId(),
+    })
+    expect(await readTemplateBySlug(bucket, 'japon-2-jours-osaka')).toEqual({
+      status: 'missing',
+    })
   })
 
   it('liste les modèles du plus récent au plus ancien, sans les modèles non listés', async () => {
@@ -1168,10 +1183,7 @@ describe('suppression des versions au retrait', () => {
     expect(await readTemplate(bucket, meta.id)).toEqual({ status: 'retired' })
     expect(await indexIds()).toEqual([])
     // … mais le contenu de l'auteur est encore dans le bucket.
-    expect(versionKeys(meta.id)).toEqual([
-      templateVersionKey(meta.id, 1),
-      templateVersionKey(meta.id, 2),
-    ])
+    expect(versionKeys(meta.id)).toEqual([templateVersionKey(meta.id, 2)])
     expect(console.error).toHaveBeenCalledWith(
       'Versions du modèle non supprimées',
       expect.any(Error),
@@ -1266,7 +1278,7 @@ function trip(
 }
 
 describe('mise à jour : ce que la méta recalcule, et ce qu’elle ne touche jamais', () => {
-  it('recalcule titre, jours, villes, année, réglages et date de modification, jamais le slug ni le pays', async () => {
+  it('recalcule titre, jours, villes, année, réglages, slug et date de modification, jamais le pays', async () => {
     const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
     const kansai = [
       day(1, { date: '2027-03-10', city: 'Osaka', notes: 'Note du jour' }),
@@ -1289,6 +1301,8 @@ describe('mise à jour : ce que la méta recalcule, et ce qu’elle ne touche ja
 
     expect(next).toEqual({
       ...meta,
+      // La durée et les villes ont changé : le slug les suit.
+      slug: 'japon-4-jours-osaka-nara-kobe',
       version: 2,
       title: 'Le Kansai en quatre jours',
       dayCount: 4,
@@ -1298,27 +1312,29 @@ describe('mise à jour : ce que la méta recalcule, et ce qu’elle ne touche ja
       includesPrices: false,
       updatedAt: '2026-11-04T08:30:00.000Z',
     })
-    // Figés à la première publication : l'adresse de la page ne bouge pas.
-    expect(next.slug).toBe('japon-3-jours-tokyo-kyoto')
+    // Le pays, lui, ne bouge jamais.
     expect(next.country).toBe('JP')
     expect(next.publishedAt).toBe(meta.publishedAt)
     expect(storedMeta(meta.id)).toEqual(next)
     expect(template.itinerary[0].notes).toBe('Note du jour')
 
+    // L'index ne porte que le slug actuel.
     const [entry] = await readIndex(bucket)
     expect(entry).toEqual({
       id: meta.id,
-      slug: 'japon-3-jours-tokyo-kyoto',
+      slug: 'japon-4-jours-osaka-nara-kobe',
       title: 'Le Kansai en quatre jours',
       country: 'JP',
       dayCount: 4,
       cities: ['Osaka', 'Nara', 'Kobe'],
       updatedAt: '2026-11-04T08:30:00.000Z',
     })
+    // L'ancien slug mène au modèle, avec son slug actuel (301 côté vitrine).
     const bySlug = await readTemplateBySlug(bucket, meta.slug)
-    expect(bySlug.status === 'active' && bySlug.template.title).toBe(
-      'Le Kansai en quatre jours',
-    )
+    expect(bySlug.status === 'active' && bySlug.template).toMatchObject({
+      title: 'Le Kansai en quatre jours',
+      slug: 'japon-4-jours-osaka-nara-kobe',
+    })
   })
 
   it('remet l’année à null quand la nouvelle version n’a plus de date', async () => {
@@ -1342,18 +1358,25 @@ describe('mise à jour : ce que la méta recalcule, et ce qu’elle ne touche ja
     })
 
     expect(template.listed).toBe(false)
-    expect(template.slug).toBe(meta.slug)
+    // Un nouveau slug d'une journée, l'ancien gardé : aucun ne répond.
+    expect(template.slug).toBe(
+      templateSlug({ country: 'JP', dayCount: 1, cities: ['Ville 1'] }),
+    )
     expect(await indexIds()).toEqual([])
-    expect(await readTemplateBySlug(bucket, meta.slug)).toEqual({
-      status: 'missing',
-    })
+    for (const slug of [meta.slug, template.slug]) {
+      expect(await readTemplateBySlug(bucket, slug)).toEqual({
+        status: 'missing',
+      })
+    }
     // Toujours joignable par son lien /m/<id>.
     expect((await readTemplate(bucket, meta.id)).status).toBe('active')
-    // Retiré ensuite, il n'avait plus de page : 404 par son slug, pas 410.
+    // Retiré ensuite, il n'avait plus de page : 404 par ses slugs, pas 410.
     await retireTemplate(bucket, meta.id, ownerToken)
-    expect(await readTemplateBySlug(bucket, meta.slug)).toEqual({
-      status: 'missing',
-    })
+    for (const slug of [meta.slug, template.slug]) {
+      expect(await readTemplateBySlug(bucket, slug)).toEqual({
+        status: 'missing',
+      })
+    }
   })
 
   it('remet dans l’index un modèle d’une journée qui en retrouve deux', async () => {
@@ -1362,9 +1385,14 @@ describe('mise à jour : ce que la méta recalcule, et ce qu’elle ne touche ja
       publishInput({ itinerary: trip(1) }),
     )
     expect(await indexIds()).toEqual([])
-    await updateTemplate(bucket, meta.id, ownerToken, { itinerary: trip(2) })
+    const { meta: longer } = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: trip(2),
+    })
+    expect(longer.slug).toBe('japon-2-jours-ville-1-ville-2')
     expect(await indexIds()).toEqual([meta.id])
-    expect((await readTemplateBySlug(bucket, meta.slug)).status).toBe('active')
+    expect((await readTemplateBySlug(bucket, longer.slug)).status).toBe(
+      'active',
+    )
   })
 })
 
@@ -1525,9 +1553,6 @@ describe('retireTemplateAsOperator', () => {
     )
     expect(await readIndex(bucket)).toEqual([])
     expect(await readTemplate(bucket, meta.id)).toEqual({ status: 'retired' })
-    expect(await readTemplateVersion(bucket, meta.id, 1)).toEqual({
-      status: 'retired',
-    })
     expect(await readTemplateBySlug(bucket, meta.slug)).toEqual({
       status: 'retired',
     })
@@ -1589,15 +1614,22 @@ describe('retireTemplateAsOperator', () => {
     expect((await readTemplate(bucket, meta.id)).status).toBe('active')
   })
 
-  it('refuse un slug réservé qui pointe vers un modèle d’un autre slug', async () => {
-    const { meta } = await publishTemplate(bucket, publishInput())
-    bucket.poke(templateSlugKey('japon-3-jours-tokyo-osaka'), { id: meta.id })
-    expect(
-      await storeError(
-        retireTemplateAsOperator(bucket, 'japon-3-jours-tokyo-osaka'),
-      ),
-    ).toBe('missing')
-    expect((await readTemplate(bucket, meta.id)).status).toBe('active')
+  it('retire par un ancien slug, et le modèle répond 410 sur tous ses slugs', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    const { meta: longer } = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: [...japanTrip(), day(4, { city: 'Osaka' })],
+    })
+    expect(longer.slug).not.toBe(meta.slug)
+
+    const result = await retireTemplateAsOperator(bucket, meta.slug, LATER)
+
+    expect(result).toMatchObject({ id: meta.id, slug: longer.slug })
+    for (const slug of [meta.slug, longer.slug]) {
+      expect(await readTemplateBySlug(bucket, slug)).toEqual({
+        status: 'retired',
+      })
+      expect(bucket.peek(templateSlugKey(slug))).toEqual({ id: meta.id })
+    }
   })
 
   it('échoue si l’index ne suit pas, pierre tombale en place, et la commande rejouée le rattrape', async () => {
@@ -1661,12 +1693,15 @@ describe('readTemplateForOperator', () => {
     await updateTemplate(bucket, meta.id, ownerToken, {
       itinerary: japanTrip(),
     })
-    // Une mise à jour interrompue a laissé v/3 sans méta qui pointe vers elle.
-    bucket.poke(templateVersionKey(meta.id, 3), {
-      version: 3,
-      title: 'Orpheline',
-      itinerary: japanTrip(),
-    })
+    // Une mise à jour interrompue a laissé v/3 sans méta qui pointe vers elle,
+    // et une suppression échouée a laissé v/1.
+    for (const version of [1, 3]) {
+      bucket.poke(templateVersionKey(meta.id, version), {
+        version,
+        title: 'Orpheline',
+        itinerary: japanTrip(),
+      })
+    }
     expect(await readTemplateForOperator(bucket, meta.id)).toMatchObject({
       status: 'active',
       versionsLeft: 3,
@@ -1839,14 +1874,11 @@ describe('réponse S3 perdue : 412 sur notre propre écriture', () => {
     expect(updated.meta.version).toBe(2)
     expect(updated.template.version).toBe(2)
     expect(storedMeta(meta.id).version).toBe(2)
-    expect(await readTemplateVersion(bucket, meta.id, 2)).toMatchObject({
+    expect(await readTemplate(bucket, meta.id)).toMatchObject({
       status: 'active',
-      version: 2,
+      template: { version: 2 },
     })
-    expect(versionKeys(meta.id)).toEqual([
-      templateVersionKey(meta.id, 1),
-      templateVersionKey(meta.id, 2),
-    ])
+    expect(versionKeys(meta.id)).toEqual([templateVersionKey(meta.id, 2)])
   })
 
   it('ne supprime jamais la version vers laquelle pointe la méta, même modifiée depuis', async () => {
@@ -2163,5 +2195,735 @@ describe('index en morceaux', () => {
     )!
     bucket.poke(elsewhere, { entries: [{ ...entry, title: 'Périmé' }] })
     expect(await readIndex(bucket)).toEqual([entry])
+  })
+})
+
+// ── Versions précédentes supprimées à la mise à jour ──────────────────────────
+
+describe('mise à jour : versions précédentes supprimées', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  it('supprime toutes les versions précédentes, orphelines comprises, une fois la méta écrite', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    // Une mise à jour interrompue a laissé v/2, que la suivante saute.
+    bucket.poke(templateVersionKey(meta.id, 2), {
+      version: 2,
+      title: 'Interrompue',
+      itinerary: japanTrip(),
+    })
+    const deletions: { keys: string[]; metaVersion: number }[] = []
+    bucket.beforeDelete = (keys) => {
+      deletions.push({ keys, metaVersion: storedMeta(meta.id).version })
+    }
+
+    const { meta: next } = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: japanTrip(),
+    })
+
+    expect(next.version).toBe(3)
+    // Après la méta : elle désigne déjà la version 3 quand les autres partent.
+    expect(deletions).toEqual([
+      {
+        keys: [templateVersionKey(meta.id, 1), templateVersionKey(meta.id, 2)],
+        metaVersion: 3,
+      },
+    ])
+    expect(versionKeys(meta.id)).toEqual([templateVersionKey(meta.id, 3)])
+  })
+
+  it('ne laisse en ligne aucune note retirée par une mise à jour', async () => {
+    const withNote = () => [
+      day(1, { notes: 'Digicode 4471, appeler Kenji' }),
+      day(2, { city: 'Kyoto' }),
+    ]
+    const { meta, ownerToken } = await publishTemplate(
+      bucket,
+      publishInput({
+        itinerary: withNote(),
+        options: { includeNotes: true, includePrices: true },
+      }),
+    )
+    expect(JSON.stringify(bucket.peek(templateVersionKey(meta.id, 1)))).toMatch(
+      /4471/,
+    )
+
+    await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: withNote(),
+      options: { includeNotes: false, includePrices: true },
+    })
+
+    const everything = JSON.stringify(bucket.keys().map((k) => bucket.peek(k)))
+    expect(everything).not.toMatch(/4471|Kenji/)
+  })
+
+  it('lève « versions » si la suppression échoue : la nouvelle version est en ligne, l’index suit, et la mise à jour rejouée efface tout', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    breakDeletes()
+    const longer = [...japanTrip(), day(4, { city: 'Osaka' })]
+
+    const error = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: longer,
+      title: 'Japon et Osaka',
+    }).catch((caught: unknown) => caught)
+
+    expect(isTemplateStoreError(error) && error.code).toBe('versions')
+    expect(error instanceof Error && error.message).toBe(
+      'Le modèle est à jour, mais ses versions précédentes n’ont pas pu être effacées. Réessayez.',
+    )
+    const current = await readTemplate(bucket, meta.id)
+    expect(current.status === 'active' && current.template.version).toBe(2)
+    expect((await readIndex(bucket))[0]).toMatchObject({
+      id: meta.id,
+      title: 'Japon et Osaka',
+    })
+    expect(versionKeys(meta.id)).toEqual([
+      templateVersionKey(meta.id, 1),
+      templateVersionKey(meta.id, 2),
+    ])
+
+    bucket.beforeDelete = null
+    const { meta: retried } = await updateTemplate(
+      bucket,
+      meta.id,
+      ownerToken,
+      { itinerary: longer },
+    )
+    expect(retried.version).toBe(3)
+    expect(versionKeys(meta.id)).toEqual([templateVersionKey(meta.id, 3)])
+  })
+
+  it('lève « index » d’abord quand l’index et la suppression échouent tous deux', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    breakDeletes()
+    breakIndexWrites()
+
+    expect(
+      await storeError(
+        updateTemplate(bucket, meta.id, ownerToken, { itinerary: [day(1)] }),
+      ),
+    ).toBe('index')
+    expect(await indexIds()).toEqual([meta.id])
+
+    bucket.beforeDelete = null
+    bucket.beforePut = null
+    await updateTemplate(bucket, meta.id, ownerToken, { itinerary: [day(1)] })
+    expect(await indexIds()).toEqual([])
+    expect(versionKeys(meta.id)).toEqual([templateVersionKey(meta.id, 3)])
+  })
+
+  /**
+   * Le bucket, avec une mise à jour complète (méta, puis suppression de la
+   * version 1) glissée juste avant la lecture de la version 1.
+   */
+  function updatingBeforeVersion1Read(
+    id: string,
+    token: string,
+  ): TemplateBucket {
+    let pending = true
+    return {
+      async getSnapshot(key, options) {
+        if (pending && key === templateVersionKey(id, 1)) {
+          pending = false
+          await updateTemplate(bucket, id, token, {
+            itinerary: [...japanTrip(), day(4, { city: 'Osaka' })],
+          })
+        }
+        return bucket.getSnapshot(key, options)
+      },
+      putSnapshot: (key, data, options) =>
+        bucket.putSnapshot(key, data, options),
+      delete: (key) => bucket.delete(key),
+    }
+  }
+
+  it('une lecture qui croise une mise à jour suit la nouvelle version, au lieu de répondre 404', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    const byId = await readTemplate(
+      updatingBeforeVersion1Read(meta.id, ownerToken),
+      meta.id,
+    )
+    expect(byId.status === 'active' && byId.template).toMatchObject({
+      version: 2,
+      dayCount: 4,
+    })
+  })
+
+  it('par le slug aussi, avec le slug que la mise à jour a pris', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    const bySlug = await readTemplateBySlug(
+      updatingBeforeVersion1Read(meta.id, ownerToken),
+      meta.slug,
+    )
+    expect(bySlug.status === 'active' && bySlug.template).toMatchObject({
+      version: 2,
+      slug: 'japon-4-jours-tokyo-kyoto-osaka',
+    })
+  })
+
+  it('un réglage qui croise une mise à jour répond avec la nouvelle version', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    const { meta: next, template } = await patchTemplate(
+      updatingBeforeVersion1Read(meta.id, ownerToken),
+      meta.id,
+      ownerToken,
+      { authorName: 'Léa' },
+    )
+    expect(next).toMatchObject({ version: 2, authorName: 'Léa' })
+    expect(template).toMatchObject({ version: 2, dayCount: 4 })
+  })
+})
+
+// ── Dates floutées ────────────────────────────────────────────────────────────
+
+describe('dates floutées avant stockage', () => {
+  it('recule le voyage par semaines entières : même jour de la semaine, même mois, quantième caché', async () => {
+    // Vendredi 12 juin 2026 → vendredi 5 juin 2026.
+    const { meta, ownerToken, template } = await publishTemplate(
+      bucket,
+      publishInput({
+        itinerary: [
+          day(1, {
+            date: '2026-06-12',
+            accommodation: {
+              id: 'acc-1',
+              name: 'Pousada da Alfama',
+              address: '',
+              bookingUrl: '',
+              checkIn: '2026-06-12T15:00',
+              checkOut: '2026-06-14T11:00',
+            },
+          }),
+          day(2, { date: '2026-06-13', city: 'Sintra' }),
+        ],
+        country: 'PT',
+      }),
+    )
+    expect(template.itinerary.map((d) => d.date)).toEqual([
+      '2026-06-05',
+      '2026-06-06',
+    ])
+    expect(template.itinerary[0].accommodation).toMatchObject({
+      checkIn: '2026-06-05T15:00',
+      checkOut: '2026-06-07T11:00',
+    })
+    expect(meta.tripYear).toBe(2026)
+    const everything = JSON.stringify(bucket.keys().map((k) => bucket.peek(k)))
+    expect(everything).not.toMatch(/2026-06-1[234]/)
+
+    // Une mise à jour est floutée de même.
+    const { template: updated } = await updateTemplate(
+      bucket,
+      meta.id,
+      ownerToken,
+      {
+        itinerary: [
+          day(1, { date: '2027-03-24' }),
+          day(2, { date: '2027-03-25' }),
+        ],
+      },
+    )
+    expect(updated.itinerary.map((d) => d.date)).toEqual([
+      '2027-03-03',
+      '2027-03-04',
+    ])
+    expect(updated.tripYear).toBe(2027)
+  })
+})
+
+// ── Publication rejouable ─────────────────────────────────────────────────────
+
+describe('publication rejouable : jeton tiré par le téléphone', () => {
+  const token = createOwnerToken()
+  const hash = createHash('sha256').update(token).digest('hex')
+
+  function ownerKeys(): string[] {
+    return bucket.keys().filter((key) => key.startsWith('owners/'))
+  }
+
+  function metaKeys(): string[] {
+    return bucket.keys().filter((key) => key.endsWith('/meta'))
+  }
+
+  function withToken(overrides: Partial<PublishTemplateInput> = {}) {
+    return publishInput({ ownerToken: token, ...overrides })
+  }
+
+  it('réserve owners/<empreinte> avant toute autre écriture, et rend ce jeton', async () => {
+    const result = await publishTemplate(bucket, withToken())
+
+    expect(result.created).toBe(true)
+    expect(result.ownerToken).toBe(token)
+    expect(bucket.puts[0]).toMatchObject({
+      key: templateOwnerKey(hash),
+      options: { ifAbsent: true },
+    })
+    expect(bucket.peek(templateOwnerKey(hash))).toEqual({ id: result.meta.id })
+    expect(storedMeta(result.meta.id).ownerTokenHash).toBe(hash)
+    expect(
+      JSON.stringify(bucket.keys().map((key) => bucket.peek(key))),
+    ).not.toContain(token)
+    await expect(
+      assertTemplateOwner(bucket, result.meta.id, token),
+    ).resolves.toBeUndefined()
+  })
+
+  it('rejouée avec le même jeton, rend le même modèle sans rien créer', async () => {
+    const first = await publishTemplate(bucket, withToken())
+    const keys = bucket.keys()
+    const writes = bucket.puts.length
+
+    const again = await publishTemplate(
+      bucket,
+      withToken({ now: LATER, title: 'Autre titre' }),
+    )
+
+    expect(again.created).toBe(false)
+    expect(again.ownerToken).toBe(token)
+    expect(again.meta).toEqual(first.meta)
+    expect(again.template).toEqual(first.template)
+    expect(bucket.keys()).toEqual(keys)
+    // Seule la réservation a été tentée, et refusée.
+    expect(bucket.puts.slice(writes).map((put) => put.key)).toEqual([
+      templateOwnerKey(hash),
+    ])
+  })
+
+  it('rend le modèle tel qu’il est en ligne, mises à jour comprises', async () => {
+    const first = await publishTemplate(bucket, withToken())
+    await updateTemplate(bucket, first.meta.id, token, {
+      itinerary: japanTrip().slice(0, 2),
+    })
+    const again = await publishTemplate(bucket, withToken())
+    expect(again.created).toBe(false)
+    expect(again.template).toMatchObject({ version: 2, dayCount: 2 })
+  })
+
+  it('termine sous le même id une publication interrompue entre sa version et sa méta', async () => {
+    let failMeta = true
+    bucket.beforePut = (key) => {
+      if (failMeta && key.endsWith('/meta')) {
+        failMeta = false
+        throw new S3ndError('UPLOAD_FAILED', 'ECONNRESET')
+      }
+    }
+    await expect(publishTemplate(bucket, withToken())).rejects.toSatisfy(
+      (error) => isS3ndError(error) && error.code === 'UPLOAD_FAILED',
+    )
+    const { id } = bucket.peek(templateOwnerKey(hash)) as { id: string }
+    expect(metaKeys()).toEqual([])
+    expect(versionKeys(id)).toEqual([templateVersionKey(id, 1)])
+
+    const retried = await publishTemplate(bucket, withToken())
+
+    expect(retried.created).toBe(true)
+    // La version 1 de l'envoi interrompu n'a jamais eu de méta : la suivante
+    // prend sa place, et elle est supprimée.
+    expect(retried.meta).toMatchObject({
+      id,
+      version: 2,
+      slug: 'japon-3-jours-tokyo-kyoto',
+    })
+    expect(versionKeys(id)).toEqual([templateVersionKey(id, 2)])
+    expect(metaKeys()).toEqual([templateMetaKey(id)])
+    expect(await indexIds()).toEqual([id])
+    expect(await readTemplate(bucket, id)).toMatchObject({
+      status: 'active',
+      template: { version: 2 },
+    })
+  })
+
+  it('une réponse perdue sur la réservation ou la méta ne change ni l’id ni le résultat', async () => {
+    loseResponseOnce((key) => key.startsWith('owners/'))
+    const lostReservation = await publishTemplate(bucket, withToken())
+    expect(lostReservation.created).toBe(true)
+    expect(bucket.peek(templateOwnerKey(hash))).toEqual({
+      id: lostReservation.meta.id,
+    })
+    vi.mocked(bucket.putSnapshot).mockRestore()
+
+    bucket.reset()
+    loseResponseOnce((key) => key.endsWith('/meta'))
+    const lostMeta = await publishTemplate(bucket, withToken())
+    expect(lostMeta.created).toBe(true)
+    expect(metaKeys()).toEqual([templateMetaKey(lostMeta.meta.id)])
+    expect(versionKeys(lostMeta.meta.id)).toEqual([
+      templateVersionKey(lostMeta.meta.id, 1),
+    ])
+  })
+
+  it('deux envois simultanés avec le même jeton ne publient qu’un modèle', async () => {
+    const [a, b] = await Promise.all([
+      publishTemplate(bucket, withToken()),
+      publishTemplate(bucket, withToken()),
+    ])
+
+    expect(a.meta.id).toBe(b.meta.id)
+    expect([a.created, b.created].sort()).toEqual([false, true])
+    expect(a.template).toEqual(b.template)
+    expect(metaKeys()).toEqual([templateMetaKey(a.meta.id)])
+    expect(versionKeys(a.meta.id)).toEqual([
+      templateVersionKey(a.meta.id, storedMeta(a.meta.id).version),
+    ])
+    expect(await indexIds()).toEqual([a.meta.id])
+  })
+
+  it('des jetons différents publient deux modèles', async () => {
+    const a = await publishTemplate(bucket, withToken())
+    const b = await publishTemplate(
+      bucket,
+      publishInput({ ownerToken: createOwnerToken() }),
+    )
+    expect(b.created).toBe(true)
+    expect(b.meta.id).not.toBe(a.meta.id)
+    expect(b.meta.slug).toBe('japon-3-jours-tokyo-kyoto-2')
+    expect(ownerKeys()).toHaveLength(2)
+  })
+
+  it('refuse un jeton mal formé, sans rien écrire', async () => {
+    for (const ownerToken of ['', 'court', `${token}x`, token.slice(1) + '=']) {
+      expect(
+        await storeError(publishTemplate(bucket, withToken({ ownerToken }))),
+      ).toBe('forbidden')
+    }
+    expect(bucket.keys()).toEqual([])
+  })
+
+  it('le retrait supprime la réservation : republier avec ce jeton crée un nouveau modèle', async () => {
+    const first = await publishTemplate(bucket, withToken())
+    await retireTemplate(bucket, first.meta.id, token, LATER)
+    expect(ownerKeys()).toEqual([])
+
+    const again = await publishTemplate(bucket, withToken())
+    expect(again.created).toBe(true)
+    expect(again.meta.id).not.toBe(first.meta.id)
+  })
+
+  it('un retrait rejoué de l’ancien modèle ne retire pas la réservation du nouveau', async () => {
+    const first = await publishTemplate(bucket, withToken())
+    await retireTemplate(bucket, first.meta.id, token, LATER)
+    const second = await publishTemplate(bucket, withToken())
+    expect(bucket.peek(templateOwnerKey(hash))).toEqual({ id: second.meta.id })
+
+    // L'ancien modèle, retiré une seconde fois (même jeton) : sa réservation
+    // a déjà été supprimée, celle du nouveau reste.
+    await retireTemplate(bucket, first.meta.id, token, EVEN_LATER)
+    await retireTemplateAsOperator(bucket, first.meta.id, EVEN_LATER)
+
+    expect(bucket.peek(templateOwnerKey(hash))).toEqual({ id: second.meta.id })
+    const replay = await publishTemplate(bucket, withToken())
+    expect(replay).toMatchObject({
+      created: false,
+      meta: { id: second.meta.id },
+    })
+  })
+
+  it('le retrait par l’opérateur supprime aussi la réservation', async () => {
+    const first = await publishTemplate(bucket, withToken())
+    await retireTemplateAsOperator(bucket, first.meta.slug, LATER)
+    expect(ownerKeys()).toEqual([])
+    expect(bucket.keys()).toEqual(
+      [
+        templateMetaKey(first.meta.id),
+        templateIndexKey(first.meta.id),
+        templateSlugKey(first.meta.slug),
+      ].sort(),
+    )
+  })
+
+  it('une réservation restée sur un modèle retiré répond « retiré »', async () => {
+    const first = await publishTemplate(bucket, withToken())
+    const reservation = bucket.peek(templateOwnerKey(hash))
+    await retireTemplate(bucket, first.meta.id, token, LATER)
+    // La suppression de la réservation n'avait pas abouti.
+    bucket.poke(templateOwnerKey(hash), reservation)
+
+    expect(await storeError(publishTemplate(bucket, withToken()))).toBe(
+      'retired',
+    )
+    expect(metaKeys()).toEqual([templateMetaKey(first.meta.id)])
+  })
+
+  it('lève sur une réservation illisible au lieu de publier ailleurs', async () => {
+    bucket.poke(templateOwnerKey(hash), { id: 'pas-un-id' })
+    await expect(publishTemplate(bucket, withToken())).rejects.toThrow(
+      /illisible/,
+    )
+    expect(metaKeys()).toEqual([])
+  })
+})
+
+// ── Titre par PATCH ───────────────────────────────────────────────────────────
+
+describe('réglages : titre', () => {
+  it('renomme sans nouvelle version : la méta, la réponse et l’index suivent', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+
+    const { meta: next, template } = await patchTemplate(
+      bucket,
+      meta.id,
+      ownerToken,
+      { title: '  Japon \n express  ', now: LATER },
+    )
+
+    expect(next).toEqual({
+      ...meta,
+      title: 'Japon express',
+      updatedAt: '2026-11-04T08:30:00.000Z',
+    })
+    expect(template.title).toBe('Japon express')
+    expect(storedMeta(meta.id)).toEqual(next)
+    expect(versionKeys(meta.id)).toEqual([templateVersionKey(meta.id, 1)])
+    expect((await readIndex(bucket))[0]).toMatchObject({
+      title: 'Japon express',
+      slug: meta.slug,
+    })
+  })
+
+  it('tire le titre des étapes de la version publiée s’il est vide ou nul', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    for (const title of ['', '   ', null]) {
+      await patchTemplate(bucket, meta.id, ownerToken, { title: 'Provisoire' })
+      const { meta: next } = await patchTemplate(bucket, meta.id, ownerToken, {
+        title,
+      })
+      expect(next.title).toBe('Tokyo et Kyoto')
+    }
+  })
+
+  it('borne le titre sans couper un emoji, comme à la publication', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    const { meta: next } = await patchTemplate(bucket, meta.id, ownerToken, {
+      title: `${'a'.repeat(119)}🗾 fin`,
+    })
+    expect(next.title).toBe('a'.repeat(119))
+  })
+
+  it('n’écrit rien quand le titre ne change pas', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    const puts = bucket.puts.length
+    const { meta: same } = await patchTemplate(bucket, meta.id, ownerToken, {
+      title: ' Deux semaines au Japon ',
+      now: LATER,
+    })
+    expect(same).toEqual(meta)
+    expect(bucket.puts.length).toBe(puts)
+  })
+
+  it('refuse un modèle retiré', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    await retireTemplate(bucket, meta.id, ownerToken)
+    expect(
+      await storeError(
+        patchTemplate(bucket, meta.id, ownerToken, { title: 'Nouveau' }),
+      ),
+    ).toBe('retired')
+  })
+})
+
+// ── Slug qui suit le contenu ──────────────────────────────────────────────────
+
+describe('mise à jour : le slug suit la durée et les trois premières villes', () => {
+  function slugKeys(): string[] {
+    return bucket.keys().filter((key) => key.startsWith('slugs/'))
+  }
+
+  it('garde le slug quand ni la durée ni les trois premières villes ne changent', async () => {
+    const { meta, ownerToken } = await publishTemplate(
+      bucket,
+      publishInput({ itinerary: trip(4) }),
+    )
+    expect(meta.slug).toBe('japon-4-jours-ville-1-ville-2-ville-3')
+
+    const { meta: next } = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: trip(4, (n) => (n === 4 ? 'Ailleurs' : `Ville ${n}`)),
+    })
+
+    expect(next.slug).toBe(meta.slug)
+    expect(slugKeys()).toEqual([templateSlugKey(meta.slug)])
+  })
+
+  it('prend un nouveau slug quand la durée change, et l’ancien mène au modèle', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+
+    const { meta: next } = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: [...japanTrip(), day(4, { city: 'Osaka' })],
+    })
+
+    expect(next.slug).toBe('japon-4-jours-tokyo-kyoto-osaka')
+    expect(slugKeys()).toEqual(
+      [templateSlugKey(meta.slug), templateSlugKey(next.slug)].sort(),
+    )
+    for (const slug of [meta.slug, next.slug]) {
+      expect(bucket.peek(templateSlugKey(slug))).toEqual({ id: meta.id })
+      const result = await readTemplateBySlug(bucket, slug)
+      expect(result.status === 'active' && result.template.slug).toBe(next.slug)
+    }
+    expect((await readIndex(bucket)).map((entry) => entry.slug)).toEqual([
+      next.slug,
+    ])
+  })
+
+  it('revenir à la durée d’avant reprend le slug d’alors', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: [...japanTrip(), day(4, { city: 'Osaka' })],
+    })
+
+    const { meta: back } = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: japanTrip(),
+    })
+
+    expect(back.slug).toBe(meta.slug)
+    expect(slugKeys()).toHaveLength(2)
+  })
+
+  it('applique au nouveau slug les règles de collision de la publication', async () => {
+    const other = await publishTemplate(
+      bucket,
+      publishInput({ itinerary: [...japanTrip(), day(4, { city: 'Osaka' })] }),
+    )
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+
+    const { meta: next } = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: [...japanTrip(), day(4, { city: 'Osaka' })],
+    })
+
+    expect(other.meta.slug).toBe('japon-4-jours-tokyo-kyoto-osaka')
+    expect(next.slug).toBe('japon-4-jours-tokyo-kyoto-osaka-2')
+  })
+
+  it('garde un slug suffixé tant que le contenu le décrit', async () => {
+    await publishTemplate(bucket, publishInput())
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    expect(meta.slug).toBe('japon-3-jours-tokyo-kyoto-2')
+
+    const { meta: next } = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: japanTrip(),
+      title: 'Autre titre',
+    })
+
+    expect(next.slug).toBe('japon-3-jours-tokyo-kyoto-2')
+  })
+
+  it('l’ancien slug reste à ce modèle : une nouvelle publication du même parcours ne le prend pas', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: [...japanTrip(), day(4, { city: 'Osaka' })],
+    })
+
+    const newcomer = await publishTemplate(bucket, publishInput())
+
+    expect(newcomer.meta.slug).toBe('japon-3-jours-tokyo-kyoto-2')
+    const result = await readTemplateBySlug(bucket, meta.slug)
+    expect(result.status === 'active' && result.template.id).toBe(meta.id)
+  })
+
+  it('retiré, le modèle répond 410 sur tous ses slugs s’il était listé, 404 sinon', async () => {
+    const listed = await publishTemplate(bucket, publishInput())
+    const { meta: longer } = await updateTemplate(
+      bucket,
+      listed.meta.id,
+      listed.ownerToken,
+      { itinerary: [...japanTrip(), day(4, { city: 'Osaka' })] },
+    )
+    await retireTemplate(bucket, listed.meta.id, listed.ownerToken)
+    for (const slug of [listed.meta.slug, longer.slug]) {
+      expect(await readTemplateBySlug(bucket, slug)).toEqual({
+        status: 'retired',
+      })
+    }
+
+    const hidden = await publishTemplate(
+      bucket,
+      publishInput({ indexable: false, itinerary: trip(2) }),
+    )
+    const { meta: hiddenLonger } = await updateTemplate(
+      bucket,
+      hidden.meta.id,
+      hidden.ownerToken,
+      { itinerary: trip(3) },
+    )
+    await retireTemplate(bucket, hidden.meta.id, hidden.ownerToken)
+    for (const slug of [hidden.meta.slug, hiddenLonger.slug]) {
+      expect(await readTemplateBySlug(bucket, slug)).toEqual({
+        status: 'missing',
+      })
+    }
+  })
+})
+
+// ── Index par pages ───────────────────────────────────────────────────────────
+
+describe('index par pages', () => {
+  /** `count` lignes rangées dans leurs morceaux ; trois par minute, pour des égalités. */
+  function pokeIndex(count: number) {
+    const entries = Array.from({ length: count }, (_, index) => ({
+      id: createTemplateId(),
+      slug: `japon-2-jours-ville-${index}`,
+      title: `Modèle ${index}`,
+      country: 'JP',
+      dayCount: 2,
+      cities: ['Tokyo'],
+      updatedAt: new Date(
+        Date.UTC(2026, 10, 3, 0, Math.floor(index / 3)),
+      ).toISOString(),
+    }))
+    for (const key of TEMPLATE_INDEX_KEYS) {
+      const shard = entries.filter(
+        (entry) => templateIndexKey(entry.id) === key,
+      )
+      if (shard.length > 0) bucket.poke(key, { entries: shard })
+    }
+    return entries
+  }
+
+  it('découpe l’index en pages de 500, dans un ordre stable : plus récent d’abord, puis par id', async () => {
+    pokeIndex(1201)
+    const all = await readIndex(bucket)
+    expect(all).toHaveLength(1201)
+    for (let index = 1; index < all.length; index++) {
+      const [a, b] = [all[index - 1], all[index]]
+      expect(
+        a.updatedAt > b.updatedAt ||
+          (a.updatedAt === b.updatedAt && a.id < b.id),
+      ).toBe(true)
+    }
+
+    const pages = [
+      await readIndexPage(bucket, 0),
+      await readIndexPage(bucket, 1),
+      await readIndexPage(bucket, 2),
+    ]
+
+    expect(TEMPLATE_INDEX_PAGE_SIZE).toBe(500)
+    expect(pages.map((page) => [page.entries.length, page.nextPage])).toEqual([
+      [500, 1],
+      [500, 2],
+      [201, null],
+    ])
+    expect(pages.flatMap((page) => page.entries)).toEqual(all)
+    expect(await readIndexPage(bucket, 3)).toEqual({
+      entries: [],
+      nextPage: null,
+    })
+  })
+
+  it('une seule page quand tout tient dedans, même pleine', async () => {
+    expect(await readIndexPage(bucket, 0)).toEqual({
+      entries: [],
+      nextPage: null,
+    })
+    pokeIndex(500)
+    const page = await readIndexPage(bucket, 0)
+    expect(page.entries).toHaveLength(500)
+    expect(page.nextPage).toBeNull()
+  })
+
+  it('refuse une page négative ou non entière', async () => {
+    for (const page of [-1, 1.5, Number.NaN]) {
+      await expect(readIndexPage(bucket, page)).rejects.toThrow(RangeError)
+    }
   })
 })
