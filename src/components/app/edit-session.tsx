@@ -54,6 +54,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
     updateDay,
     remoteApplied,
     activeTripId,
+    activeTrip,
   } = useTrip()
   const [isEditing, setIsEditing] = useState(false)
   // Photo de l'itinéraire prise à l'entrée en mode édition : elle permet de
@@ -109,10 +110,18 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
     stopEditing()
   }, [openReview, pendingChanges, stopEditing])
 
+  // Voyage repris d'un modèle : la mesure compte les reprises retouchées
+  // ensuite (spec des modèles, §8). Sur `origin`, comme `fromTemplate` : la
+  // copie d'un voyage repris n'en est plus une.
+  const fromTemplate = Boolean(activeTrip?.origin)
+
   const saveEdits = useCallback(() => {
-    trackEvent('edit_changes_saved', { changes_count: pendingChanges })
+    trackEvent('edit_changes_saved', {
+      changes_count: pendingChanges,
+      from_template: fromTemplate,
+    })
     stopEditing()
-  }, [pendingChanges, stopEditing])
+  }, [fromTemplate, pendingChanges, stopEditing])
 
   const discardEdits = useCallback(async () => {
     if (!baseline) {

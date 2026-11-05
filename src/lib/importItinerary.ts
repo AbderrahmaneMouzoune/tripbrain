@@ -5,6 +5,7 @@ import type {
   Transport,
   Accommodation,
 } from '@/lib/itinerary-data'
+import { normalizeTransportType } from '@/lib/transport-type'
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -134,7 +135,9 @@ function rowToTransport(row: RawRow, index: number): TransportRow {
   return {
     _dayId: str(row['day_id']) ?? '',
     id: str(row['id']) ?? `transport-import-${index + 1}`,
-    type: (str(row['type']) as Transport['type']) ?? 'train',
+    // « Ferry », « TGV », « Taxi »… : ramené à un type de l'app, `other` à
+    // défaut (colonne vide comprise), plutôt qu'un type sans icône ni libellé.
+    type: normalizeTransportType(str(row['type'])),
     from: str(row['from']),
     to: str(row['to']),
     details: str(row['details']),

@@ -40,7 +40,13 @@ export interface Activity extends EntityMetadata {
 
 export interface Transport extends EntityMetadata {
   id: string
-  type: 'train' | 'car' | 'plane' | 'bus'
+  /**
+   * `boat` : bateau, ferry, croisière. `other` : tout ce que l'app ne sait pas
+   * classer (import d'un tableur, ancien partage) — jamais proposé à la
+   * génération. Toute valeur venue de l'extérieur passe par
+   * `normalizeTransportType` (`transport-type.ts`).
+   */
+  type: 'train' | 'car' | 'plane' | 'bus' | 'boat' | 'other'
   from?: string
   to?: string
   details?: string

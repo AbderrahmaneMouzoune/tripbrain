@@ -15,6 +15,7 @@ import { deflateSync, inflateSync } from 'fflate'
 import { isGroupId as readGroupId, readGroupInvite } from '@/lib/group-sync'
 import { isNativeApp, shareLinkNatively } from '@/lib/native-app'
 import type { DayItinerary } from '@/lib/itinerary-data'
+import { normalizeItineraryTransports } from '@/lib/transport-type'
 
 /** Au-delà, un QR code inline devient trop dense pour être scanné confortablement. */
 export const SHARE_INLINE_LIMIT = 2000
@@ -64,9 +65,11 @@ export async function compressItinerary(
 
 /**
  * Le payload arrive d'une URL ou d'un serveur : il est validé avant d'atteindre
- * IndexedDB, comme n'importe quel import de fichier.
+ * IndexedDB, comme n'importe quel import de fichier. Exporté pour l'API des
+ * modèles, qui décompresse côté serveur avec ses propres bornes
+ * (`template-request.ts`) mais valide la même forme.
  */
-function isDayItinerary(value: unknown): value is DayItinerary {
+export function isDayItinerary(value: unknown): value is DayItinerary {
   if (typeof value !== 'object' || value === null) return false
   const day = value as Partial<DayItinerary>
   return (
@@ -95,7 +98,10 @@ export function decompressItinerary(compressed: string): DayItinerary[] {
     throw new Error('Le partage ne contient pas d’itinéraire valide.')
   }
 
-  return decoded
+  // Un partage d'une autre version de l'app peut porter un type de trajet
+  // qu'elle ne connaît pas (« ferry » importé d'un tableur) : sans icône ni
+  // libellé, il serait illisible ici.
+  return normalizeItineraryTransports(decoded)
 }
 
 // ── URLs et mise en forme ─────────────────────────────────────────────────────

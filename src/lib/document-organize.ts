@@ -116,6 +116,8 @@ const TRANSPORT_LABELS: Record<
   train: 'Train',
   bus: 'Bus',
   car: 'Route',
+  boat: 'Bateau',
+  other: 'Trajet',
 }
 
 /** « Vol Pékin → Xi’an », ou « Vol » quand l'itinéraire ne dit pas d'où à où. */
@@ -268,6 +270,7 @@ const TICKET_WORDS = [
   'sncf',
   'bus',
   'ferry',
+  'bateau',
   'navette',
 ]
 

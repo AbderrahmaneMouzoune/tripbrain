@@ -73,7 +73,8 @@ Les modèles servent aussi au référencement du site vitrine.
 
 - **Où** : site vitrine (`tripbrain-landing`), `tripbrain.fr/itineraires/<slug>`. Le slug
   est généré depuis le pays, la durée et les villes : `japon-14-jours-tokyo-kyoto-osaka`,
-  suffixé en cas de doublon, figé à la première publication.
+  suffixé en cas de doublon ; il suit la durée et les 3 premières villes, et les anciens
+  slugs mènent au modèle (le site vitrine redirige en 301).
 - **Lien partagé par l'auteur** : `app.tripbrain.fr/m/<id>`. Il ouvre l'app si elle est
   installée, sinon l'aperçu dans la webapp. Il n'est jamais indexé ; quand le modèle est
   listé, il désigne la page tripbrain.fr comme page canonique.
@@ -150,8 +151,12 @@ Recherche par destination et filtres (durée, budget, rythme) sur `/itineraires`
   sans compte.
 - Modèle stocké : `{ id, slug, version, authorName?, indexable, includesPrices,
   includesNotes, itinerary, publishedAt, updatedAt }`. Chaque mise à jour incrémente
-  `version` et garde l'ancienne version (nécessaire comme base de fusion pour ceux qui
-  l'ont reprise).
+  `version` et **efface les versions précédentes** : ce que l'auteur retire ne reste pas en
+  ligne. La base de fusion de ceux qui l'ont repris est `origin.base`, gardée sur leur
+  téléphone (décision du 3 nov. 2026, après la recette).
+- Les dates publiées sont floutées : le voyage est reculé de semaines entières, seuls le
+  mois, l'année et les jours de la semaine restent vrais (un voyage à venir ne révèle pas
+  quand l'auteur est absent).
 - Stockage : réutiliser le bucket R2 de `share-store.ts`, sous un préfixe `templates/`, sans
   expiration. Identifiant non devinable (≥ 10 caractères base32). Le site vitrine lit les
   modèles indexables pour son sitemap ; il faut donc un index listable (fichier d'index R2

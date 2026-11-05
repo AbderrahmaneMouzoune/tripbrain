@@ -52,6 +52,25 @@ describe('parseItineraryJson', () => {
     expect(parsed.itinerary).toHaveLength(2)
   })
 
+  it('ramène un trajet en ferry à un trajet en bateau', () => {
+    const [first] = demo
+    const parsed = parseItineraryJson(
+      JSON.stringify({
+        itinerary: [
+          {
+            ...first,
+            transport: { id: 'tr-1', type: 'Ferry', from: 'Nice' },
+          },
+        ],
+      }),
+    )
+    expect(parsed.itinerary[0].transport).toEqual({
+      id: 'tr-1',
+      type: 'boat',
+      from: 'Nice',
+    })
+  })
+
   it('refuse un fichier sans itinéraire ou vide', () => {
     expect(() => parseItineraryJson('{}')).toThrow(/itinerary manquant/)
     expect(() => parseItineraryJson('{"itinerary":[]}')).toThrow(

@@ -1,4 +1,5 @@
 import type { DayItinerary } from '@/lib/itinerary-data'
+import { fromDayNumber, localIsoDate, toDayNumber } from '@/lib/iso-date'
 
 /**
  * Le voyage d'exemple, recalé sur la date du jour.
@@ -15,25 +16,14 @@ import type { DayItinerary } from '@/lib/itinerary-data'
 export const DEMO_TODAY_DAY = 3
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-const DAY_MS = 24 * 60 * 60 * 1000
 
-/** Date ISO → jours depuis l'époque, sans fuseau horaire. */
-function toDayNumber(iso: string): number {
-  const [year, month, day] = iso.split('-').map(Number)
-  return Math.round(Date.UTC(year, month - 1, day) / DAY_MS)
-}
-
-function fromDayNumber(dayNumber: number): string {
-  return new Date(dayNumber * DAY_MS).toISOString().slice(0, 10)
-}
-
-function localIso(date: Date): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${date.getFullYear()}-${month}-${day}`
-}
-
-/** Décale toute chaîne `AAAA-MM-JJ`, où qu'elle soit (journée, hôtel…). */
+/**
+ * Décale toute chaîne `AAAA-MM-JJ`, où qu'elle soit (journée, hôtel…).
+ *
+ * Volontairement plus simple que `shiftDatesDeep` (`iso-date.ts`) : la démo n'a
+ * que des dates nues, et ce parcours reste celui que ses tests ont figé (pas de
+ * date-heure, pas de contrôle du calendrier).
+ */
 function shiftDates<T>(value: T, offset: number): T {
   if (typeof value === 'string') {
     return (
@@ -61,6 +51,6 @@ export function demoItineraryFor(
   const first = itinerary[0]?.date
   if (!first) return [...itinerary]
   const offset =
-    toDayNumber(localIso(today)) - (DEMO_TODAY_DAY - 1) - toDayNumber(first)
+    toDayNumber(localIsoDate(today)) - (DEMO_TODAY_DAY - 1) - toDayNumber(first)
   return shiftDates([...itinerary], offset)
 }

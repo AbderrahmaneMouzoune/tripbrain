@@ -18,6 +18,18 @@ const TRANSPORT_SUMMARY_LABEL: Record<Transport['type'], string> = {
   train: 'Train',
   bus: 'Bus',
   car: 'Trajet en voiture',
+  boat: 'Bateau',
+  other: 'Trajet',
+}
+
+/** Mode de transport dans la description d'une journée (« Transport : Avion »). */
+const TRANSPORT_DESCRIPTION_LABEL: Record<Transport['type'], string> = {
+  train: 'Train',
+  car: 'Voiture',
+  plane: 'Avion',
+  bus: 'Bus',
+  boat: 'Bateau',
+  other: 'Trajet',
 }
 
 const TIME_PATTERN = /^(\d{1,2}):(\d{2})$/
@@ -110,12 +122,7 @@ export function buildEventDescription(day: DayItinerary): string {
 
   if (day.transport) {
     const { type, from, to, details } = day.transport
-    const label = {
-      train: 'Train',
-      car: 'Voiture',
-      plane: 'Avion',
-      bus: 'Bus',
-    }[type]
+    const label = TRANSPORT_DESCRIPTION_LABEL[type] ?? 'Trajet'
     const route = from && to ? ` ${from} → ${to}` : ''
     parts.push(`Transport : ${label}${route}${details ? ` (${details})` : ''}`)
   }

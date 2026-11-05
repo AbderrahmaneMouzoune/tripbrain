@@ -9,7 +9,16 @@
  */
 
 import type { TripGroup } from '@/lib/group-sync'
+import { splitIsoDateValue, toDayNumber } from '@/lib/iso-date'
 import type { DayItinerary } from '@/lib/itinerary-data'
+import { cleanForTemplate } from '@/lib/template-clean'
+import { templateDateAnchor } from '@/lib/template-dates'
+import { normalizeItineraryTransports } from '@/lib/transport-type'
+import type {
+  PublishedTemplateInfo,
+  TemplateOptions,
+  TemplateOrigin,
+} from '@/lib/template-model'
 
 /** D'où vient un voyage : sert l'affichage (« Généré il y a 2 jours ») et la mesure. */
 export type TripSource =
@@ -20,6 +29,8 @@ export type TripSource =
   | 'share'
   | 'generator'
   | 'legacy'
+  /** Repris d'un itinéraire modèle publié par un autre voyageur. */
+  | 'template'
 
 export interface StoredTrip {
   id: string
@@ -30,8 +41,61 @@ export interface StoredTrip {
   updatedAt: number
   /** Voyage d'exemple : ses documents de démo partent avec lui. */
   isDemo?: boolean
+  /**
+   * Copie du voyage d'exemple, ou d'une telle copie (voir `tripCopyOf`). La
+   * copie n'est plus la démo — elle reste quand on la quitte —, mais son
+   * programme n'est le voyage de personne : elle ne se publie pas comme
+   * itinéraire modèle (`canPublishTemplate`). Champ facultatif, sans
+   * migration IndexedDB.
+   */
+  copiedFromDemo?: boolean
   /** Voyage tenu à jour avec d'autres voyageurs (voir `group-sync.ts`). */
   group?: TripGroup
+  /**
+   * Côté auteur : ce voyage est publié comme itinéraire modèle. Porte le
+   * jeton propriétaire, seul moyen de mettre à jour ou de retirer le modèle
+   * sans compte — il ne se copie jamais (ni duplication, ni export).
+   */
+  publishedTemplate?: PublishedTemplateInfo
+  /**
+   * Côté repreneur : le modèle d'où vient ce voyage, avec la version reprise
+   * telle qu'elle a été recalée. Champ facultatif, donc sans migration
+   * IndexedDB : les enregistrements sont stockés entiers. Tant que le voyage
+   * n'a pas été retouché, il ne se republie pas (`templatePublishBlocker`).
+   */
+  origin?: TemplateOrigin
+}
+
+/** Les journées, chaque trajet ramené à un type de l'app ; les mêmes si rien ne change. */
+function withKnownTransports(days: DayItinerary[]): DayItinerary[] {
+  const normalized = normalizeItineraryTransports(days)
+  return normalized.every((day, index) => day === days[index])
+    ? days
+    : normalized
+}
+
+/**
+ * Un voyage lu sur l'appareil, chaque trajet ramené à un type de l'app
+ * (`normalizeItineraryTransports`) : dans le voyage et dans la base d'un
+ * voyage repris (`origin.base`). Avant cette règle, un import CSV ou XLSX
+ * gardait le type saisi (« Ferry », « TGV ») et un import JSON n'importe
+ * quel texte : l'icône du trajet manquait et l'écran de la journée
+ * plantait. Le même objet revient si rien ne change.
+ */
+export function normalizeStoredTrip(trip: StoredTrip): StoredTrip {
+  const itinerary = Array.isArray(trip.itinerary)
+    ? withKnownTransports(trip.itinerary)
+    : trip.itinerary
+  const base = trip.origin?.base
+  const normalizedBase = Array.isArray(base) ? withKnownTransports(base) : base
+  if (itinerary === trip.itinerary && normalizedBase === base) return trip
+  return {
+    ...trip,
+    itinerary,
+    ...(trip.origin && normalizedBase !== base
+      ? { origin: { ...trip.origin, base: normalizedBase as DayItinerary[] } }
+      : {}),
+  }
 }
 
 /** Ce qu'il faut pour lister les voyages, sans traîner tout l'itinéraire. */
@@ -44,6 +108,10 @@ export interface TripSummary {
   isDemo: boolean
   /** Synchronisé avec d'autres voyageurs. */
   isGroup: boolean
+  /** Repris d'un itinéraire modèle (bannière « D'après le voyage de… »). */
+  fromTemplate: boolean
+  /** Publié comme itinéraire modèle par ce téléphone. */
+  isPublishedTemplate: boolean
   startDate: string | null
   endDate: string | null
   dayCount: number
@@ -149,6 +217,10 @@ export function summarizeTrip(
     updatedAt: trip.updatedAt,
     isDemo: Boolean(trip.isDemo),
     isGroup: Boolean(trip.group),
+    // Sur `origin` et non sur `source` : une copie d'un voyage repris garde la
+    // provenance « Repris » mais pas le lien au modèle (voir `duplicateTrip`).
+    fromTemplate: Boolean(trip.origin),
+    isPublishedTemplate: Boolean(trip.publishedTemplate),
     startDate: range?.start ?? null,
     endDate: range?.end ?? null,
     dayCount: trip.itinerary.length,
@@ -199,6 +271,182 @@ export function currentDayIndex(
   const range = tripDateRange(itinerary)
   if (!range) return 0
   return now > startOfDay(parseDayDate(range.end)) ? itinerary.length - 1 : 0
+}
+
+/**
+ * Ce que garde la copie d'un voyage (`duplicateTrip`) : le programme, le
+ * titre suivi de « (copie) » et la provenance. Ni `group` (la copie n'est pas
+ * synchronisée), ni `publishedTemplate` (le jeton propriétaire ne se duplique
+ * jamais : deux voyages piloteraient le même modèle), ni `origin` (la copie
+ * vit sa vie, sans mise à jour depuis le modèle) ; une copie d'un voyage
+ * repris reste donc affichée « Repris ».
+ *
+ * La copie de la démo n'est plus la démo (provenance `share`, elle survit à
+ * la sortie de la démo), mais elle en garde la trace dans `copiedFromDemo`,
+ * transmise de copie en copie : sans quoi il suffirait de dupliquer la démo
+ * pour la publier comme modèle.
+ */
+export interface TripCopy {
+  itinerary: DayItinerary[]
+  title: string
+  source: TripSource
+  copiedFromDemo?: true
+}
+
+export function tripCopyOf(trip: StoredTrip): TripCopy {
+  return {
+    itinerary: trip.itinerary,
+    title: `${trip.title} (copie)`,
+    source: trip.source === 'demo' ? 'share' : trip.source,
+    ...(trip.isDemo || trip.copiedFromDemo ? { copiedFromDemo: true } : {}),
+  }
+}
+
+/**
+ * Pourquoi un voyage ne se publie pas comme itinéraire modèle :
+ * - `demo` : le voyage d'exemple (spec des modèles, §9) ;
+ * - `demo-copy` : une copie de la démo (`copiedFromDemo`) ;
+ * - `empty` : aucune journée ;
+ * - `unmodified-take` : repris d'un modèle (`origin`) et pas retouché — le
+ *   republier ne ferait qu'un doublon du modèle d'un autre.
+ */
+export type TemplatePublishBlocker =
+  | 'demo'
+  | 'demo-copy'
+  | 'empty'
+  | 'unmodified-take'
+
+/**
+ * Ce qu'on compare entre un voyage repris et le modèle tel qu'il a été repris :
+ * tout ce qui pourrait partir, notes et prix compris, sans hébergement masqué.
+ */
+const COMPARED_CONTENT: TemplateOptions = {
+  includeNotes: true,
+  includePrices: true,
+  privateStays: [],
+}
+
+/** La partie date d'une valeur `AAAA-MM-JJ…`, hors ids ; `null` sinon. */
+function dateOf(value: unknown, key?: string): string | null {
+  if (typeof value !== 'string' || key === 'id') return null
+  return splitIsoDateValue(value)?.date ?? null
+}
+
+/** Les clés d'un objet dans l'ordre alphabétique, sans valeur `undefined`. */
+function sortedEntries(value: object): [string, unknown][] {
+  return Object.keys(value)
+    .sort()
+    .flatMap((name) => {
+      const item: unknown = Reflect.get(value, name)
+      return item === undefined ? [] : [[name, item] as [string, unknown]]
+    })
+}
+
+/**
+ * La première date d'une structure, clés parcourues dans l'ordre
+ * alphabétique : le même champ des deux côtés d'une comparaison, quel que
+ * soit l'ordre d'écriture des clés.
+ */
+function firstDate(value: unknown, key?: string): string | null {
+  const own = dateOf(value, key)
+  if (own !== null) return own
+  const children: [string | undefined, unknown][] = Array.isArray(value)
+    ? value.map((item) => [undefined, item])
+    : value && typeof value === 'object'
+      ? sortedEntries(value)
+      : []
+  for (const [name, item] of children) {
+    const found = firstDate(item, name)
+    if (found !== null) return found
+  }
+  return null
+}
+
+/**
+ * Le contenu publiable d'un itinéraire, comparable d'un voyage à l'autre :
+ * nettoyé comme pour un modèle (statuts, références, sièges… retirés), les
+ * clés dans l'ordre, et chaque date comptée en jours depuis une date repère
+ * — celle du voyage (`templateDateAnchor`), sinon la première trouvée (un
+ * voyage sans date de journée peut dater ses hôtels). Décaler tout le voyage
+ * n'y change donc rien. Les ids restent tels quels, même quand ils ont la
+ * forme d'une date.
+ */
+function publishableContent(itinerary: readonly DayItinerary[]): string {
+  const cleaned = cleanForTemplate(itinerary, COMPARED_CONTENT)
+  const anchor = templateDateAnchor(cleaned) ?? firstDate(cleaned)
+  const origin = anchor === null ? 0 : toDayNumber(anchor)
+  const comparable = (value: unknown, key?: string): unknown => {
+    if (typeof value === 'string') {
+      const date = dateOf(value, key)
+      return date === null
+        ? value
+        : `@${toDayNumber(date) - origin}${value.slice(date.length)}`
+    }
+    if (Array.isArray(value)) return value.map((item) => comparable(item))
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        sortedEntries(value).map(([name, item]) => [
+          name,
+          comparable(item, name),
+        ]),
+      )
+    }
+    return value
+  }
+  return JSON.stringify(comparable(cleaned))
+}
+
+/**
+ * Le voyage repris a-t-il été retouché ? Vrai dès que ce qui partirait dans
+ * un modèle diffère du modèle tel qu'il a été repris (`origin.base`) : une
+ * journée, une activité, un conseil, un hôtel, un trajet, un prix, une note
+ * ou l'ordre. Un statut (« fait »), une référence de réservation ou un lien
+ * de confirmation ne comptent pas : ils ne partent jamais. Décaler tout le
+ * voyage non plus : le repreneur recale de toute façon le modèle à ses dates.
+ */
+function isRetouchedTake(
+  itinerary: readonly DayItinerary[],
+  origin: TemplateOrigin,
+): boolean {
+  // Une base illisible ne permet pas de comparer : on ne bloque pas.
+  if (!Array.isArray(origin.base)) return true
+  try {
+    return publishableContent(itinerary) !== publishableContent(origin.base)
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Ce qui empêche de publier le voyage comme itinéraire modèle, ou `null`. Un
+ * voyage de groupe se publie : l'écran A3 prévient que les retouches des
+ * autres voyageurs deviennent publiques. Un voyage déjà publié reste géré
+ * (A4) quoi qu'il arrive : la règle vaut pour publier, pas pour retirer.
+ */
+export function templatePublishBlocker(
+  trip: StoredTrip,
+): TemplatePublishBlocker | null {
+  if (trip.isDemo) return 'demo'
+  if (trip.copiedFromDemo) return 'demo-copy'
+  if (trip.itinerary.length === 0) return 'empty'
+  if (trip.origin && !isRetouchedTake(trip.itinerary, trip.origin)) {
+    return 'unmodified-take'
+  }
+  return null
+}
+
+/** Le voyage peut-il être publié comme itinéraire modèle (`templatePublishBlocker`) ? */
+export function canPublishTemplate(trip: StoredTrip): boolean {
+  return templatePublishBlocker(trip) === null
+}
+
+/**
+ * Un des voyages de l'appareil a-t-il été repris d'un itinéraire modèle ?
+ * Sert la mesure des installations venues d'un lien modèle
+ * (`pwa_installed.from_template`).
+ */
+export function hasTripFromTemplate(trips: readonly StoredTrip[]): boolean {
+  return trips.some((trip) => Boolean(trip.origin))
 }
 
 /** Délai (ms) jusqu'au prochain minuit local. */

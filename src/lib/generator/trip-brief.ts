@@ -35,6 +35,7 @@ import {
   IconConfetti,
   IconCreditCard,
   IconDiamond,
+  IconFerry,
   IconFishOff,
   IconFriends,
   IconGlassFull,
@@ -613,6 +614,12 @@ export const TRANSPORTS: BriefOption[] = [
     label: 'Vol intérieur',
     prompt: 'l’avion pour les vols intérieurs',
   },
+  {
+    id: 'boat',
+    icon: IconFerry,
+    label: 'Bateau ou ferry',
+    prompt: 'le bateau ou le ferry',
+  },
   { id: 'bike', icon: IconBike, label: 'Vélo', prompt: 'le vélo' },
   {
     id: 'taxi',
@@ -884,8 +891,7 @@ function travelersLine(brief: TripBrief): string {
  * un chevron tapé par le voyageur ne doit pas pouvoir les refermer.
  */
 function withSafeText(brief: TripBrief): TripBrief {
-  const safe = (text: string) =>
-    text.replace(/</g, '‹').replace(/>/g, '›')
+  const safe = (text: string) => text.replace(/</g, '‹').replace(/>/g, '›')
   return {
     ...brief,
     destination: safe(brief.destination),

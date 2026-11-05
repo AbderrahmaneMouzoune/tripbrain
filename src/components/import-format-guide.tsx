@@ -386,7 +386,8 @@ const TRANSPORT_COLUMNS: ColumnDef[] = [
   {
     name: 'type',
     required: true,
-    description: 'train | car | plane | bus',
+    description:
+      'train | plane | bus | boat | car | other (ferry, TGV, taxi… sont aussi reconnus)',
     example: 'train',
   },
   {
@@ -2060,7 +2061,8 @@ export function ImportFormatGuideContent() {
                       >
                         requis
                       </Badge>{' '}
-                      — train | car | plane | bus
+                      — train | plane | bus | boat | car | other (ferry, TGV,
+                      taxi… sont aussi reconnus)
                     </li>
                     <li>
                       <code className="bg-muted rounded px-1 text-[11px]">

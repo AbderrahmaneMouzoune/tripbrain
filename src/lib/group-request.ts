@@ -1,6 +1,7 @@
 // Validation commune des écritures de voyage de groupe (création et mise à jour).
 
 import { cleanAuthor, MAX_GROUP_TITLE_LENGTH } from '@/lib/group-sync'
+import { truncateText } from '@/lib/text-limit'
 import {
   GROUP_MAX_PAYLOAD_CHARS,
   type GroupSnapshotData,
@@ -29,7 +30,7 @@ export function parseGroupWrite(body: unknown): ParsedGroupWrite {
   }
   const title =
     typeof value?.title === 'string'
-      ? value.title.trim().slice(0, MAX_GROUP_TITLE_LENGTH)
+      ? truncateText(value.title.trim(), MAX_GROUP_TITLE_LENGTH)
       : ''
   return {
     ok: true,

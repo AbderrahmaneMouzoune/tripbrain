@@ -47,7 +47,7 @@ export const JSON_SHAPE =
   '"highlights":["Point fort 1","Point fort 2"],' +
   '"foodRecommendations":["Plat ou adresse typique"],"walkingDistance":"7 km",' +
   '"tips":["Conseil pratique"],"notes":"Note libre sur la journée.",' +
-  '"transport":{"type":"train|car|plane|bus","from":"Ville de départ","to":"Ville d\'arrivée",' +
+  '"transport":{"type":"train|car|plane|bus|boat","from":"Ville de départ","to":"Ville d\'arrivée",' +
   '"details":"Ligne, compagnie…","departureTime":"09:15","arrivalTime":"11:30","duration":"2h15"},' +
   '"activities":[{"name":"Nom du lieu","description":"Pourquoi ce lieu vaut le détour.",' +
   '"type":"visit|food|experience|shopping|transport","duration":"1h30",' +
@@ -90,7 +90,7 @@ const BREVITY_RULES = [
 /** Règles de lieu, communes à la génération et à l'affinage. */
 const PLACE_RULES = [
   '- Suis le calendrier fourni : chaque journée porte la date indiquée, et le jour de la semaine compte (fermetures hebdomadaires, marchés, horaires du dimanche).',
-  '- Ajoute "transport" uniquement les jours avec un déplacement entre deux villes.',
+  '- Ajoute "transport" uniquement les jours avec un déplacement entre deux villes ; un ferry ou un bateau prend le type "boat".',
   LODGING_RULE,
   '- Utilise de vrais lieux avec des coordonnées GPS approximatives réelles.',
 ]

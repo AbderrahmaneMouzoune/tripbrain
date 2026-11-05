@@ -214,7 +214,14 @@ describe('itinerary data structure', () => {
   })
 
   it('transport type is a valid enum value when present', () => {
-    const validTypes = ['train', 'car', 'plane', 'bus'] as const
+    const validTypes = [
+      'train',
+      'car',
+      'plane',
+      'bus',
+      'boat',
+      'other',
+    ] as const
     for (const day of itinerary) {
       if (day.transport) {
         expect(validTypes).toContain(day.transport.type)

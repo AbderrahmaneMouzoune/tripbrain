@@ -17,6 +17,7 @@
  */
 
 import type { DayItinerary } from '@/lib/itinerary-data'
+import { truncateText } from '@/lib/text-limit'
 
 /** Longueur d'un identifiant de groupe : 16 octets aléatoires en base64url. */
 export const GROUP_ID_LENGTH = 22
@@ -51,11 +52,14 @@ export function createGroupId(): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-/** Prénom tel qu'il part vers le serveur : nettoyé, borné, ou rien. */
+/**
+ * Prénom tel qu'il part vers le serveur : nettoyé, borné (sans couper un
+ * emoji en deux), ou rien.
+ */
 export function cleanAuthor(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.replace(/\s+/g, ' ').trim()
-  return trimmed ? trimmed.slice(0, MAX_AUTHOR_LENGTH) : null
+  return trimmed ? truncateText(trimmed, MAX_AUTHOR_LENGTH) : null
 }
 
 /**

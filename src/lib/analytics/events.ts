@@ -183,8 +183,10 @@ export const analyticsEvents = {
   },
   edit_changes_saved: {
     description:
-      "Fin d'une session d'édition avec enregistrement, et volume de modifications.",
-    properties: { changes_count: count() },
+      "Fin d'une session d'édition avec enregistrement, volume de modifications, et si le voyage a été repris d'un itinéraire modèle (jamais lequel).",
+    // `from_template` : part des reprises retouchées ensuite (spec des
+    // modèles, §8), à rapprocher de `template_taken`.
+    properties: { changes_count: count(), from_template: flag() },
   },
   edit_changes_discarded: {
     description: "Fin d'une session d'édition avec retour en arrière.",
@@ -267,6 +269,70 @@ export const analyticsEvents = {
         'network_error',
         'unknown',
       ),
+    },
+  },
+  // Itinéraires modèles : ni l'id, ni le slug, ni le prénom de l'auteur, ni le
+  // pays — un modèle est public, mais la mesure n'a pas à savoir lequel on
+  // regarde pour compter publications, ouvertures et reprises.
+  template_published: {
+    description:
+      'Un voyage a été publié comme itinéraire modèle : nombre de journées, notes et prix inclus ou non, visible sur tripbrain.fr ou par lien seulement — jamais lequel.',
+    properties: {
+      days_count: count(),
+      includes_notes: flag(),
+      includes_prices: flag(),
+      indexable: flag(),
+    },
+  },
+  template_publish_failed: {
+    description:
+      "Échec de la publication d'un itinéraire modèle, avec sa cause : trop volumineux, réseau, service indisponible ou contenu refusé.",
+    properties: {
+      reason: choice(
+        'too_large',
+        'network_error',
+        'unavailable',
+        'invalid',
+        'unknown',
+      ),
+    },
+  },
+  template_updated: {
+    description:
+      'Un itinéraire modèle a été mis à jour par son auteur, avec le nombre de journées de la nouvelle version.',
+    properties: { days_count: count() },
+  },
+  template_visibility_changed: {
+    description:
+      "L'auteur d'un itinéraire modèle l'a rendu visible sur tripbrain.fr et Google, ou l'a limité à son lien.",
+    properties: { indexable: flag() },
+  },
+  template_retired: {
+    description:
+      'Un itinéraire modèle a été retiré par son auteur : son lien et sa page ne répondent plus.',
+    properties: {},
+  },
+  template_opened: {
+    description:
+      "Ouverture d'un itinéraire modèle, et par quel chemin : lien partagé, site tripbrain.fr ou app installée — jamais lequel.",
+    properties: { via: choice('link', 'site', 'native') },
+  },
+  template_taken: {
+    description:
+      "Un itinéraire modèle a été repris : journées du modèle, journées gardées, et durée identique ou plus courte que l'original.",
+    properties: {
+      // Journées du modèle, puis journées gardées par le repreneur. Les
+      // journées gardées sont prises dans le modèle : jamais plus longue.
+      days_count: count(),
+      kept_days_count: count(),
+      duration: choice('same', 'shorter'),
+    },
+  },
+  template_take_failed: {
+    description:
+      "Échec de la reprise d'un itinéraire modèle, avec sa cause : modèle introuvable, retiré par son auteur, ou erreur de réseau.",
+    properties: {
+      reason: choice('not_found', 'retired', 'network_error', 'unknown'),
     },
   },
   generator_opened: {
@@ -398,8 +464,11 @@ export const analyticsEvents = {
     properties: { surface: choice('share_dialog', 'demo_banner', 'trip_menu') },
   },
   pwa_installed: {
-    description: "Installation de l'application sur l'appareil.",
-    properties: {},
+    description:
+      "Installation de l'application sur l'appareil, et si un voyage repris d'un itinéraire modèle s'y trouvait déjà (jamais lequel).",
+    // `from_template` : installations venant d'un lien modèle (spec des
+    // modèles, §8).
+    properties: { from_template: flag() },
   },
   legal_page_viewed: {
     description: "Consultation d'une page légale.",

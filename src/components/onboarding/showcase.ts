@@ -88,5 +88,9 @@ export function transportLabel(type: Transport['type']): string {
       return 'Bus'
     case 'car':
       return 'Voiture'
+    case 'boat':
+      return 'Bateau'
+    case 'other':
+      return 'Trajet'
   }
 }

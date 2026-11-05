@@ -50,6 +50,34 @@ export const TRANSPORT_TYPE_LABELS: Record<Transport['type'], string> = {
   car: 'Voiture',
   plane: 'Vol',
   bus: 'Bus',
+  boat: 'Bateau',
+  other: 'Autre trajet',
+}
+
+/**
+ * « Itinéraire vers … » : le point de départ du trajet, sauf en voiture, où
+ * le point utile est l'arrivée.
+ */
+export const TRANSPORT_PLACE_WORDS: Record<Transport['type'], string> = {
+  plane: 'l’aéroport',
+  train: 'la gare',
+  bus: 'l’arrêt',
+  car: 'l’arrivée',
+  boat: 'le port',
+  other: 'le départ',
+}
+
+/** Où l'on embarque : à quai dans une gare ou un port, par une porte ailleurs. */
+export const TRANSPORT_BOARDING_LABELS: Record<
+  Transport['type'],
+  'Quai' | 'Porte'
+> = {
+  train: 'Quai',
+  boat: 'Quai',
+  plane: 'Porte',
+  bus: 'Porte',
+  car: 'Porte',
+  other: 'Porte',
 }
 
 /** Statut d'un trajet ou d'un hébergement, dans l'ordre où il avance. */
@@ -349,11 +377,18 @@ export interface DepartureChecklistInput {
   ticketsLinked: number
 }
 
+/**
+ * Complément de « 3 trajets … ». Un trajet non classé se dit « par un autre
+ * moyen » : « en trajet » répéterait le nom sans rien apprendre (« 2 trajets
+ * en train et en trajet »).
+ */
 const TRANSPORT_MODE_WORDS: Record<Transport['type'], string> = {
   train: 'en train',
   plane: 'en avion',
   bus: 'en bus',
   car: 'en voiture',
+  boat: 'en bateau',
+  other: 'par un autre moyen',
 }
 
 /** « a », « a et b », « a, b et c » */

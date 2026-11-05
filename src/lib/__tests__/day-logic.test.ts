@@ -1,4 +1,4 @@
-import type { DayItinerary } from '@/lib/itinerary-data'
+import type { DayItinerary, Transport } from '@/lib/itinerary-data'
 import {
   buildDepartureChecklist,
   buildProgramRows,
@@ -155,7 +155,7 @@ describe('préparation du départ', () => {
     offline: { total: 10, cached: 10 },
     notifications: 'granted' as const,
     remindersEnabled: true,
-    transports: ['train', 'plane', 'train'] as ('train' | 'plane')[],
+    transports: ['train', 'plane', 'train'] as Transport['type'][],
     ticketsLinked: 1,
   }
 
@@ -175,6 +175,17 @@ describe('préparation du départ', () => {
     )
     expect(items.find((i) => i.id === 'calendar')?.detail).toBe(
       'Les 20 jours et les horaires des trajets',
+    )
+  })
+
+  it('nomme le bateau, et le trajet non classé « par un autre moyen »', () => {
+    const items = buildDepartureChecklist({
+      ...base,
+      transports: ['boat', 'train', 'other'],
+      ticketsLinked: 0,
+    })
+    expect(items.find((i) => i.id === 'tickets')?.detail).toBe(
+      '3 trajets en bateau, en train et par un autre moyen',
     )
   })
 

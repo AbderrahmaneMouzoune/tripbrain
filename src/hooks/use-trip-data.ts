@@ -14,6 +14,10 @@ import {
   type TripGroup,
 } from '@/lib/group-sync'
 import { readPreferences } from '@/lib/preferences'
+import type {
+  PublishedTemplateInfo,
+  TemplateOrigin,
+} from '@/lib/template-model'
 import { compressItinerary } from '@/lib/share'
 import { trackEvent } from '@/lib/analytics/client'
 import { importFailureReason, itineraryVolume } from '@/lib/analytics/metrics'
@@ -22,9 +26,11 @@ import {
   currentDayIndex,
   deriveTripTitle,
   msUntilNextMidnight,
+  normalizeStoredTrip,
   pickDefaultTrip,
   sortTripSummaries,
   summarizeTrip,
+  tripCopyOf,
   type StoredTrip,
   type TripSource,
   type TripSummary,
@@ -53,6 +59,17 @@ export interface AddTripOptions {
   activate?: boolean
   /** Voyage de groupe rejoint par invitation. */
   group?: TripGroup
+  /** Voyage repris d'un itinéraire modèle (voir `takeTemplate`). */
+  origin?: TemplateOrigin
+  /** Copie de la démo : ne se publie pas comme modèle (voir `tripCopyOf`). */
+  copiedFromDemo?: boolean
+}
+
+/** Ce que la reprise d'un modèle (B4) remet au voyage créé. */
+export interface TakeTemplateInput {
+  /** Titre du modèle, ou celui choisi par le repreneur. */
+  title: string
+  origin: TemplateOrigin
 }
 
 /** Remplacer le voyage consulté plutôt que d'en ajouter un : choix offert à la réception d'un partage. */
@@ -173,8 +190,19 @@ export function useTripData() {
   useEffect(() => {
     let cancelled = false
     readAllTrips()
-      .then((stored) => {
+      .then((raw) => {
         if (cancelled) return
+        // Un trajet enregistré avant la normalisation des types (« Ferry »
+        // d'un tableur, texte libre d'un JSON) n'a pas d'icône : l'écran de
+        // la journée plantait. Corrigé à la lecture, puis réécrit au mieux
+        // pour que la synchronisation de groupe parte propre.
+        const stored = raw.map(normalizeStoredTrip)
+        stored.forEach((trip, index) => {
+          if (trip === raw[index]) return
+          writeTrip(trip).catch((error) => {
+            console.error('Réécriture d’un voyage normalisé impossible', error)
+          })
+        })
         commitTrips(() => stored)
         const remembered = readActiveTripId()
         const id =
@@ -249,6 +277,8 @@ export function useTripData() {
         updatedAt: now,
         isDemo: options.source === 'demo',
         ...(options.group ? { group: options.group } : {}),
+        ...(options.origin ? { origin: options.origin } : {}),
+        ...(options.copiedFromDemo ? { copiedFromDemo: true } : {}),
       }
       await persistTrip(trip)
 
@@ -284,31 +314,6 @@ export function useTripData() {
       ...itineraryVolume(demo),
     })
   }, [activate, addTrip])
-
-  const importData = useCallback(
-    async (file: File) => {
-      try {
-        const text = await file.text()
-        const parsed = JSON.parse(text) as TripData & { title?: string }
-        if (!parsed.itinerary || !Array.isArray(parsed.itinerary)) {
-          throw new Error('Format invalide : tableau itinerary manquant')
-        }
-        await addTrip(parsed.itinerary, { source: 'json', title: parsed.title })
-        trackEvent('trip_imported', {
-          source: 'json',
-          ...itineraryVolume(parsed.itinerary),
-        })
-      } catch (error) {
-        // Seule la nature de l'échec est remontée : ni le fichier, ni son nom.
-        trackEvent('trip_import_failed', {
-          source: 'json',
-          reason: importFailureReason(error),
-        })
-        throw error
-      }
-    },
-    [addTrip],
-  )
 
   const importXlsxData = useCallback(
     async (file: File) => {
@@ -356,6 +361,13 @@ export function useTripData() {
    * Enregistre un itinéraire reçu par partage, par le générateur ou par le
    * site. Par défaut il s'ajoute aux voyages et s'ouvre ; en mode `replace`, il
    * prend la place du voyage consulté (même identifiant, même position).
+   *
+   * Remplacer le programme coupe aussi le lien aux modèles : `origin` ne
+   * décrirait plus ce voyage (une mise à jour V1.1 fusionnerait le modèle dans
+   * un tout autre programme), et `publishedTemplate` permettrait de publier
+   * le voyage reçu — celui d'un autre — sous le modèle de l'auteur. Le jeton
+   * propriétaire part avec : le modèle reste en ligne, mais ce téléphone ne
+   * peut plus le retirer.
    */
   const importSharedItinerary = useCallback(
     async (days: DayItinerary[], options: ImportSharedOptions = {}) => {
@@ -378,6 +390,8 @@ export function useTripData() {
             itinerary: days,
             title: options.title?.trim() || deriveTripTitle(days),
             source,
+            origin: undefined,
+            publishedTemplate: undefined,
           }),
         )
         setTripRevision((revision) => revision + 1)
@@ -526,17 +540,56 @@ export function useTripData() {
     [persistTrip],
   )
 
-  /** Copie d'un voyage, utile avant de le retoucher en profondeur. */
+  /**
+   * Copie d'un voyage, utile avant de le retoucher en profondeur. Ce qui
+   * passe ou non est décidé par `tripCopyOf` : le programme, le titre et la
+   * provenance, mais ni `group`, ni `publishedTemplate`, ni `origin` ; une
+   * copie de la démo est marquée `copiedFromDemo` et ne se publie pas.
+   */
   const duplicateTrip = useCallback(
     async (id: string) => {
       const trip = tripsRef.current.find((item) => item.id === id)
       if (!trip) return null
-      return addTrip(trip.itinerary, {
-        source: trip.source === 'demo' ? 'share' : trip.source,
-        title: `${trip.title} (copie)`,
+      const copy = tripCopyOf(trip)
+      return addTrip(copy.itinerary, {
+        source: copy.source,
+        title: copy.title,
+        copiedFromDemo: copy.copiedFromDemo,
         activate: false,
       })
     },
+    [addTrip],
+  )
+
+  /**
+   * Enregistre (ou efface, avec `undefined`) le modèle publié depuis ce
+   * voyage. Comme `leaveGroup`, sans passer par `touched` : publier n'est pas
+   * une retouche du programme, et un voyage de groupe ne doit pas devenir
+   * « à envoyer » pour autant. Sans effet si le voyage n'existe plus.
+   */
+  const setPublishedTemplate = useCallback(
+    async (tripId: string, info: PublishedTemplateInfo | undefined) => {
+      // Relu ici plutôt que reçu de l'appelant : la publication suit un appel
+      // réseau, pendant lequel une retouche a pu être enregistrée.
+      const trip = tripsRef.current.find((item) => item.id === tripId)
+      if (!trip) return
+      await persistTrip({ ...trip, publishedTemplate: info })
+    },
+    [persistTrip],
+  )
+
+  /**
+   * Crée le voyage d'un repreneur à partir d'un modèle déjà recalé et filtré
+   * (`retimeTemplate`), puis l'ouvre. L'appel réseau et la mesure restent à
+   * l'écran de reprise : ici, seulement l'enregistrement local.
+   */
+  const takeTemplate = useCallback(
+    (days: DayItinerary[], input: TakeTemplateInput): Promise<string> =>
+      addTrip(days, {
+        source: 'template',
+        title: input.title,
+        origin: input.origin,
+      }),
     [addTrip],
   )
 
@@ -599,12 +652,13 @@ export function useTripData() {
     enableGroup,
     joinGroupTrip,
     leaveGroup,
+    setPublishedTemplate,
+    takeTemplate,
     /** Voyages complets (itinéraires compris), pour ce qui les sert tous : les rappels. */
     storedTrips: trips,
     activeTrip,
     activeTripId,
     loadMockData,
-    importData,
     importXlsxData,
     importCsvData,
     importSharedItinerary,

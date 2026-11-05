@@ -11,6 +11,8 @@ import {
   ChevronDown,
   Luggage,
   Plane,
+  Route,
+  Ship,
   TrainFront,
 } from 'lucide-react'
 import type { DayItinerary } from '@/lib/itinerary-data'
@@ -43,6 +45,8 @@ const TRANSPORT_ICONS: Record<
   train: TrainFront,
   bus: Bus,
   car: Car,
+  boat: Ship,
+  other: Route,
 }
 
 export interface LinkOption {

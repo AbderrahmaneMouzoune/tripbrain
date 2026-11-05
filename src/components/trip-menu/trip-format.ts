@@ -116,12 +116,14 @@ const ORIGIN_VERBS: Partial<Record<TripSource, string>> = {
   json: 'Importé',
   xlsx: 'Importé',
   csv: 'Importé',
+  template: 'Repris',
 }
 
 /**
- * « Généré il y a 2 jours », « Reçu hier », « Voyage d’exemple ». `null` pour
- * un voyage d'avant les voyages multiples : sa date de création n'est que
- * celle de la migration, elle ne dirait rien de vrai.
+ * « Généré il y a 2 jours », « Reçu hier », « Repris il y a 3 jours »,
+ * « Voyage d’exemple ». `null` pour un voyage d'avant les voyages multiples :
+ * sa date de création n'est que celle de la migration, elle ne dirait rien de
+ * vrai.
  */
 export function formatTripOrigin(
   source: TripSource,

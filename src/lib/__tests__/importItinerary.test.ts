@@ -300,6 +300,45 @@ describe('importFromCsv', () => {
     ).resolves.toBeDefined()
   })
 
+  it('ramène chaque type de trajet à un type de l’app (ferry, métro, taxi, inconnu)', async () => {
+    const days = [
+      'id,date,city,title',
+      'd1,2026-05-10,Marseille,Départ',
+      'd2,2026-05-11,Ajaccio,Arrivée',
+      'd3,2026-05-12,Paris,Métro',
+      'd4,2026-05-13,Lyon,Taxi',
+      'd5,2026-05-14,Nantes,Inconnu',
+      'd6,2026-05-15,Rennes,Vide',
+    ].join('\n')
+    const transports = [
+      'id,day_id,type,from,to',
+      't1,d1,Ferry,Marseille,Ajaccio',
+      't2,d2,navette maritime,Ajaccio,Bonifacio',
+      't3,d3,Métro,Châtelet,Nation',
+      't4,d4,taxi,Gare,Hôtel',
+      't5,d5,téléporteur,Nantes,Rennes',
+      't6,d6,,Rennes,Brest',
+    ].join('\n')
+    const result = await importFromCsv([
+      makeCsvFile('days.csv', days),
+      makeCsvFile('activities.csv', 'id,day_id,name,type\n'),
+      makeCsvFile('transports.csv', transports),
+    ])
+    expect(result.itinerary.map((day) => day.transport?.type)).toEqual([
+      'boat',
+      'boat',
+      'train',
+      'car',
+      'other',
+      'other',
+    ])
+    expect(result.itinerary[0].transport).toMatchObject({
+      id: 't1',
+      from: 'Marseille',
+      to: 'Ajaccio',
+    })
+  })
+
   it('returns empty itinerary for header-only CSV files', async () => {
     const result = await importFromCsv([
       makeCsvFile('days.csv', 'id,date,city,title'),
@@ -496,6 +535,22 @@ describe('importFromXlsx', () => {
     } as unknown as File
 
     await expect(importFromXlsx(file)).rejects.toThrow('Transports')
+  })
+
+  it('ramène un ferry à un trajet en bateau', async () => {
+    const file = await makeXlsxFile(
+      [
+        ['id', 'date', 'city', 'title'],
+        ['day-1', '2026-05-10', 'Nice', 'Traversée'],
+      ],
+      [['id', 'day_id', 'name', 'type']],
+      [
+        ['id', 'day_id', 'type', 'from', 'to'],
+        ['tr-1', 'day-1', 'FERRY', 'Nice', 'Bastia'],
+      ],
+    )
+    const result = await importFromXlsx(file)
+    expect(result.itinerary[0].transport?.type).toBe('boat')
   })
 
   it('returns empty itinerary when sheets have only headers', async () => {

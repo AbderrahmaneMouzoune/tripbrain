@@ -9,6 +9,7 @@
 
 import type { DayItinerary } from '@/lib/itinerary-data'
 import type { TripSource } from '@/lib/trips'
+import { normalizeItineraryTransports } from '@/lib/transport-type'
 
 /** Formats acceptés par le sélecteur de fichiers (identique à l'ancien accueil). */
 export const ITINERARY_FILE_ACCEPT =
@@ -103,7 +104,9 @@ export function parseItineraryJson(text: string): {
     throw new Error('Le fichier ne contient aucune journée.')
   }
   return {
-    itinerary: parsed.itinerary as DayItinerary[],
+    // Un export d'une autre version, ou retouché à la main, peut dire
+    // « ferry » : ramené à un type de l'app, comme à l'import d'un tableur.
+    itinerary: normalizeItineraryTransports(parsed.itinerary as DayItinerary[]),
     title:
       typeof parsed.title === 'string' && parsed.title.trim()
         ? parsed.title.trim()

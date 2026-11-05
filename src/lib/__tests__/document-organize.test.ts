@@ -145,6 +145,7 @@ describe('documentCategory', () => {
       'hotel',
     )
     expect(documentCategory({ name: 'airbnb_receipt.pdf' })).toBe('hotel')
+    expect(documentCategory({ name: 'Bateau-Nice-Bastia.pdf' })).toBe('ticket')
     expect(documentCategory({ name: 'Visa Chine.pdf' })).toBe('identity')
     expect(documentCategory({ name: 'PASSEPORT.jpg' })).toBe('identity')
     expect(documentCategory({ name: 'Attestation-assurance.pdf' })).toBe(

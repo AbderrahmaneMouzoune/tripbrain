@@ -10,7 +10,9 @@ import {
   FileText,
   Loader2,
   Plane,
+  Route,
   Settings,
+  Ship,
   TrainFront,
   X,
 } from 'lucide-react'
@@ -97,6 +99,8 @@ const TRANSPORT_ICONS: Record<Transport['type'], typeof Plane> = {
   train: TrainFront,
   bus: Bus,
   car: Car,
+  boat: Ship,
+  other: Route,
 }
 
 /**

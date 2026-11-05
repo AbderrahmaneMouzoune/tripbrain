@@ -1,4 +1,5 @@
 import { analyticsEvents } from '@/lib/analytics/events'
+import { sanitizeEventProperties } from '@/lib/analytics/sanitize'
 
 /**
  * Ces tests ne vérifient pas un comportement mais une discipline : ils cassent
@@ -24,6 +25,14 @@ const FORBIDDEN_PROPERTY_NAMES = [
   'filename',
   'file_name',
   'message',
+  // Un modèle est public, mais la mesure n'a pas à savoir lequel : ni son id,
+  // ni son adresse, ni le prénom de son auteur, ni son jeton.
+  'id',
+  'template_id',
+  'slug',
+  'author',
+  'author_name',
+  'token',
 ]
 
 const entries = Object.entries(analyticsEvents)
@@ -70,5 +79,54 @@ describe('catalogue des événements', () => {
         }
       }
     }
+  })
+})
+
+describe('mesure des itinéraires modèles (spec, §8)', () => {
+  it('dit si une édition enregistrée porte sur un voyage repris', () => {
+    expect(analyticsEvents.edit_changes_saved.properties).toEqual({
+      changes_count: { kind: 'count' },
+      from_template: { kind: 'flag' },
+    })
+    expect(
+      sanitizeEventProperties('edit_changes_saved', {
+        changes_count: 3,
+        from_template: true,
+      }),
+    ).toEqual({ changes_count: 3, from_template: true })
+  })
+
+  it('dit si une installation suit la reprise d’un modèle', () => {
+    expect(analyticsEvents.pwa_installed.properties).toEqual({
+      from_template: { kind: 'flag' },
+    })
+    expect(
+      sanitizeEventProperties('pwa_installed', {
+        from_template: false,
+        template_id: 'k3v9x2mq8r7t4wza',
+      }),
+    ).toEqual({ from_template: false })
+  })
+
+  it('ne connaît que les chemins d’ouverture qui existent', () => {
+    expect(analyticsEvents.template_opened.properties.via.values).toEqual([
+      'link',
+      'site',
+      'native',
+    ])
+  })
+
+  it('ne connaît pas de reprise plus longue que le modèle', () => {
+    expect(analyticsEvents.template_taken.properties.duration.values).toEqual([
+      'same',
+      'shorter',
+    ])
+    expect(
+      sanitizeEventProperties('template_taken', {
+        days_count: 7,
+        kept_days_count: 10,
+        duration: 'longer',
+      }),
+    ).toEqual({ days_count: 7, kept_days_count: 10 })
   })
 })
