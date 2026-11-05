@@ -57,7 +57,7 @@ export function ResetSheet({ onClose }: ScreenProps<'reset'>) {
       await action()
       closeAll()
     } catch {
-      setError('La suppression n’a pas abouti. Réessayez.')
+      setError('La suppression n’a pas abouti. Réessaie.')
       setBusy(false)
     }
   }
@@ -125,7 +125,7 @@ export function ResetSheet({ onClose }: ScreenProps<'reset'>) {
             >
               <Share2 className="size-5 shrink-0" aria-hidden />
               <span className="flex-1 text-sm leading-snug font-extrabold">
-                Partagez-le d’abord pour en garder une copie
+                Partage-le d’abord pour en garder une copie
               </span>
               <ChevronRight className="size-[18px] shrink-0" aria-hidden />
             </button>
@@ -141,8 +141,8 @@ export function ResetSheet({ onClose }: ScreenProps<'reset'>) {
               {trips.length > 1
                 ? `Les ${plural(trips.length, 'voyage')} enregistrés`
                 : 'Le voyage enregistré'}{' '}
-              et leurs documents seront supprimés de ce téléphone. Vous
-              reviendrez à l’écran de bienvenue de TripBrain.
+              et leurs documents seront supprimés de ce téléphone. Tu reviendras
+              à l’écran de bienvenue de TripBrain.
             </AlertDialogDescription>
           </>
         )}
@@ -154,7 +154,7 @@ export function ResetSheet({ onClose }: ScreenProps<'reset'>) {
             </AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground mt-2.5 text-[15px] leading-normal">
               Dernière confirmation : rien ne pourra être récupéré, sauf ce que
-              vous avez partagé ou exporté.
+              tu as partagé ou exporté.
             </AlertDialogDescription>
           </>
         )}

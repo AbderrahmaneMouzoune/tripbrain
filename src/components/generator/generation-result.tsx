@@ -49,7 +49,7 @@ const STOP_DOTS = [
 ]
 
 /**
- * « Votre itinéraire est prêt » : en-tête, points à vérifier tirés du rapport
+ * « Ton itinéraire est prêt » : en-tête, points à vérifier tirés du rapport
  * de qualité, puis les journées regroupées par ville. Deux sorties : affiner
  * par une demande en langage naturel, ou enregistrer le voyage.
  */
@@ -150,7 +150,7 @@ export function GenerationResult({
         <p className="text-secondary-strong text-xs font-black tracking-[0.08em] uppercase">
           {state.status === 'stopped'
             ? 'Itinéraire partiel'
-            : 'Votre itinéraire est prêt'}
+            : 'Ton itinéraire est prêt'}
         </p>
         <h1 className="font-display text-[32px] leading-[1.1]">
           {itinerary.tripTitle.trim() || 'Voyage sans titre'}

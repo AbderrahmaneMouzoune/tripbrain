@@ -63,7 +63,7 @@ export function classifyFiles(names: readonly string[]): FileClassification {
       ok: false,
       message:
         names.length < REQUIRED_CSV_FILES.length
-          ? 'Pour importer en CSV, sélectionnez les 3 fichiers en même temps'
+          ? 'Pour importer en CSV, sélectionne les 3 fichiers en même temps'
           : 'Les fichiers CSV doivent s’appeler days.csv, activities.csv et transports.csv',
       csvChecklist,
     }
@@ -83,7 +83,7 @@ export function classifyFiles(names: readonly string[]): FileClassification {
   return {
     ok: false,
     message:
-      'Format non supporté. Utilisez un fichier .json, .xlsx, ou 3 fichiers .csv',
+      'Format non supporté. Utilise un fichier .json, .xlsx, ou 3 fichiers .csv',
   }
 }
 

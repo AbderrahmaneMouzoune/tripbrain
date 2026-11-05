@@ -110,7 +110,7 @@ export default function SharedTripOpenGraphImage() {
                 textAlign: 'center',
               }}
             >
-              Un voyage vous a été partagé
+              Un voyage t’a été partagé
             </div>
             <div
               style={{
@@ -121,7 +121,7 @@ export default function SharedTripOpenGraphImage() {
                 lineHeight: 1.4,
               }}
             >
-              Ouvrez ce lien pour retrouver l’itinéraire jour par jour
+              Ouvre ce lien pour retrouver l’itinéraire jour par jour
             </div>
           </div>
 

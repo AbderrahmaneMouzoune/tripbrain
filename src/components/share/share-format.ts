@@ -79,7 +79,7 @@ export function toFrenchShareError(
   }
   const message = error.message.toLowerCase()
   if (message.includes('network') || message.includes('failed to fetch')) {
-    return 'Erreur réseau : vérifiez votre connexion internet et réessayez.'
+    return 'Erreur réseau : vérifie ta connexion internet et réessaie.'
   }
   // Les routes /api/share répondent déjà en français : leur message passe tel quel.
   if (context === 'share') return error.message

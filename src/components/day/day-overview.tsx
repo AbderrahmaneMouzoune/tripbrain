@@ -227,7 +227,7 @@ export function SwapDaySheet({
             >
               <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
               Les villes diffèrent : le trajet ou l’hébergement réservé ces
-              jours-là ne suit pas l’échange. Pensez à le vérifier.
+              jours-là ne suit pas l’échange. Pense à le vérifier.
             </p>
           )}
           <Button
@@ -238,7 +238,7 @@ export function SwapDaySheet({
           >
             <ArrowLeftRight />
             {target === null
-              ? 'Choisissez une journée'
+              ? 'Choisis une journée'
               : `Échanger avec le ${shortDate(itinerary[target].date)}`}
           </Button>
         </div>

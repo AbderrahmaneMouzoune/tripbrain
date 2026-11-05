@@ -1,7 +1,7 @@
 {
   "name": "TripBrain",
   "short_name": "TripBrain",
-  "description": "Planifiez et consultez votre itineraire de voyage avec TripBrain",
+  "description": "Planifie et consulte ton itinéraire de voyage avec TripBrain",
   "id": "/",
   "start_url": "/",
   "scope": "/",

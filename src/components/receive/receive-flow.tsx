@@ -93,7 +93,7 @@ export function ReceiveFlow({
   const [busy, setBusy] = useState(() => !('method' in start))
   const [busyLabel, setBusyLabel] = useState(() =>
     !('method' in start) && start.incoming.origin === 'generator'
-      ? 'Récupération de votre itinéraire…'
+      ? 'Récupération de ton itinéraire…'
       : 'Récupération du voyage…',
   )
   const top = history[history.length - 1]
@@ -122,7 +122,7 @@ export function ReceiveFlow({
       trackEvent('share_import_started', { source })
       setBusyLabel(
         fromGenerator
-          ? 'Récupération de votre itinéraire…'
+          ? 'Récupération de ton itinéraire…'
           : 'Récupération du voyage…',
       )
       setBusy(true)
@@ -342,8 +342,8 @@ export function ReceiveFlow({
             <p className="text-sm leading-relaxed font-bold">{top.message}</p>
           </div>
           <p className="text-muted-foreground mt-4 text-sm leading-relaxed">
-            Le lien est peut-être incomplet. Demandez un nouveau partage, ou
-            saisissez le code à {SHARE_CODE_LENGTH} chiffres affiché sur l’autre
+            Le lien est peut-être incomplet. Demande un nouveau partage, ou
+            saisis le code à {SHARE_CODE_LENGTH} chiffres affiché sur l’autre
             appareil.
           </p>
         </MobileScreen>

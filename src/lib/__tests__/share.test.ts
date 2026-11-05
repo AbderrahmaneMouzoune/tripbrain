@@ -453,7 +453,7 @@ describe('fetchSharedItinerary', () => {
   it('refuse un code vide sans appeler le serveur', async () => {
     const fetchMock = stubFetch({ body: {} })
     await expect(fetchSharedItinerary('   ')).rejects.toThrow(
-      'Saisissez un code de partage.',
+      'Saisis un code de partage.',
     )
     expect(fetchMock).not.toHaveBeenCalled()
   })

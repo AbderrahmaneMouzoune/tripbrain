@@ -25,7 +25,7 @@ export default function GuidePage() {
       {/* Content */}
       <main className="mx-auto max-w-2xl px-4 py-6">
         <p className="text-muted-foreground mb-6 text-sm">
-          Choisissez votre format ci-dessous pour voir les instructions et
+          Choisis ton format ci-dessous pour voir les instructions et
           télécharger un modèle.
         </p>
         <ImportFormatGuideContent />

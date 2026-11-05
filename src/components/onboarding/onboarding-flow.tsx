@@ -58,7 +58,7 @@ const TRANSPORT_ICONS: Record<Transport['type'], typeof Plane> = {
 
 /**
  * Parcours d'accueil quand aucun voyage n'est enregistré : bienvenue, « où en
- * est votre voyage ? », puis code, QR code, fichier ou générateur, et l'aperçu
+ * est ton voyage ? », puis code, QR code, fichier ou générateur, et l'aperçu
  * avant d'enregistrer. Une fois le voyage enregistré, l'écran « voyage prêt »
  * prend le relais au-dessus des onglets.
  */
@@ -165,7 +165,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
     try {
       await loadMockData()
     } catch {
-      setError('Le voyage exemple n’a pas pu s’ouvrir. Réessayez.')
+      setError('Le voyage exemple n’a pas pu s’ouvrir. Réessaie.')
       setLoadingDemo(false)
     }
   }
@@ -225,7 +225,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
 
       <div className="bg-background text-foreground animate-sheet relative z-10 mx-auto flex w-full max-w-xl flex-1 flex-col gap-3.5 rounded-t-[28px] px-6 pt-8 pb-[calc(var(--safe-bottom)+28px)] [animation-delay:0.1s]">
         <h1 className="font-display text-[31px] leading-[1.12]">
-          Tout votre voyage, même sans réseau.
+          Tout ton voyage, même sans réseau.
         </h1>
         <p className="text-muted-foreground text-base leading-relaxed">
           Programme, billets et adresses réunis dans un roadbook qui tient dans
@@ -250,7 +250,7 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
           {loadingDemo ? 'Ouverture…' : 'Explorer un voyage exemple'}
         </Button>
         <p className="text-muted-foreground mt-0.5 text-center text-xs leading-relaxed">
-          Vos voyages restent sur ce téléphone.{' '}
+          Tes voyages restent sur ce téléphone.{' '}
           <Link
             href="/politique-de-confidentialite"
             className="text-primary font-bold underline-offset-4 hover:underline"
@@ -287,8 +287,8 @@ function IntentionStep({
     <MobileScreen
       onBack={onBack}
       progress={{ step: 1, total: 4 }}
-      title="Où en est votre voyage ?"
-      description="Choisissez votre point de départ, on s’occupe du reste."
+      title="Où en est ton voyage ?"
+      description="Choisis ton point de départ, on s’occupe du reste."
       footer={
         <div className="flex flex-col items-center gap-0.5">
           <Button

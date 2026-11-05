@@ -128,7 +128,7 @@ export function ImportFilePanel({
       setError({
         message:
           err instanceof SyntaxError
-            ? 'Ce fichier JSON est illisible : vérifiez qu’il est complet.'
+            ? 'Ce fichier JSON est illisible : vérifie qu’il est complet.'
             : err instanceof Error
               ? err.message
               : 'Erreur lors de l’import.',
@@ -193,7 +193,7 @@ export function ImportFilePanel({
           </Button>
           {templateState === 'error' && (
             <p role="alert" className="text-destructive text-center text-xs">
-              Le modèle n’a pas pu être généré. Réessayez.
+              Le modèle n’a pas pu être généré. Réessaie.
             </p>
           )}
         </>

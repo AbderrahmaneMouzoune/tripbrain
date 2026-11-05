@@ -256,9 +256,7 @@ export function CalendarSheet({ screen, onClose }: ScreenProps<'calendar'>) {
         />
       )}
 
-      <SectionTitle className="mt-4 mb-2">
-        Aperçu dans votre agenda
-      </SectionTitle>
+      <SectionTitle className="mt-4 mb-2">Aperçu dans ton agenda</SectionTitle>
       <ol className="bg-card border-border rounded-[20px] border px-3.5 py-1">
         {preview.map((item, index) => {
           const time = item.transport
@@ -379,8 +377,8 @@ function NativeFooter({
       >
         <CalendarCheck className="size-5" aria-hidden />
         {state.count > 1
-          ? `${state.count} journées ajoutées à votre agenda`
-          : 'Journée ajoutée à votre agenda'}
+          ? `${state.count} journées ajoutées à ton agenda`
+          : 'Journée ajoutée à ton agenda'}
       </p>
     )
   }
@@ -394,8 +392,8 @@ function NativeFooter({
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
           <span>
-            TripBrain n’a pas accès à votre agenda. Autorisez-le dans les
-            réglages du téléphone, puis réessayez.
+            TripBrain n’a pas accès à ton agenda. Autorise-le dans les réglages
+            du téléphone, puis réessaie.
           </span>
         </p>
         <Button size="xl" className="w-full" onClick={openNativeSettings}>
@@ -437,8 +435,8 @@ function NativeFooter({
         <CalendarCheck className="size-3.5 shrink-0" aria-hidden />
         <span>
           {alreadyAdded
-            ? 'Déjà dans votre agenda : un nouvel ajout créera des doublons.'
-            : 'Ajouté directement à l’agenda de votre téléphone'}
+            ? 'Déjà dans ton agenda : un nouvel ajout créera des doublons.'
+            : 'Ajouté directement à l’agenda de ton téléphone'}
         </span>
       </p>
     </>

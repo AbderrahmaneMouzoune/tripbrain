@@ -194,7 +194,7 @@ let controller: AbortController | null = null
  * génération : le système suspend alors la WebView et la connexion tombe.
  */
 export const BACKGROUND_INTERRUPTED_MESSAGE =
-  'La génération a été interrompue quand l’app est passée en arrière-plan. Relancez-la en gardant TripBrain ouverte.'
+  'La génération a été interrompue quand l’app est passée en arrière-plan. Relance-la en gardant TripBrain ouverte.'
 
 /**
  * Message de l'échec à afficher. Une coupure réseau survenue après un passage
@@ -310,17 +310,17 @@ async function notifyReady(title: string | undefined): Promise<void> {
   if (document.visibilityState !== 'hidden') return
 
   const options: NotificationOptions = {
-    body: title ? `« ${title} » vous attend dans TripBrain.` : undefined,
+    body: title ? `« ${title} » t’attend dans TripBrain.` : undefined,
     tag: 'tripbrain-generator',
   }
   try {
     // Sur mobile, seule la notification du service worker est permise.
     const registration = await navigator.serviceWorker?.getRegistration()
     if (registration) {
-      await registration.showNotification('Votre voyage est prêt', options)
+      await registration.showNotification('Ton voyage est prêt', options)
       return
     }
-    new Notification('Votre voyage est prêt', options)
+    new Notification('Ton voyage est prêt', options)
   } catch {
     // Notification refusée par le système : l'écran montrera le résultat.
   }

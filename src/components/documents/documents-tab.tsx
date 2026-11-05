@@ -283,7 +283,7 @@ function EmptyDocuments({
 
       <div className="px-7 pt-[18px] text-center">
         <h2 className="text-[21px] font-black">
-          Vos billets, toujours sous la main
+          Tes billets, toujours sous la main
         </h2>
         <p className="text-muted-foreground mt-1.5 text-sm leading-relaxed">
           Billets, réservations, visas : ils restent lisibles hors ligne, rangés

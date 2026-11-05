@@ -37,7 +37,7 @@ const VIA_LABEL: Record<ReceivedVia, string> = {
   link: 'Reçu par un lien de partage',
   clipboard: 'Reçu depuis tripbrain.fr',
   generator: 'Généré sur tripbrain.fr',
-  file: 'Lu depuis votre fichier',
+  file: 'Lu depuis ton fichier',
 }
 
 const STATUS_LABEL: Record<TripStatus, string> = {
@@ -256,14 +256,14 @@ export function TripPreviewStep({
           ? 'Rejoindre ce voyage ?'
           : canReplace
             ? 'Importer ce voyage ?'
-            : 'Voici votre voyage'
+            : 'Voici ton voyage'
       }
       description={
         joining
           ? joining.state.author
-            ? `${joining.state.author} vous invite · le programme restera à jour chez chacun`
+            ? `${joining.state.author} t’invite · le programme restera à jour chez chacun`
             : 'Invitation reçue · le programme restera à jour chez chacun'
-          : `${subtitle} · vérifiez avant d’enregistrer`
+          : `${subtitle} · vérifie avant d’enregistrer`
       }
       footer={
         <>
@@ -348,8 +348,8 @@ export function TripPreviewStep({
             <Info className="mt-0.5 size-5 shrink-0" aria-hidden />
             <p className="text-sm leading-snug">
               {realTrips.length > 1
-                ? `Vous avez déjà ${realTrips.length} voyages sur ce téléphone, dont `
-                : 'Vous avez déjà un voyage sur ce téléphone : '}
+                ? `Tu as déjà ${realTrips.length} voyages sur ce téléphone, dont `
+                : 'Tu as déjà un voyage sur ce téléphone : '}
               <strong className="font-black">{activeTrip.title}</strong>
               {activeSummary && ` (${STATUS_LABEL[activeSummary.status]})`}
             </p>

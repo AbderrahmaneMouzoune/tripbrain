@@ -153,7 +153,7 @@ export function analyzeItinerary(days: DayItinerary[]): QualityReport {
         dayNumber,
         field: 'date',
         kind: 'missing',
-        message: 'Date absente : renseignez-la avant d’enregistrer.',
+        message: 'Date absente : renseigne-la avant d’enregistrer.',
         blocking: true,
       })
     } else if (!isValidIsoDate(day.date)) {
@@ -210,7 +210,7 @@ export function analyzeItinerary(days: DayItinerary[]): QualityReport {
         dayNumber,
         field: 'activities',
         kind: 'missing',
-        message: 'Aucune activité prévue ce jour-là : ajoutez-en une.',
+        message: 'Aucune activité prévue ce jour-là : ajoutes-en une.',
         blocking: true,
       })
     }

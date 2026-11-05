@@ -177,7 +177,7 @@ export function computeReminders(
         title: `Demain : ${lowerFirst(transportLabel(day.transport))}`,
         body: departure
           ? `Départ à ${departure}. Billets et adresses sont dans TripBrain.`
-          : 'Vérifiez l’heure de départ et gardez vos billets à portée de main.',
+          : 'Vérifie l’heure de départ et garde tes billets à portée de main.',
       })
     }
 
@@ -195,7 +195,7 @@ export function computeReminders(
         body:
           count > 0
             ? `${day.city} · ${plural(count, 'activité')} au programme.`
-            : `${day.city} · le programme du jour vous attend.`,
+            : `${day.city} · le programme du jour t’attend.`,
       })
     }
 

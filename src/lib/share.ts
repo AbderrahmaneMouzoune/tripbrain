@@ -227,9 +227,7 @@ export async function createShareCode(
   })
 
   if (!response.ok) {
-    throw new Error(
-      await readError(response, 'Le partage a échoué. Réessayez.'),
-    )
+    throw new Error(await readError(response, 'Le partage a échoué. Réessaie.'))
   }
 
   const body = (await response.json()) as {
@@ -259,7 +257,7 @@ export async function fetchShare(
 ): Promise<{ days: DayItinerary[]; group?: string }> {
   const trimmed = code.trim()
   if (!trimmed) {
-    throw new Error('Saisissez un code de partage.')
+    throw new Error('Saisis un code de partage.')
   }
 
   const response = await fetch(`/api/share/${encodeURIComponent(trimmed)}`)

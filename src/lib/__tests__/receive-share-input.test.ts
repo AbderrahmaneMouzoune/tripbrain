@@ -132,11 +132,11 @@ describe('describeShareError', () => {
 
   it('garde le message du serveur pour les autres cas', () => {
     const result = describeShareError(
-      new Error('Trop de tentatives. Réessayez dans un instant.'),
+      new Error('Trop de tentatives. Réessaie dans un instant.'),
     )
     expect(result).toEqual({
       kind: 'other',
-      message: 'Trop de tentatives. Réessayez dans un instant.',
+      message: 'Trop de tentatives. Réessaie dans un instant.',
     })
   })
 })

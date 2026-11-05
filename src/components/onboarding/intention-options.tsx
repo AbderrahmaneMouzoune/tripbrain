@@ -22,7 +22,7 @@ export function IntentionOptions({
         icon={KeyRound}
         tone="primary"
         title="Je l’ai préparé sur tripbrain.fr"
-        description="Saisissez le code affiché sous votre programme"
+        description="Saisis le code affiché sous ton programme"
         badge="Le plus fréquent"
         selected
         onClick={() => onChoose('code')}
@@ -31,14 +31,14 @@ export function IntentionOptions({
         icon={QrCode}
         tone="accent"
         title="On me l’a partagé"
-        description="Scannez le QR code ou ouvrez le lien reçu"
+        description="Scanne le QR code ou ouvre le lien reçu"
         onClick={() => onChoose('scan')}
       />
       <OptionCard
         icon={Sparkles}
         tone="secondary"
         title="Je n’ai pas encore de programme"
-        description="Décrivez vos envies, on le construit avec vous"
+        description="Décris tes envies, on le construit avec toi"
         onClick={() => onChoose('generator')}
       />
     </div>

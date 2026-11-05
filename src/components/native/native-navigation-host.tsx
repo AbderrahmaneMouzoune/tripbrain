@@ -193,7 +193,7 @@ function IncomingShareOverlay({
       aria-modal="true"
       aria-label={
         incoming.origin === 'generator'
-          ? 'Récupérer votre itinéraire'
+          ? 'Récupérer ton itinéraire'
           : 'Importer un partage'
       }
       className="bg-background animate-screen fixed inset-0 z-50 overflow-y-auto overscroll-contain"

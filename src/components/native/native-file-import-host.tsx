@@ -82,7 +82,7 @@ export function NativeFileImportHost() {
         notify({
           tone: 'error',
           message: named.name.toLowerCase().endsWith('.csv')
-            ? 'Les fichiers CSV s’importent ensemble depuis « Importer un fichier » : ouvrez plutôt le modèle Excel ou JSON.'
+            ? 'Les fichiers CSV s’importent ensemble depuis « Importer un fichier » : ouvre plutôt le modèle Excel ou JSON.'
             : verdict.message,
         })
         return
@@ -106,7 +106,7 @@ export function NativeFileImportHost() {
           tone: 'error',
           message:
             error instanceof SyntaxError
-              ? 'Ce fichier JSON est illisible : vérifiez qu’il est complet.'
+              ? 'Ce fichier JSON est illisible : vérifie qu’il est complet.'
               : error instanceof Error
                 ? error.message
                 : 'Ce fichier n’a pas pu être lu.',
@@ -183,7 +183,7 @@ export function NativeFileImportHost() {
             notify({
               tone: 'error',
               message:
-                'Créez ou importez d’abord un voyage pour y ranger ce document.',
+                'Crée ou importe d’abord un voyage pour y ranger ce document.',
             })
             return
           }

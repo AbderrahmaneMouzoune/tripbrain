@@ -214,7 +214,7 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
           >
             <SquarePen className="size-5 shrink-0" aria-hidden />
             <p className="text-[13px] leading-snug font-bold">
-              <strong className="font-black">Mode édition</strong> · touchez un
+              <strong className="font-black">Mode édition</strong> · touche un
               élément pour le modifier
             </p>
           </div>
@@ -254,7 +254,7 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
             <h2 className="text-[17px] font-black">Activités</h2>
             {day.activities.length > 1 && (
               <span className="text-muted-foreground text-xs font-extrabold">
-                Glissez pour réordonner
+                Glisse pour réordonner
               </span>
             )}
           </div>

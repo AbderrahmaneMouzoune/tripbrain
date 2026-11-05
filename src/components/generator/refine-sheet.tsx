@@ -107,7 +107,7 @@ type Proposal = {
 }
 
 /**
- * Feuille « Que voulez-vous changer ? » : une demande en langage naturel, une
+ * Feuille « Que veux-tu changer ? » : une demande en langage naturel, une
  * proposition complète du modèle, et l'écart avant/après — calculé par le
  * même comparateur que la relecture du mode édition — à appliquer ou non.
  */
@@ -229,13 +229,13 @@ export function RefineSheet({
     <BottomSheet
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
-      title="Que voulez-vous changer ?"
+      title="Que veux-tu changer ?"
       hideHeader
       className="bg-card"
     >
       <div className="flex items-center gap-3 pt-1">
         <h2 className="font-display flex-1 text-2xl leading-[1.2]">
-          Que voulez-vous changer ?
+          Que veux-tu changer ?
         </h2>
         <Button
           variant="outline"
@@ -411,7 +411,7 @@ export function RefineSheet({
         className="border-primary ring-ring/30 bg-card focus-within:ring-ring/40 mt-3.5 flex items-center gap-2 rounded-[18px] border-[1.5px] py-1 pr-1 pl-3.5 ring-4"
       >
         <label htmlFor="generator-refine-input" className="sr-only">
-          Votre demande
+          Ta demande
         </label>
         <input
           id="generator-refine-input"

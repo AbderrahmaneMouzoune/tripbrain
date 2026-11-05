@@ -84,6 +84,7 @@ const LODGING_RULE =
 /** Règles de concision et de complétude, communes aux deux usages. */
 const BREVITY_RULES = [
   '- Va droit au but : "description", "tips" et "notes" en une phrase courte (140 caractères maximum), 3 "highlights" et 3 "tags" au maximum. Omets un champ optionnel plutôt que de le remplir approximativement.',
+  '- Dans les textes que tu rédiges ("description", "tips", "notes"), tutoie le voyageur quand tu t’adresses à lui : « Réserve la veille », jamais « Réservez la veille ».',
   '- Le JSON doit aller jusqu’à la dernière journée et se terminer par "]}" : si la réponse devient trop longue, raccourcis les textes, jamais le nombre de jours.',
 ]
 

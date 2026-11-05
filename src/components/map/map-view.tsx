@@ -144,8 +144,8 @@ export function MapView(_props: {}) {
           // Dans l'app, l'autorisation se rend dans les réglages du téléphone.
           showMessage(
             getNativeApp()?.platform === 'ios'
-              ? 'Autorisez la localisation dans Réglages → TripBrain'
-              : 'Autorisez la localisation dans les réglages de TripBrain',
+              ? 'Autorise la localisation dans Réglages → TripBrain'
+              : 'Autorise la localisation dans les réglages de TripBrain',
             isNativeApp(),
           )
         } else {
@@ -379,7 +379,7 @@ export function MapView(_props: {}) {
               Aucune activité localisée ce jour
             </p>
             <p className="text-muted-foreground text-[13px]">
-              Ajoutez des coordonnées à une activité pour la voir ici.
+              Ajoute des coordonnées à une activité pour la voir ici.
             </p>
             <Button
               variant="outline"

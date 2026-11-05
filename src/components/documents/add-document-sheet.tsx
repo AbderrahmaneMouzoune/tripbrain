@@ -163,7 +163,7 @@ export function AddDocumentSheet({
       open
       onOpenChange={(next) => !next && onClose()}
       title="Ajouter un document"
-      description="Importez un billet, une réservation ou une pièce d’identité."
+      description="Importe un billet, une réservation ou une pièce d’identité."
       hideHeader
       className="bg-background"
     >
@@ -174,7 +174,7 @@ export function AddDocumentSheet({
             Ajouter un document
           </p>
           <h2 className="font-display mt-0.5 text-[23px] leading-tight">
-            Importez depuis vos apps
+            Importe depuis tes apps
           </h2>
         </div>
         <Button
@@ -253,7 +253,7 @@ export function AddDocumentSheet({
         ))}
       </div>
       <p className="text-muted-foreground mt-1.5 text-xs">
-        Téléchargez la confirmation dans l’app, puis revenez l’ajouter ici.
+        Télécharge la confirmation dans l’app, puis reviens l’ajouter ici.
       </p>
 
       <h3 className="text-muted-foreground mt-4 mb-2 text-xs font-black tracking-[0.08em] uppercase">

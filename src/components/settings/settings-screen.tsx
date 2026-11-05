@@ -420,7 +420,7 @@ export function SettingsScreen({ onClose }: ScreenProps<'settings'>) {
                 Mesure d’audience anonyme
               </span>
               <span className="text-muted-foreground mt-0.5 block text-[13px] leading-snug">
-                Quels écrans servent et où ça coince. Rien de votre voyage n’est
+                Quels écrans servent et où ça coince. Rien de ton voyage n’est
                 envoyé.
               </span>
             </span>
@@ -556,7 +556,7 @@ function NotificationPermissionNote({
     return (
       <p className="text-muted-foreground mx-1 mt-2 text-[13px] leading-snug">
         {isNative
-          ? 'Le téléphone vous prévient à l’heure dite, même application fermée.'
+          ? 'Le téléphone te prévient à l’heure dite, même application fermée.'
           : 'Les rappels partent tant que TripBrain est ouvert ou utilisé depuis peu : sans application native, le téléphone ne réveille pas l’app.'}
       </p>
     )
@@ -566,7 +566,7 @@ function NotificationPermissionNote({
       <p className="text-muted-foreground mx-1 mt-2 text-[13px] leading-snug">
         {isNative
           ? 'Les rappels ne sont pas disponibles sur cet appareil.'
-          : 'Ce navigateur n’affiche pas de notifications. Sur iPhone, ajoutez TripBrain à l’écran d’accueil pour recevoir les rappels.'}
+          : 'Ce navigateur n’affiche pas de notifications. Sur iPhone, ajoute TripBrain à l’écran d’accueil pour recevoir les rappels.'}
       </p>
     )
   }
@@ -591,15 +591,15 @@ function NotificationPermissionNote({
     return (
       <p className="bg-destructive-soft text-destructive mt-2 rounded-2xl px-4 py-3 text-[13px] leading-snug font-bold">
         {isNative
-          ? 'Les notifications sont désactivées pour TripBrain. Réactivez-les dans les réglages du téléphone.'
-          : 'Les notifications sont bloquées pour TripBrain. Réactivez-les dans les réglages du navigateur (cadenas à côté de l’adresse) ou du téléphone.'}
+          ? 'Les notifications sont désactivées pour TripBrain. Réactive-les dans les réglages du téléphone.'
+          : 'Les notifications sont bloquées pour TripBrain. Réactive-les dans les réglages du navigateur (cadenas à côté de l’adresse) ou du téléphone.'}
       </p>
     )
   }
   return (
     <div className="bg-primary-soft mt-2 flex items-center gap-3 rounded-2xl px-4 py-3">
       <p className="text-primary-strong flex-1 text-[13px] leading-snug font-bold">
-        Autorisez les notifications pour recevoir ces rappels.
+        Autorise les notifications pour recevoir ces rappels.
       </p>
       <Button size="lg2" className="h-11 rounded-xl" onClick={onRequest}>
         Autoriser

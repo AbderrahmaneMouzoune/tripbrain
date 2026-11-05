@@ -443,7 +443,7 @@ export function buildDepartureChecklist(
   items.push(
     {
       id: 'share',
-      label: 'Partager avec votre compagnon de voyage',
+      label: 'Partager avec ton compagnon de voyage',
       detail: 'Code, QR code ou lien',
       done: false,
     },

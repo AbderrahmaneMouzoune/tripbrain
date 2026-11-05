@@ -63,7 +63,7 @@ describe('reviewPoints', () => {
     const points = reviewPoints(report, days)
     expect(points.find((point) => point.id === 'day-2')).toMatchObject({
       heading: 'Jour 2 · Tokyo :',
-      summary: 'aucune activité prévue ce jour-là : ajoutez-en une.',
+      summary: 'aucune activité prévue ce jour-là : ajoutes-en une.',
     })
   })
 

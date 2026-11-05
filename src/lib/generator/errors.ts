@@ -41,16 +41,16 @@ export const FAILURE_MESSAGES: Record<GeneratorFailureReason, string> = {
   not_configured:
     'Le générateur intégré n’est pas encore disponible sur ce serveur.',
   rate_limited:
-    'Vous avez lancé beaucoup de générations d’affilée. Réessayez dans un moment.',
+    'Tu as lancé beaucoup de générations d’affilée. Réessaie dans un moment.',
   overloaded:
-    'Le service de génération est très sollicité. Réessayez dans quelques minutes.',
+    'Le service de génération est très sollicité. Réessaie dans quelques minutes.',
   refused:
-    'Cette demande n’a pas pu être traitée. Reformulez votre voyage et réessayez.',
+    'Cette demande n’a pas pu être traitée. Reformule ton voyage et réessaie.',
   invalid_json:
-    'La réponse reçue était incomplète ou illisible. Relancez la génération.',
-  invalid_request: 'La demande est incomplète. Vérifiez les champs.',
-  network: 'La connexion a été perdue. Vérifiez le réseau et réessayez.',
-  unknown: 'La génération a échoué. Réessayez dans un instant.',
+    'La réponse reçue était incomplète ou illisible. Relance la génération.',
+  invalid_request: 'La demande est incomplète. Vérifie les champs.',
+  network: 'La connexion a été perdue. Vérifie le réseau et réessaie.',
+  unknown: 'La génération a échoué. Réessaie dans un instant.',
 }
 
 /** Statut HTTP renvoyé pour chaque cause détectée avant le début du flux. */
