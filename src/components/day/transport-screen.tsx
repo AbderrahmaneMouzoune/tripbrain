@@ -35,6 +35,8 @@ import {
   splitPlace,
   transportExtras,
   transportNumber,
+  TRANSPORT_BOARDING_LABELS,
+  TRANSPORT_PLACE_WORDS,
   TRANSPORT_TYPE_LABELS,
 } from '@/components/day/day-logic'
 import {
@@ -43,13 +45,6 @@ import {
   useApplePlatform,
 } from '@/components/day/day-ui'
 import { PhoneText } from '@/components/phone-text'
-
-const PLACE_WORDS = {
-  plane: 'l’aéroport',
-  train: 'la gare',
-  bus: 'l’arrêt',
-  car: 'l’arrivée',
-} as const
 
 /** Billet du jour, façon carte d'embarquement. */
 export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
@@ -77,6 +72,7 @@ export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
   }
 
   const Icon = TRANSPORT_ICONS[transport.type]
+  const boarding = TRANSPORT_BOARDING_LABELS[transport.type]
   const from = splitPlace(transport.from)
   const to = splitPlace(transport.to)
   const number = transportNumber(transport)
@@ -243,11 +239,7 @@ export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
               {(
                 [
                   ['TERMINAL', transport.terminal, 'Terminal'],
-                  [
-                    transport.type === 'train' ? 'QUAI' : 'PORTE',
-                    transport.gate,
-                    transport.type === 'train' ? 'Quai' : 'Porte',
-                  ],
+                  [boarding.toUpperCase(), transport.gate, boarding],
                   ['SIÈGE', transport.seat, 'Siège'],
                 ] as const
               ).map(([label, value, name]) => (
@@ -393,7 +385,7 @@ export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
               className="border-border-strong bg-card pressable flex h-[52px] items-center justify-center gap-2 rounded-[14px] border-[1.5px] px-2.5 text-left text-sm leading-[17px] font-extrabold"
             >
               <Navigation className="size-5 shrink-0" aria-hidden />
-              Itinéraire vers {PLACE_WORDS[transport.type]}
+              Itinéraire vers {TRANSPORT_PLACE_WORDS[transport.type]}
             </a>
           ) : (
             <span />

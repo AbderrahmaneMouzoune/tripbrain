@@ -20,6 +20,8 @@ export type EditFieldIcon =
   | 'plane'
   | 'bus'
   | 'car'
+  | 'ship'
+  | 'route'
   | 'clock'
   | 'footprints'
   | 'map-pin'
@@ -453,6 +455,18 @@ export const transportForm: EditFormSchema = {
         { value: 'plane', label: 'Avion', icon: 'plane', accent: 'primary' },
         { value: 'bus', label: 'Bus', icon: 'bus', accent: 'secondary' },
         { value: 'car', label: 'Voiture', icon: 'car', accent: 'success' },
+        {
+          value: 'boat',
+          label: 'Bateau ou ferry',
+          icon: 'ship',
+          accent: 'primary',
+        },
+        {
+          value: 'other',
+          label: 'Autre trajet',
+          icon: 'route',
+          accent: 'muted',
+        },
       ],
     },
     {
@@ -511,7 +525,7 @@ export const transportForm: EditFormSchema = {
       label: 'Adresse de départ',
       type: 'address',
       section: 'schedule',
-      hint: 'Gare, terminal ou point de rendez-vous.',
+      hint: 'Gare, port, terminal ou point de rendez-vous.',
     },
     {
       key: 'provider',

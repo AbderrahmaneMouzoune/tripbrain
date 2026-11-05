@@ -29,6 +29,7 @@ describe('normalizeItineraryShape', () => {
     const cleaned = cleanForTemplate(once ?? [], {
       includeNotes: true,
       includePrices: true,
+      privateStays: [],
     })
     expect(normalizeItineraryShape(cleaned)).toEqual(cleaned)
   })
@@ -207,12 +208,49 @@ describe('transport', () => {
     ['est une liste', [transport()]],
     ['n’a pas d’id', { ...transport(), id: undefined }],
     ['a un id numérique', { ...transport(), id: 12 }],
-    ['a un type inconnu', { ...transport(), type: 'ferry' }],
-    ['n’a pas de type', { ...transport(), type: undefined }],
   ])('retire un transport qui %s', (_label, value) => {
     const normalized = normalizeDay(hostile({ ...day(1), transport: value }))
     expect(normalized).toBeDefined()
     expect(normalized).not.toHaveProperty('transport')
+  })
+
+  it.each([
+    ['Ferry', 'boat'],
+    ['ferry', 'boat'],
+    ['Métro', 'train'],
+    ['taxi', 'car'],
+    ['teleporter', 'other'],
+    [{ mode: 'ferry' }, 'other'],
+    [undefined, 'other'],
+  ])('garde un transport de type « %s », lu comme %s', (type, expected) => {
+    const normalized = normalizeDay(
+      hostile({ ...day(1), transport: { ...transport(), type } }),
+    )
+    expect(normalized?.transport).toEqual({ ...transport(), type: expected })
+  })
+
+  it('garde un ferry jusqu’au modèle publié', () => {
+    const ferry = {
+      id: 'tr-ferry',
+      type: 'Ferry',
+      from: 'Marseille',
+      to: 'Ajaccio',
+      provider: 'Corsica Linea',
+    }
+    const normalized = normalizeItineraryShape([
+      hostile({ ...day(1), transport: ferry }),
+    ])
+    const cleaned = cleanForTemplate(normalized ?? [], {
+      includeNotes: false,
+      includePrices: false,
+      privateStays: [],
+    })
+    expect(cleaned[0].transport).toMatchObject({
+      id: 'tr-ferry',
+      type: 'boat',
+      from: 'Marseille',
+      to: 'Ajaccio',
+    })
   })
 
   it('garde un transport valide en retirant ses valeurs mal typées', () => {
@@ -289,6 +327,7 @@ describe('hébergement', () => {
     const [cleaned] = cleanForTemplate(shaped ?? [], {
       includeNotes: false,
       includePrices: true,
+      privateStays: [],
     })
     expect(cleaned.accommodation?.bookingUrl).toBe('')
     expect(cleaned.accommodation).not.toHaveProperty('bookingReference')

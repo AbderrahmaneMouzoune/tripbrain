@@ -898,7 +898,14 @@ const ACTIVITY_TYPES = [
   'experience',
   'shopping',
 ] as const
-const TRANSPORT_TYPES = ['train', 'car', 'plane', 'bus'] as const
+const TRANSPORT_TYPES = [
+  'train',
+  'car',
+  'plane',
+  'bus',
+  'boat',
+  'other',
+] as const
 const SOURCES = ['user', 'import', 'ai'] as const
 const PRIORITIES = ['must', 'nice', 'optional'] as const
 const DAY_TYPES = [

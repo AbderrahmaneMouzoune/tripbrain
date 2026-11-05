@@ -10,7 +10,8 @@
 // (d) le contenu injecté que les pages SEO afficheront ;
 // (e) les en-têtes `Cache-Control` de chaque réponse ;
 // (f) les abus de ressources ;
-// (g) l'effacement au retrait.
+// (g) l'effacement au retrait ;
+// (h) les hébergements privés (« Ne publier que le nom et la ville »).
 //
 // Convention : un défaut trouvé est écrit en `it.fails` avec le comportement
 // attendu. Le jour où il est corrigé, le test passe au rouge : remplacer
@@ -441,7 +442,14 @@ function stuffedTrip(): unknown[] {
       city: 'PUB-ville-3',
       title: 'PUB-titre-jour-3',
       coordinates: [35, 135],
-      transport: { id: 'tr-3', type: 'teleport', from: 'PRIV-type-inconnu' },
+      // Un type inconnu ne retire plus le trajet (il devient `other`) : ses
+      // champs publics sortent, sa référence non.
+      transport: {
+        id: 'tr-3',
+        type: 'teleport',
+        from: 'PUB-type-inconnu',
+        bookingReference: 'PRIV-type-inconnu-reference',
+      },
       accommodation: { id: 'acc-3', address: 'PRIV-hebergement-sans-nom' },
       activities: [],
     },
@@ -483,6 +491,7 @@ const PUBLISHED_FREE_TEXT = [
   'PUB-titre-jour-2',
   'PUB-ville-3',
   'PUB-titre-jour-3',
+  'PUB-type-inconnu',
 ]
 
 // ── Cycle ─────────────────────────────────────────────────────────────────────
@@ -559,7 +568,12 @@ describe('(a) aucune donnée retirée ne ressort d’un modèle publié', () => 
     expect(itinerary[1]).not.toHaveProperty('accommodation')
     expect(itinerary[1]).not.toHaveProperty('transport')
     expect(itinerary[1]).not.toHaveProperty('images')
-    expect(itinerary[2]).not.toHaveProperty('transport')
+    // Un type de trajet inconnu ne se devine pas non plus : « Autre trajet ».
+    expect(itinerary[2].transport).toEqual({
+      id: 'tr-3',
+      type: 'other',
+      from: 'PUB-type-inconnu',
+    })
     expect(itinerary[2]).not.toHaveProperty('accommodation')
     expect(itinerary[0].images).toEqual([
       { url: 'https://img.example/jour-1.jpg', caption: 'PUB-legende' },
@@ -1841,7 +1855,7 @@ describe('(f) abus de ressources', () => {
 
 // ── (g) Effacement au retrait ─────────────────────────────────────────────────
 
-describe('(g) retrait : il ne reste que la pierre tombale et le slug', () => {
+describe('(g) retrait : il ne reste que la pierre tombale et l’empreinte des slugs', () => {
   /** Douze villes : seules les trois premières vont dans le slug. */
   function authoredTrip(marker: string): DayItinerary[] {
     const cities = [
@@ -1868,10 +1882,16 @@ describe('(g) retrait : il ne reste que la pierre tombale et le slug', () => {
     'ownerTokenHash',
     'publishedAt',
     'retiredAt',
-    'slug',
     'version',
     'wasListed',
   ]
+
+  /**
+   * Ce que les slugs du modèle disaient du voyage (`japon-12-jours-tokyo-
+   * kyoto-osaka`) : pays, durée, villes. Plus rien de lisible dans le bucket.
+   */
+  const SLUG_WORDS = /japon|tokyo|kyoto|osaka|12-jours/gi
+  const SLUG_WORD = /japon|tokyo|kyoto|osaka|12-jours/i
 
   it('par l’auteur, après mises à jour et changement de prénom', async () => {
     const { template, ownerToken } = await publish(authoredTrip('v1'), {
@@ -1922,6 +1942,22 @@ describe('(g) retrait : il ne reste que la pierre tombale et le slug', () => {
     ).toEqual([neighbour.template.id])
     expect(plantedLeaks(bucketSurfaces())).toEqual([])
     expect(plantedLeaks(await publicSurfaces(id, slug))).toEqual([])
+    // Ni le slug ni ce qu'il contient, hors du voisin toujours en ligne.
+    expect(templateSlugKey(slug)).toMatch(/^slugs\/[0-9a-f]{64}$/)
+    const neighbourKeys = bucket
+      .keys()
+      .filter((key) => key.startsWith(`${neighbour.template.id}/`))
+    expect(
+      plantedLeaks(
+        bucketSurfaces().filter(
+          (s) =>
+            !neighbourKeys.includes(s.name.slice('bucket '.length)) &&
+            !isTemplateIndexKey(s.name.slice('bucket '.length)),
+        ),
+        SLUG_WORDS,
+      ),
+    ).toEqual([])
+    expect(bucket.keys().filter((key) => SLUG_WORD.test(key))).toEqual([])
     // Le voisin n'a rien perdu.
     expect((await read(neighbour.template.id)).status).toBe(200)
   })
@@ -1934,6 +1970,10 @@ describe('(g) retrait : il ne reste que la pierre tombale et le slug', () => {
     const result = await retireTemplateAsOperator(bucket, template.slug)
     expect(result).toMatchObject({ id: template.id, wasListed: true })
     expect(plantedLeaks(bucketSurfaces())).toEqual([])
+    // Seul modèle du bucket : plus rien de son slug, nulle part.
+    expect(plantedLeaks(bucketSurfaces(), SLUG_WORDS)).toEqual([])
+    expect(bucket.keys().join(' ')).not.toMatch(SLUG_WORD)
+    expect((await readBySlug(template.slug)).status).toBe(410)
     expect(await readTemplateForOperator(bucket, template.id)).toMatchObject({
       status: 'retired',
       inIndex: false,
@@ -1990,5 +2030,102 @@ describe('(g) retrait : il ne reste que la pierre tombale et le slug', () => {
     expect(bucket.keys().filter((key) => key.startsWith(`${id}/v/`))).toEqual(
       [],
     )
+  })
+})
+
+describe('(h) hébergements privés : le nom et la ville, jamais l’adresse', () => {
+  const KEY = 'cheztantelurdes'
+
+  /** Deux nuits chez une tante, puis un hôtel : seul le premier est privé. */
+  function familyTrip(): DayItinerary[] {
+    const stay = {
+      id: 'acc-tante',
+      name: 'Chez Tante Lurdes',
+      address: '12 rue PRIV-lilas, 3e étage',
+      bookingUrl: 'https://maps.example/12-rue-PRIV-lilas',
+      checkIn: '2026-04-01',
+      checkOut: '2026-04-03',
+      images: ['https://img.example/PRIV-porte.jpg'],
+    }
+    return [
+      day(1, {
+        title: 'Arrivée à Tokyo',
+        tips: ['Le bus 42 s’arrête devant le 12 rue PRIV-lilas'],
+        accommodation: stay,
+      }),
+      day(2, { title: 'Shibuya', accommodation: { ...stay } }),
+      day(3, { city: 'Kyoto', title: 'Kyoto', accommodation: hotel() }),
+    ]
+  }
+
+  /** Les surfaces publiques et les versions stockées : jamais l'adresse. */
+  async function expectNoAddress(id: string, slug: string): Promise<void> {
+    const surfaces = [
+      ...(await publicSurfaces(id, slug)),
+      ...bucketSurfaces().filter((s) => s.name.includes(`${id}/v/`)),
+    ]
+    expect(surfaces.length).toBeGreaterThanOrEqual(4)
+    expect(plantedLeaks(surfaces)).toEqual([])
+    for (const s of await publicSurfaces(id, slug)) {
+      expect(s.status, s.name).toBe(200)
+      expect(s.text, s.name).not.toContain('privateStays')
+      expect(s.text, s.name).not.toContain(KEY)
+    }
+  }
+
+  it('publié, mis à jour sans la liste puis avec d’autres réglages : l’adresse ne part jamais', async () => {
+    const { template, ownerToken, text } = await publish(familyTrip(), {
+      options: { includeNotes: true, privateStays: [KEY] },
+    })
+    expect(text).not.toContain('privateStays')
+    expect(
+      plantedLeaks([{ name: 'POST', status: 201, cacheControl: null, text }]),
+    ).toEqual([])
+    const stay = (template.itinerary as DayItinerary[])[0].accommodation
+    expect(stay).toMatchObject({ name: 'Chez Tante Lurdes', address: '' })
+    // L'hôtel, lui, garde son adresse : il n'est pas coché.
+    expect(
+      (template.itinerary as DayItinerary[])[2].accommodation?.address,
+    ).toBe(hotel().address)
+    // Gardée dans la méta, pour les mises à jour ; jamais dans une réponse.
+    expect(
+      (bucket.peek(templateMetaKey(template.id)) as { privateStays: string[] })
+        .privateStays,
+    ).toEqual([KEY])
+    await expectNoAddress(template.id, template.slug as string)
+
+    for (const body of [
+      { data: await compressItinerary(familyTrip()) },
+      {
+        data: await compressItinerary(familyTrip()),
+        options: { includeNotes: false, includePrices: false },
+      },
+    ]) {
+      const updated = await put(template.id, body, bearer(ownerToken))
+      const updatedText = await updated.text()
+      expect(updated.status, updatedText).toBe(200)
+      expect(updatedText).not.toContain('privateStays')
+      expect(
+        plantedLeaks([
+          { name: 'PUT', status: 200, cacheControl: null, text: updatedText },
+        ]),
+      ).toEqual([])
+      await expectNoAddress(template.id, template.slug as string)
+    }
+  })
+
+  it('refuse une liste mal formée (400) sans rien écrire', async () => {
+    const response = await POST(
+      jsonRequest('/api/templates', 'POST', {
+        data: await compressItinerary(familyTrip()),
+        country: 'JP',
+        options: { privateStays: ['Chez Tante Lurdes'] },
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      error: 'Hébergements privés invalides.',
+    })
+    expect(bucket.keys()).toEqual([])
   })
 })

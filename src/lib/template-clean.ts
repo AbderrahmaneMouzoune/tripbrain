@@ -13,10 +13,12 @@
  * (V1.1) s'appuie dessus.
  *
  * Le reste du module sert les écrans de publication : les vrais chiffres de
- * « ce qui part / ce qui reste » (A2), et des extraits de notes où les données
- * sensibles sont surlignées (A3). Tout est pur et tourne aussi sur le serveur.
+ * « ce qui part / ce qui reste » et les hébergements à publier sans adresse
+ * (A2), et des extraits de notes où les données sensibles sont surlignées
+ * (A3). Tout est pur et tourne aussi sur le serveur.
  */
 
+import { isIsoDate, splitIsoDateValue, toDayNumber } from '@/lib/iso-date'
 import type {
   Accommodation,
   Activity,
@@ -26,7 +28,9 @@ import type {
 } from '@/lib/itinerary-data'
 import {
   COUNTRY_CODES,
+  MAX_TEMPLATE_DAYS,
   countryName,
+  stayKey,
   type TemplateOptions,
 } from '@/lib/template-model'
 
@@ -194,6 +198,13 @@ function omitBookingUrl<T extends { bookingUrl?: string }>(
   entity: T,
 ): Omit<T, 'bookingUrl'> {
   const { bookingUrl: _url, ...rest } = entity
+  return rest
+}
+
+function omitCoordinates<T extends { coordinates?: [number, number] }>(
+  entity: T,
+): Omit<T, 'coordinates'> {
+  const { coordinates: _coordinates, ...rest } = entity
   return rest
 }
 
@@ -381,30 +392,45 @@ function isShareableBookingUrl(
  * Une image `blob:` ou `data:` ne vit que sur l'appareil qui l'a créée : chez le
  * repreneur, elle ne mène nulle part (et une `data:` alourdit le modèle).
  */
-function isPortableImageUrl(url: unknown): boolean {
+function isPortableImageUrl(url: unknown): url is string {
   return typeof url === 'string' && /^https?:\/\/\S/i.test(url.trim())
+}
+
+/** Image gardée : en http(s), et sans adresse masquée (carte d'un logement). */
+function isPublishableImageUrl(
+  url: unknown,
+  search: AddressSearch,
+): url is string {
+  return isPortableImageUrl(url) && !urlHasAddress(url, search)
 }
 
 function withPortableImages<T extends { images?: string[] }>(
   entity: T,
+  search: AddressSearch,
 ): T | Omit<T, 'images'> {
   if (entity.images === undefined) return entity
   const images = Array.isArray(entity.images)
-    ? entity.images.filter(isPortableImageUrl)
+    ? entity.images.filter((url) => isPublishableImageUrl(url, search))
     : []
   if (images.length > 0) return { ...entity, images }
   const { images: _dropped, ...rest } = entity
   return rest
 }
 
-function withPortableDayImages(day: DayItinerary): DayItinerary {
+function withPortableDayImages(
+  day: DayItinerary,
+  search: AddressSearch,
+): DayItinerary {
   if (day.images === undefined) return day
   const images: DayImage[] = Array.isArray(day.images)
     ? day.images
-        .filter((image) => isPortableImageUrl(image?.url))
+        .filter((image) => isPublishableImageUrl(image?.url, search))
         .map((image) => ({
           url: image.url,
-          caption: typeof image.caption === 'string' ? image.caption : '',
+          caption:
+            typeof image.caption === 'string'
+              ? scrubAddresses(image.caption, search)
+              : '',
         }))
     : []
   if (images.length > 0) return { ...day, images }
@@ -412,64 +438,914 @@ function withPortableDayImages(day: DayItinerary): DayItinerary {
   return rest
 }
 
+// ── Hébergements privés ───────────────────────────────────────────────────────
+
+/*
+ * « Ne publier que le nom et la ville » (écran A2) : chez des proches ou dans
+ * un appartement loué, l'adresse est celle de quelqu'un. L'hébergement part
+ * avec son nom, ses dates et son prix (si l'auteur publie les prix) ; la
+ * ville est celle de sa journée. Son adresse, son lien et ses photos restent
+ * sur le téléphone, et l'adresse est effacée de tous les textes du voyage
+ * (notes, conseils, « départ du 12 rue des Lilas »…) pour ne pas ressortir
+ * ailleurs.
+ *
+ * On cherche l'adresse entière et ceux de ses morceaux qui désignent un
+ * logement. L'adresse entière est cherchée dès qu'elle a un numéro ou
+ * plusieurs morceaux (« Quinta das Rosas, Sintra » : une maison à la
+ * campagne n'a souvent pas de numéro) ; un morceau, seulement s'il a un
+ * numéro (`pinpointsAHome`). Ni un quartier seul (« Montmartre »), ni le
+ * code postal et la ville (« 75011 Paris ») : les effacer partout abîmerait
+ * le reste du voyage sans rien protéger.
+ *
+ * La recherche est linéaire : le texte est plié une fois (sans accents ni
+ * casse, séparateurs ramenés à une espace), puis parcouru par un automate
+ * d'Aho-Corasick qui trouve tous les morceaux d'un coup. Le serveur renettoie
+ * ce que n'importe qui envoie : une expression régulière, elle, pouvait
+ * s'acharner des minutes sur une adresse forgée (`MAX_ADDRESS_SEARCH_WORK`).
+ */
+
+/** Nom publié d'un hébergement dont le nom n'était que son adresse masquée. */
+export const PRIVATE_STAY_NAME = 'Logement privé'
+
+/** En dessous, un bout d'adresse (`12`, `Apt 4`) se retrouverait n'importe où. */
+const MIN_HIDDEN_ADDRESS_LENGTH = 6
+
+/** Une seule passe suffit, sauf adresse imbriquée dans elle-même. */
+const MAX_SCRUB_PASSES = 5
+
+/**
+ * Morceaux cherchés par hébergement privé, adresse entière comprise : une
+ * vraie adresse en donne deux à cinq.
+ */
+const MAX_HIDDEN_ADDRESS_PARTS_PER_STAY = 8
+
+/**
+ * Morceaux cherchés pour tout le voyage, au plus : quatre hébergements privés
+ * aux adresses détaillées. Un envoi forgé ne doit pas faire chercher des
+ * milliers d'adresses dans chaque texte.
+ */
+const MAX_HIDDEN_ADDRESS_PARTS = 32
+
+/** Un morceau plus long n'est pas une adresse : seuls ses morceaux plus courts sont cherchés. */
+const MAX_HIDDEN_ADDRESS_PART_LENGTH = 120
+
+/**
+ * Coût du parcours d'un caractère (le plier, avancer l'automate), compté
+ * comme autant de morceaux : relire un texte face à un seul morceau coûte
+ * presque autant que face à trente.
+ */
+const SCAN_COST = 24
+
+/**
+ * Travail maximal de la recherche d'adresses sur le serveur, en caractères
+ * parcourus × (morceaux cherchés + `SCAN_COST`) : les textes une fois, les
+ * liens et les images trois fois, les noms des autres hébergements à chaque
+ * tour de `stayPrivacy`, et chaque passe de plus de `scrubAddresses`. Un vrai
+ * voyage en demande quelques millions ; ce plafond (2 Mio de textes face à
+ * 32 morceaux) se parcourt en un quart de seconde environ. Au-delà, la
+ * publication est refusée (`AddressSearchTooCostlyError`) : un modèle ne
+ * part jamais sans la recherche.
+ */
+export const MAX_ADDRESS_SEARCH_WORK = 2 ** 28
+
+/** Message de `AddressSearchTooCostlyError`, montré à l'auteur. */
+export const ADDRESS_SEARCH_TOO_COSTLY =
+  'Ce voyage est trop long à vérifier avant publication : raccourcis ses textes ou l’adresse de ses hébergements privés.'
+
+/**
+ * La recherche des adresses masquées dépasserait `maxAddressSearchWork`
+ * (`cleanForTemplate`, côté serveur) : le nettoyage s'interrompt, et rien
+ * ne doit partir.
+ */
+export class AddressSearchTooCostlyError extends Error {
+  constructor() {
+    super(ADDRESS_SEARCH_TOO_COSTLY)
+    this.name = 'AddressSearchTooCostlyError'
+  }
+}
+
+export function isAddressSearchTooCostlyError(
+  error: unknown,
+): error is AddressSearchTooCostlyError {
+  return error instanceof AddressSearchTooCostlyError
+}
+
+/** Bornes du nettoyage qu'impose le serveur, qui renettoie ce que n'importe qui envoie. */
+export interface TemplateCleaningLimits {
+  /**
+   * Travail maximal de la recherche d'adresses (`MAX_ADDRESS_SEARCH_WORK`).
+   * La première passe sur les textes est comptée avant d'en toucher un seul,
+   * les passes de plus au fil de l'eau ; au-delà,
+   * `AddressSearchTooCostlyError`.
+   */
+  maxAddressSearchWork: number
+}
+
+/** Ce qu'il reste à dépenser ; `null` : sans limite (le téléphone). */
+interface WorkBudget {
+  left: number
+}
+
+/** Dépense le parcours de `chars` caractères face à `needles` morceaux. */
+function charge(
+  budget: WorkBudget | null,
+  chars: number,
+  needles: number,
+): void {
+  if (!budget || needles === 0) return
+  budget.left -= chars * (needles + SCAN_COST)
+  if (budget.left < 0) throw new AddressSearchTooCostlyError()
+}
+
+/** Automate d'Aho-Corasick des morceaux pliés, en unités UTF-16. */
+interface Automaton {
+  /** Transitions de chaque état ; l'état 0 est la racine. */
+  next: Map<number, number>[]
+  /** Lien d'échec : le plus long suffixe propre qui est encore un préfixe. */
+  fail: Int32Array
+  /** Longueur du morceau qui finit à cet état ; 0 si aucun. */
+  length: Int32Array
+  /** Premier état, en suivant les liens d'échec, où finit un morceau ; 0 si aucun. */
+  output: Int32Array
+  /** Transition de l'état `s` sur l'unité ASCII `u`, en `s * 128 + u`. */
+  ascii: Int32Array
+}
+
+interface AddressSearch {
+  /** Morceaux cherchés, pliés (`foldForSearch`), sans doublon. */
+  needles: readonly (readonly number[])[]
+  /** Chaque morceau a un chiffre : un texte sans chiffre n'en contient aucun. */
+  needsDigit: boolean
+  /** `null` : rien à chercher. */
+  automaton: Automaton | null
+  /** Où compter les passes de plus de `scrubAddresses` ; `null` : nulle part. */
+  budget: WorkBudget | null
+}
+
+const NO_SEARCH: AddressSearch = {
+  needles: [],
+  needsDigit: true,
+  automaton: null,
+  budget: null,
+}
+
+interface StayPrivacy {
+  /** Hébergements de l'entrée publiés sans adresse, ni lien, ni photo. */
+  hidden: ReadonlySet<Accommodation>
+  /** Les adresses masquées et leurs morceaux qui désignent un logement. */
+  search: AddressSearch
+}
+
+const NO_PRIVACY: StayPrivacy = { hidden: new Set(), search: NO_SEARCH }
+
+/** Mots (deux lettres ou plus) des villes du voyage, sans accents ni casse. */
+function tripCityWords(itinerary: readonly DayItinerary[]): Set<string> {
+  const words = new Set<string>()
+  for (const day of itinerary) {
+    if (typeof day.city !== 'string') continue
+    for (const word of fold(day.city).match(/\p{L}{2,}/gu) ?? []) {
+      words.add(word)
+    }
+  }
+  return words
+}
+
+/**
+ * Le texte va-t-il au-delà du code postal et des villes du voyage
+ * (« 75011 Paris », « Kyoto 600-8216 ») ? Ceux-là, la journée les publie
+ * déjà, et un code postal désigne un quartier, pas un logement.
+ */
+function namesMoreThanTheCity(
+  text: string,
+  cityWords: ReadonlySet<string>,
+): boolean {
+  const words = fold(text).match(/\p{L}{2,}/gu) ?? []
+  return !words.every((word) => cityWords.has(word))
+}
+
+/**
+ * Ce morceau d'adresse désigne-t-il un logement ? Il faut des lettres, un
+ * chiffre (numéro de rue, étage, code), au moins `MIN_HIDDEN_ADDRESS_LENGTH`
+ * caractères, et plus que le code postal et une ville du voyage.
+ */
+function pinpointsAHome(part: string, cityWords: ReadonlySet<string>): boolean {
+  if (part.length < MIN_HIDDEN_ADDRESS_LENGTH) return false
+  if (!/\p{N}/u.test(part) || !/\p{L}/u.test(part)) return false
+  return namesMoreThanTheCity(part, cityWords)
+}
+
+/**
+ * L'adresse entière est-elle cherchée ? Comme un morceau, mais un numéro
+ * n'est pas exigé d'une adresse en plusieurs morceaux : « Quinta das Rosas,
+ * Sintra », « Le Mas des Oliviers, chemin de la Source » désignent une
+ * maison. Un seul morceau sans numéro est un quartier (« Montmartre »).
+ */
+function wholeAddressIsSearched(
+  whole: string,
+  pieces: number,
+  cityWords: ReadonlySet<string>,
+): boolean {
+  if (whole.length < MIN_HIDDEN_ADDRESS_LENGTH) return false
+  if (!/\p{L}/u.test(whole)) return false
+  if (!namesMoreThanTheCity(whole, cityWords)) return false
+  return /\p{N}/u.test(whole) || pieces >= 2
+}
+
+/** Espaces resserrées, bornée par des lettres ou des chiffres : elle se lit en mots entiers. */
+function trimAddressPart(raw: string): string {
+  return raw
+    .replace(/\s+/gu, ' ')
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+}
+
+const APOSTROPHE_CHARS: ReadonlySet<string> = new Set("'’‘ʼ`")
+const DASH_CHARS: ReadonlySet<string> = new Set('-‐‑‒–—')
+/** Ce qui sépare deux mots d'une adresse : blancs, virgules, points-virgules. */
+const SEPARATOR = /^[\s,;]+$/u
+const SPACE = 0x20
+/** Plis des caractères hors ASCII déjà vus ; borné, il ne grossit pas indéfiniment. */
+const FOLDED_CHARS = new Map<string, string>()
+const MAX_FOLDED_CHARS = 8192
+
+/**
+ * Un caractère ASCII tel qu'on le compare : en minuscule, `` ` `` en `'`,
+ * un blanc, une virgule ou un point-virgule en espace.
+ */
+function foldAscii(code: number): number {
+  if (code >= 0x41 && code <= 0x5a) return code + 0x20
+  if (code === 0x2c || code === 0x3b || code === SPACE) return SPACE
+  if (code >= 0x09 && code <= 0x0d) return SPACE
+  return code === 0x60 ? 0x27 : code
+}
+
+/**
+ * Un caractère hors ASCII tel qu'on le compare : sans accents (NFD, marques
+ * retirées), en minuscules, apostrophes et tirets ramenés à `'` et `-`,
+ * `ς` final à `σ`, un séparateur (`SEPARATOR`) à une espace. Une marque
+ * seule ne donne rien.
+ */
+function foldChar(char: string): string {
+  const cached = FOLDED_CHARS.get(char)
+  if (cached !== undefined) return cached
+  let folded = char
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/\p{M}/gu, '')
+  if (APOSTROPHE_CHARS.has(folded)) folded = "'"
+  else if (DASH_CHARS.has(folded)) folded = '-'
+  else if (folded === 'ς') folded = 'σ'
+  else if (folded !== '' && SEPARATOR.test(folded)) folded = ' '
+  if (FOLDED_CHARS.size < MAX_FOLDED_CHARS) FOLDED_CHARS.set(char, folded)
+  return folded
+}
+
+/**
+ * Un texte plié, unité UTF-16 par unité, et d'où vient chacune dans
+ * l'original. Les tableaux sont partagés d'un pli à l'autre (`foldBuffer`) :
+ * le résultat ne vaut que jusqu'au pli suivant.
+ */
+interface FoldedText {
+  codes: Uint16Array
+  /** Début, dans l'original, du caractère qui a donné l'unité `i`. */
+  starts: Int32Array
+  /** Fin, dans l'original, de ce caractère et des marques qui le suivent. */
+  ends: Int32Array
+  length: number
+}
+
+/**
+ * Tampon des plis : la recherche plie chaque texte du voyage, et allouer
+ * trois tableaux par texte coûtait plus que la recherche elle-même.
+ */
+const foldBuffer: FoldedText = {
+  codes: new Uint16Array(1024),
+  starts: new Int32Array(1024),
+  ends: new Int32Array(1024),
+  length: 0,
+}
+
+/** Agrandit le tampon pour `size` unités, en gardant les `foldBuffer.length` premières. */
+function reserveFold(size: number): void {
+  if (size <= foldBuffer.codes.length) return
+  const capacity = Math.max(size, foldBuffer.codes.length * 2)
+  const codes = new Uint16Array(capacity)
+  const starts = new Int32Array(capacity)
+  const ends = new Int32Array(capacity)
+  codes.set(foldBuffer.codes.subarray(0, foldBuffer.length))
+  starts.set(foldBuffer.starts.subarray(0, foldBuffer.length))
+  ends.set(foldBuffer.ends.subarray(0, foldBuffer.length))
+  foldBuffer.codes = codes
+  foldBuffer.starts = starts
+  foldBuffer.ends = ends
+}
+
+/**
+ * Le texte tel qu'on y cherche les adresses (`foldAscii`, `foldChar`),
+ * chaque suite de séparateurs ramenée à une espace : « 12, Rue de l’Église »
+ * devient « 12 rue de l'eglise ». Une marque qui suit un caractère lui est
+ * rattachée : effacer le caractère l'efface aussi.
+ */
+function foldForSearch(text: string): FoldedText {
+  foldBuffer.length = 0
+  reserveFold(text.length)
+  let { codes, starts, ends } = foldBuffer
+  let length = 0
+  let offset = 0
+  while (offset < text.length) {
+    const code = text.charCodeAt(offset)
+    if (code < 0x80) {
+      const folded = foldAscii(code)
+      if (folded === SPACE && length > 0 && codes[length - 1] === SPACE) {
+        ends[length - 1] = offset + 1
+      } else {
+        // Une unité ASCII n'en donne qu'une : le tampon a la place.
+        codes[length] = folded
+        starts[length] = offset
+        ends[length] = offset + 1
+        length += 1
+      }
+      offset += 1
+      continue
+    }
+    const next = text.charCodeAt(offset + 1)
+    const end = offset + (isHighUnit(code) && isLowUnit(next) ? 2 : 1)
+    const folded = foldChar(text.slice(offset, end))
+    if (
+      folded === '' ||
+      (folded === ' ' && length > 0 && codes[length - 1] === SPACE)
+    ) {
+      // Une marque, ou un séparateur de plus : rattachés au caractère d'avant.
+      if (length > 0) ends[length - 1] = end
+    } else {
+      // Un caractère peut en donner plusieurs (syllabe coréenne) : il reste
+      // au moins une place par unité du texte qui suit.
+      foldBuffer.length = length
+      reserveFold(length + folded.length + (text.length - end))
+      ;({ codes, starts, ends } = foldBuffer)
+      for (let unit = 0; unit < folded.length; unit += 1) {
+        codes[length] = folded.charCodeAt(unit)
+        starts[length] = offset
+        ends[length] = end
+        length += 1
+      }
+    }
+    offset = end
+  }
+  foldBuffer.length = length
+  return foldBuffer
+}
+
+/** Le morceau tel qu'on le cherche : plié comme le texte. */
+function foldNeedle(part: string): number[] {
+  const folded = foldForSearch(part)
+  return Array.from(folded.codes.subarray(0, folded.length))
+}
+
+function buildAutomaton(needles: readonly (readonly number[])[]): Automaton {
+  const next: Map<number, number>[] = [new Map()]
+  const length = [0]
+  for (const needle of needles) {
+    let state = 0
+    for (const unit of needle) {
+      let target = next[state].get(unit)
+      if (target === undefined) {
+        target = next.length
+        next.push(new Map())
+        length.push(0)
+        next[state].set(unit, target)
+      }
+      state = target
+    }
+    length[state] = needle.length
+  }
+  const fail = new Int32Array(next.length)
+  const output = new Int32Array(next.length)
+  // En largeur : le lien d'échec d'un état pointe toujours moins profond.
+  const queue = [...next[0].values()]
+  for (let head = 0; head < queue.length; head += 1) {
+    const state = queue[head]
+    for (const [unit, child] of next[state]) {
+      let link = fail[state]
+      while (link !== 0 && !next[link].has(unit)) link = fail[link]
+      const target = next[link].get(unit) ?? 0
+      fail[child] = target === child ? 0 : target
+      output[child] =
+        length[fail[child]] > 0 ? fail[child] : output[fail[child]]
+      queue.push(child)
+    }
+  }
+  // Transitions ASCII précalculées (un automate déterministe) : le cas
+  // courant se lit dans un tableau, sans suivre les liens d'échec.
+  const ascii = new Int32Array(next.length * 0x80)
+  for (const state of [0, ...queue]) {
+    for (let unit = 0; unit < 0x80; unit += 1) {
+      const own = next[state].get(unit)
+      ascii[state * 0x80 + unit] =
+        own ?? (state === 0 ? 0 : ascii[fail[state] * 0x80 + unit])
+    }
+  }
+  return { next, fail, length: Int32Array.from(length), output, ascii }
+}
+
+const WORD_CHAR = /[\p{L}\p{N}]/u
+
+function isWordCodePoint(codePoint: number): boolean {
+  if (codePoint < 0x80) {
+    return (
+      (codePoint >= 0x30 && codePoint <= 0x39) ||
+      (codePoint >= 0x61 && codePoint <= 0x7a) ||
+      (codePoint >= 0x41 && codePoint <= 0x5a)
+    )
+  }
+  return WORD_CHAR.test(String.fromCodePoint(codePoint))
+}
+
+function isHighUnit(unit: number): boolean {
+  return unit >= 0xd800 && unit <= 0xdbff
+}
+
+function isLowUnit(unit: number): boolean {
+  return unit >= 0xdc00 && unit <= 0xdfff
+}
+
+/** Une lettre ou un chiffre finit-il juste avant `index` ? */
+function isWordBefore(folded: FoldedText, index: number): boolean {
+  if (index <= 0) return false
+  const unit = folded.codes[index - 1]
+  if (isLowUnit(unit) && index >= 2) {
+    const high = folded.codes[index - 2]
+    if (isHighUnit(high)) {
+      return isWordCodePoint(((high - 0xd800) << 10) + unit - 0xdc00 + 0x10000)
+    }
+  }
+  return isWordCodePoint(unit)
+}
+
+/** Une lettre ou un chiffre commence-t-il à `index` ? */
+function isWordAt(folded: FoldedText, index: number): boolean {
+  if (index >= folded.length) return false
+  const unit = folded.codes[index]
+  if (isHighUnit(unit) && index + 1 < folded.length) {
+    const low = folded.codes[index + 1]
+    if (isLowUnit(low)) {
+      return isWordCodePoint(((unit - 0xd800) << 10) + low - 0xdc00 + 0x10000)
+    }
+  }
+  return isWordCodePoint(unit)
+}
+
+/**
+ * Les passages du texte original où se trouve un morceau, en mots entiers
+ * (ni lettre, ni chiffre, ni marque de part et d'autre : « 12 rue des Lilas »
+ * n'est pas dans « 112 rue des Lilas »), triés et fusionnés quand ils se
+ * chevauchent. `first` : s'arrête au premier.
+ */
+function addressSpans(
+  text: string,
+  search: AddressSearch,
+  first = false,
+): [number, number][] {
+  const { automaton } = search
+  if (!automaton) return []
+  const folded = foldForSearch(text)
+  const { codes } = folded
+  const { next, fail, length, output, ascii } = automaton
+  // Les passages arrivent par fin croissante : chacun absorbe ceux qu'il
+  // chevauche, et la liste reste triée et sans chevauchement.
+  const spans: [number, number][] = []
+  let state = 0
+  for (let index = 0; index < folded.length; index += 1) {
+    const unit = codes[index]
+    if (unit < 0x80) {
+      state = ascii[state * 0x80 + unit]
+    } else {
+      let target = next[state].get(unit)
+      while (target === undefined && state !== 0) {
+        state = fail[state]
+        target = next[state].get(unit)
+      }
+      state = target ?? 0
+    }
+    const end = index + 1
+    // Du plus long morceau qui finit ici au plus court : le premier en mots
+    // entiers couvre tous les suivants.
+    for (
+      let found = length[state] > 0 ? state : output[state];
+      found !== 0;
+      found = output[found]
+    ) {
+      const start = end - length[found]
+      if (isWordBefore(folded, start) || isWordAt(folded, end)) continue
+      let from = folded.starts[start]
+      while (spans.length > 0 && spans[spans.length - 1][1] > from) {
+        from = Math.min(from, (spans.pop() as [number, number])[0])
+      }
+      spans.push([from, folded.ends[index]])
+      if (first) return spans
+      break
+    }
+  }
+  return spans
+}
+
+/**
+ * Les adresses des hébergements masqués, et ceux de leurs morceaux qui
+ * désignent un logement, prêts à chercher : au plus
+ * `MAX_HIDDEN_ADDRESS_PARTS_PER_STAY` par hébergement (même clé `stayKey`)
+ * et `MAX_HIDDEN_ADDRESS_PARTS` en tout, dans l'ordre du voyage, l'adresse
+ * entière d'abord. Ajouter un hébergement ne fait qu'allonger la liste.
+ */
+function addressSearch(
+  hidden: Iterable<Accommodation>,
+  cityWords: ReadonlySet<string>,
+  budget: WorkBudget | null,
+): AddressSearch {
+  const needles: number[][] = []
+  const seen = new Set<string>()
+  const perStay = new Map<string, number>()
+  const add = (key: string, part: string): void => {
+    if (part.length > MAX_HIDDEN_ADDRESS_PART_LENGTH) return
+    if ((perStay.get(key) ?? 0) >= MAX_HIDDEN_ADDRESS_PARTS_PER_STAY) return
+    const needle = foldNeedle(part)
+    const text = String.fromCharCode(...needle)
+    if (text === '' || seen.has(text)) return
+    seen.add(text)
+    needles.push(needle)
+    perStay.set(key, (perStay.get(key) ?? 0) + 1)
+  }
+  for (const accommodation of hidden) {
+    if (needles.length >= MAX_HIDDEN_ADDRESS_PARTS) break
+    const address: unknown = accommodation.address
+    if (typeof address !== 'string') continue
+    const key = stayKey(accommodation)
+    const pieces = address
+      .split(/[,;\n\r]+/)
+      .map(trimAddressPart)
+      .filter((piece) => /[\p{L}\p{N}]/u.test(piece))
+    const whole = trimAddressPart(address)
+    if (wholeAddressIsSearched(whole, pieces.length, cityWords)) {
+      add(key, whole)
+    }
+    for (const piece of pieces) {
+      if (needles.length >= MAX_HIDDEN_ADDRESS_PARTS) break
+      if (pinpointsAHome(piece, cityWords)) add(key, piece)
+    }
+  }
+  if (needles.length === 0) return NO_SEARCH
+  return {
+    needles,
+    needsDigit: needles.every((needle) =>
+      /\p{N}/u.test(String.fromCharCode(...needle)),
+    ),
+    automaton: buildAutomaton(needles),
+    budget,
+  }
+}
+
+const HAS_DIGIT = /\p{N}/u
+
+/** Le texte peut-il contenir un morceau ? Un test rapide, avant de plier. */
+function mayContainAddress(text: string, search: AddressSearch): boolean {
+  return (
+    search.automaton !== null && (!search.needsDigit || HAS_DIGIT.test(text))
+  )
+}
+
+function containsAddress(text: string, search: AddressSearch): boolean {
+  return (
+    mayContainAddress(text, search) &&
+    addressSpans(text, search, true).length > 0
+  )
+}
+
+/** Le lien mène-t-il à une adresse masquée (`maps…?q=12+rue+des+Lilas`) ? */
+function urlHasAddress(url: string, search: AddressSearch): boolean {
+  if (!search.automaton) return false
+  const spaced = url.replace(/\+/g, ' ')
+  return [url, spaced, safeDecode(spaced)].some((text) =>
+    containsAddress(text, search),
+  )
+}
+
+/**
+ * La ponctuation qu'un effacement laisse orpheline : parenthèses vides,
+ * blancs doublés (les sauts de ligne restent), espace avant une virgule ou
+ * un point, virgules répétées ou suivies d'un point, séparateurs au début ou
+ * à la fin. Sans lettre ni chiffre, il ne reste rien.
+ */
+function tidyAfterRemoval(text: string): string {
+  const tidied = text
+    .replace(/\(\s*[,;]?\s*\)/g, '')
+    .replace(/[^\S\r\n]+/g, ' ')
+    .replace(/ +(?=\r?\n)/g, '')
+    .replace(/(\n) +/g, '$1')
+    .replace(/ (?=[,.])/g, '')
+    .replace(/([,;])(?:\s*[,;])+/g, '$1')
+    .replace(/[,;]+(?=[.!?])/g, '')
+    .replace(/^[\s,;:–—-]+|[\s,;:–—-]+$/g, '')
+  return /[\p{L}\p{N}]/u.test(tidied) ? tidied : ''
+}
+
+/**
+ * Le texte sans les adresses masquées : chaque passage effacé laisse une
+ * espace, puis `tidyAfterRemoval` range la ponctuation. On recommence tant
+ * qu'une adresse réapparaît (« 12 rue des 12 rue des Lilas Lilas ») : le
+ * résultat n'en contient plus, et le nettoyer encore ne change rien. Un texte
+ * sans adresse revient tel quel, au caractère près.
+ */
+function scrubAddresses(text: string, search: AddressSearch): string {
+  if (!mayContainAddress(text, search)) return text
+  let current = text
+  for (let pass = 0; pass < MAX_SCRUB_PASSES; pass += 1) {
+    // La première passe est comptée d'avance (`cleanForTemplate`, `stayPrivacy`).
+    if (pass > 0) charge(search.budget, current.length, search.needles.length)
+    const spans = addressSpans(current, search)
+    if (spans.length === 0) return current
+    let kept = ''
+    let from = 0
+    for (const [start, end] of spans) {
+      kept += `${current.slice(from, start)} `
+      from = end
+    }
+    current = tidyAfterRemoval(kept + current.slice(from))
+  }
+  charge(search.budget, current.length, search.needles.length)
+  return containsAddress(current, search) ? '' : current
+}
+
+/**
+ * Nom publié d'un hébergement : sans les adresses masquées. S'il n'était que
+ * l'adresse (« 12 rue des Lilas »), il devient « Logement privé ».
+ */
+function publishedStayName(name: string, search: AddressSearch): string {
+  if (typeof name !== 'string') return name
+  const scrubbed = scrubAddresses(name, search)
+  return scrubbed === '' && name.trim() !== '' ? PRIVATE_STAY_NAME : scrubbed
+}
+
+/**
+ * Les hébergements à publier sans adresse, et la recherche de leurs adresses.
+ *
+ * Un hébergement est masqué si sa clé (`stayKey`) est dans `privateStays`,
+ * ou si elle y entre une fois son nom publié : « Chez Marie, 12 rue des
+ * Lilas » devient « Chez Marie ». On repasse jusqu'à ce que plus rien ne
+ * bouge, pour que nettoyer deux fois revienne à nettoyer une fois. Chaque
+ * tour relit les noms distincts des autres hébergements, compté dans
+ * `budget` ; il n'y a de tour suivant que si les morceaux cherchés ont
+ * grandi, soit `MAX_HIDDEN_ADDRESS_PARTS` tours au plus.
+ */
+function stayPrivacy(
+  itinerary: readonly DayItinerary[],
+  privateStays: unknown,
+  budget: WorkBudget | null,
+): StayPrivacy {
+  const wanted = new Set(
+    Array.isArray(privateStays)
+      ? privateStays.filter((key): key is string => typeof key === 'string')
+      : [],
+  )
+  if (wanted.size === 0) return NO_PRIVACY
+  const stays = itinerary.flatMap((day) =>
+    day.accommodation && typeof day.accommodation === 'object'
+      ? [day.accommodation]
+      : [],
+  )
+  const hidden = new Set(stays.filter((stay) => wanted.has(stayKey(stay))))
+  const cityWords = tripCityWords(itinerary)
+  let search = addressSearch(hidden, cityWords, budget)
+  for (;;) {
+    if (!search.automaton) return { hidden, search }
+    const others = stays.filter((stay) => !hidden.has(stay))
+    // Un nom par texte distinct : les nuits d'un même hébergement le répètent.
+    const published = new Map<unknown, string>()
+    for (const stay of others) published.set(stay.name, '')
+    let scanned = 0
+    for (const name of published.keys()) {
+      if (typeof name === 'string') scanned += name.length
+    }
+    charge(budget, scanned, search.needles.length)
+    for (const name of published.keys()) {
+      published.set(name, publishedStayName(name as string, search))
+    }
+    const renamed = others.filter((stay) =>
+      wanted.has(
+        stayKey({ id: stay.id, name: published.get(stay.name) ?? '' }),
+      ),
+    )
+    if (renamed.length === 0) return { hidden, search }
+    for (const stay of renamed) hidden.add(stay)
+    const grown = addressSearch(hidden, cityWords, budget)
+    // Mêmes morceaux : un tour de plus rendrait les mêmes noms.
+    if (grown.needles.length === search.needles.length) {
+      return { hidden, search: grown }
+    }
+    search = grown
+  }
+}
+
+/**
+ * Ce que la recherche parcourra au plus, en caractères : chaque texte une
+ * fois, chaque lien et chaque image trois fois (brut, `+` en espace,
+ * décodé). Tout l'itinéraire est compté, champs retirés compris : c'est un
+ * plafond, pas une estimation.
+ */
+function searchedLength(value: unknown, key = ''): number {
+  if (typeof value === 'string') {
+    return key === 'bookingUrl' || key === 'url' || key === 'images'
+      ? value.length * 3
+      : value.length
+  }
+  let total = 0
+  if (Array.isArray(value)) {
+    for (const item of value) total += searchedLength(item, key)
+  } else if (value && typeof value === 'object') {
+    for (const [name, item] of Object.entries(value)) {
+      if (name !== 'id') total += searchedLength(item, name)
+    }
+  }
+  return total
+}
+
+/**
+ * Les textes libres d'une entité, sans les adresses masquées. Un champ
+ * facultatif vidé disparaît, un champ requis (`required`) reste vide ; une
+ * liste perd les entrées vidées, et disparaît si plus rien n'y reste.
+ */
+function scrubTexts<T extends object>(
+  entity: T,
+  keys: readonly string[],
+  search: AddressSearch,
+  required: ReadonlySet<string> = new Set(),
+): T {
+  if (!search.automaton) return entity
+  let copy: T | null = null
+  for (const key of keys) {
+    const value: unknown = Reflect.get(entity, key)
+    if (typeof value === 'string') {
+      const scrubbed = scrubAddresses(value, search)
+      if (scrubbed === value) continue
+      copy ??= { ...entity }
+      if (scrubbed === '' && !required.has(key)) {
+        Reflect.deleteProperty(copy, key)
+      } else {
+        Reflect.set(copy, key, scrubbed)
+      }
+    } else if (Array.isArray(value)) {
+      const scrubbed: unknown[] = value.map((item: unknown) =>
+        typeof item === 'string' ? scrubAddresses(item, search) : item,
+      )
+      if (scrubbed.every((item, index) => item === value[index])) continue
+      const kept = scrubbed.filter(
+        (item, index) => item !== '' || value[index] === '',
+      )
+      copy ??= { ...entity }
+      if (kept.length === 0) Reflect.deleteProperty(copy, key)
+      else Reflect.set(copy, key, kept)
+    }
+  }
+  return copy ?? entity
+}
+
+/** Textes libres où une adresse masquée est effacée, entité par entité. */
+const DAY_TEXT_KEYS = [
+  'title',
+  'city',
+  'highlights',
+  'foodRecommendations',
+  'walkingDistance',
+  'notes',
+  'packingTips',
+  'dayType',
+  'tips',
+] as const satisfies readonly (keyof DayItinerary)[]
+const DAY_REQUIRED_TEXTS: ReadonlySet<string> = new Set(['title', 'city'])
+
+const ACTIVITY_TEXT_KEYS = [
+  'name',
+  'description',
+  'duration',
+  'openAt',
+  'address',
+  'tips',
+  'tags',
+] as const satisfies readonly (keyof Activity)[]
+const ACTIVITY_REQUIRED_TEXTS: ReadonlySet<string> = new Set(['name'])
+
+const TRANSPORT_TEXT_KEYS = [
+  'from',
+  'to',
+  'details',
+  'departureAddress',
+  'departureTime',
+  'arrivalTime',
+  'duration',
+  'provider',
+  'notes',
+] as const satisfies readonly (keyof Transport)[]
+
+/** Le nom passe par `publishedStayName` ; ces trois-là sont requis. */
+const ACCOMMODATION_TEXT_KEYS = [
+  'address',
+  'checkIn',
+  'checkOut',
+] as const satisfies readonly (keyof Accommodation)[]
+const ACCOMMODATION_REQUIRED_TEXTS: ReadonlySet<string> = new Set(
+  ACCOMMODATION_TEXT_KEYS,
+)
+
 // ── Nettoyage ─────────────────────────────────────────────────────────────────
 
 /**
  * Ce que le nettoyage d'une journée doit savoir du voyage entier : les
- * références de réservation (`tripReferences`), lues avant d'être retirées.
+ * références de réservation (`tripReferences`) et les hébergements privés
+ * (`stayPrivacy`), lus sur l'original avant d'être retirés.
  */
 interface CleanContext {
   options: TemplateOptions
   references: ReadonlySet<string>
+  privacy: StayPrivacy
+}
+
+/** Lien gardé : une page publique, qui ne mène pas à une adresse masquée. */
+function keepsLink(url: unknown, context: CleanContext): boolean {
+  return (
+    isShareableBookingUrl(url, context.references) &&
+    !urlHasAddress(url as string, context.privacy.search)
+  )
 }
 
 function cleanActivity(activity: Activity, context: CleanContext): Activity {
-  const { options, references } = context
+  const { options, privacy } = context
   let cleaned: Activity = pickKnown(activity, ACTIVITY_KEY_SET)
   if (!options.includePrices) cleaned = omitPrice(cleaned)
   if (
     cleaned.bookingUrl !== undefined &&
-    !isShareableBookingUrl(cleaned.bookingUrl, references)
+    !keepsLink(cleaned.bookingUrl, context)
   ) {
     cleaned = omitBookingUrl(cleaned)
   }
-  return withPortableImages(cleaned)
+  const scrubbed = scrubTexts(
+    cleaned,
+    ACTIVITY_TEXT_KEYS,
+    privacy.search,
+    ACTIVITY_REQUIRED_TEXTS,
+  )
+  // Une activité nommée ou située à l'adresse masquée (« Dîner au 12 rue des
+  // Lilas ») y est aussi sur la carte : ses coordonnées ne partent pas.
+  const atHiddenAddress =
+    scrubbed.name !== cleaned.name || scrubbed.address !== cleaned.address
+  cleaned = atHiddenAddress ? omitCoordinates(scrubbed) : scrubbed
+  return withPortableImages(cleaned, privacy.search)
 }
 
 function cleanTransport(
   transport: Transport,
   context: CleanContext,
 ): Transport {
-  const { options, references } = context
+  const { options, privacy } = context
   let cleaned: Transport = pickKnown(transport, TRANSPORT_KEY_SET)
   if (!options.includeNotes) cleaned = omitNotes(cleaned)
   if (!options.includePrices) cleaned = omitPrice(cleaned)
   // Les références du voyage (la sienne comprise) sont lues sur l'original.
   if (
     cleaned.bookingUrl !== undefined &&
-    !isShareableBookingUrl(cleaned.bookingUrl, references)
+    !keepsLink(cleaned.bookingUrl, context)
   ) {
     cleaned = omitBookingUrl(cleaned)
   }
-  return cleaned
+  return scrubTexts(cleaned, TRANSPORT_TEXT_KEYS, privacy.search)
 }
 
 function cleanAccommodation(
   accommodation: Accommodation,
   context: CleanContext,
 ): Accommodation {
-  const { options, references } = context
+  const { options, privacy } = context
   let cleaned: Accommodation = pickKnown(accommodation, ACCOMMODATION_KEY_SET)
   if (!options.includePrices) cleaned = omitPrice(cleaned)
-  // `bookingUrl` est requis par le type : on le vide au lieu de le retirer.
-  if (!isShareableBookingUrl(cleaned.bookingUrl, references)) {
+  if (privacy.hidden.has(accommodation)) {
+    // « Ne publier que le nom et la ville » : la ville est celle de la journée.
+    const { images: _images, ...rest } = cleaned
+    cleaned = { ...rest, address: '', bookingUrl: '' }
+  } else if (!keepsLink(cleaned.bookingUrl, context)) {
+    // `bookingUrl` est requis par le type : on le vide au lieu de le retirer.
     cleaned = { ...cleaned, bookingUrl: '' }
   }
-  return withPortableImages(cleaned)
+  cleaned = {
+    ...scrubTexts(
+      cleaned,
+      ACCOMMODATION_TEXT_KEYS,
+      privacy.search,
+      ACCOMMODATION_REQUIRED_TEXTS,
+    ),
+    name: publishedStayName(cleaned.name, privacy.search),
+  }
+  return withPortableImages(cleaned, privacy.search)
 }
 
 function cleanDay(day: DayItinerary, context: CleanContext): DayItinerary {
-  const { options } = context
+  const { options, privacy } = context
   let cleaned: DayItinerary = {
     ...pickKnown(day, DAY_KEY_SET),
     activities: day.activities.map((activity) =>
@@ -489,7 +1365,13 @@ function cleanDay(day: DayItinerary, context: CleanContext): DayItinerary {
     }
   }
   if (!options.includeNotes) cleaned = omitNotes(cleaned)
-  return withPortableDayImages(cleaned)
+  cleaned = scrubTexts(
+    cleaned,
+    DAY_TEXT_KEYS,
+    privacy.search,
+    DAY_REQUIRED_TEXTS,
+  )
+  return withPortableDayImages(cleaned, privacy.search)
 }
 
 /**
@@ -502,16 +1384,33 @@ function cleanDay(day: DayItinerary, context: CleanContext): DayItinerary {
  *   ailleurs ; un lien qui contient la référence de n'importe quelle
  *   réservation du voyage est privé ;
  * - images hors http(s) retirées ; un tableau vide disparaît ;
- * - clés inconnues du type retirées (voir la liste blanche plus haut).
+ * - clés inconnues du type retirées (voir la liste blanche plus haut) ;
+ * - hébergements de `privateStays` : adresse et lien vidés, photos retirées ;
+ *   leur adresse (et ses morceaux qui désignent un logement) est effacée de
+ *   tous les textes, et un lien, une image ou les coordonnées d'une activité
+ *   qui y mènent partent avec (voir « Hébergements privés » plus haut).
  *
  * Pure, idempotente ; ids, ordre des journées et des activités inchangés. Une
  * clé retirée disparaît : jamais de valeur `undefined` dans le résultat.
+ *
+ * `limits` (serveur) : la recherche des adresses masquées est comptée avant
+ * de toucher au moindre texte ; au-delà de `maxAddressSearchWork`,
+ * `AddressSearchTooCostlyError` est levée et rien ne part. Sans `limits` (le
+ * téléphone), rien n'est compté.
  */
 export function cleanForTemplate(
   itinerary: readonly DayItinerary[],
   options: TemplateOptions,
+  limits?: TemplateCleaningLimits,
 ): DayItinerary[] {
-  const context = { options, references: tripReferences(itinerary) }
+  const budget = limits ? { left: limits.maxAddressSearchWork } : null
+  const privacy = stayPrivacy(itinerary, options.privateStays, budget)
+  charge(budget, searchedLength(itinerary), privacy.search.needles.length)
+  const context: CleanContext = {
+    options,
+    references: tripReferences(itinerary),
+    privacy,
+  }
   return itinerary.map((day) => cleanDay(day, context))
 }
 
@@ -527,7 +1426,10 @@ export interface TemplateCleaningSummary {
   goes: {
     days: number
     activities: number
-    /** Hébergements distincts : même nom (casse ignorée) = un seul hôtel. */
+    /**
+     * Hébergements distincts (`stayKey` : même nom aux accents, à la casse et
+     * aux espaces près = un seul hôtel), privés compris : leur nom part.
+     */
     accommodations: number
     /** Journées avec un trajet (train, vol, voiture, bus). */
     transports: number
@@ -551,10 +1453,18 @@ export interface TemplateCleaningSummary {
     notes: number
     /** Prix renseignés — 0 quand l'auteur les inclut. Un hôtel compte une fois. */
     prices: number
-    /** Liens de réservation privés distincts (confirmation, espace client…). */
+    /**
+     * Liens distincts qui ne partent pas : privés (confirmation, espace
+     * client…), d'un hébergement privé, ou menant à son adresse.
+     */
     privateLinks: number
     /** Images distinctes stockées sur l'appareil (`blob:`, `data:`…). */
     deviceImages: number
+    /**
+     * Hébergements distincts publiés sans adresse, ni lien, ni photo
+     * (`TemplateOptions.privateStays`) : seuls leur nom et la ville partent.
+     */
+    privateStays: number
   }
 }
 
@@ -564,13 +1474,6 @@ function hasText(value: unknown): value is string {
 
 function nameKey(value: string): string {
   return value.trim().toLocaleLowerCase('fr')
-}
-
-/** Un hôtel répété sur plusieurs nuits : même nom, casse ignorée (sinon son id). */
-function accommodationKey(accommodation: Accommodation): string {
-  return hasText(accommodation.name)
-    ? `name:${nameKey(accommodation.name)}`
-    : `id:${accommodation.id}`
 }
 
 function hasInformativeStatus(entity: { status?: string }): boolean {
@@ -593,10 +1496,17 @@ export function summarizeTemplateCleaning(
   let notes = 0
   let prices = 0
 
-  // Mêmes références que `cleanForTemplate` : le chiffre est ce qui part.
+  // Mêmes références et mêmes hébergements privés que `cleanForTemplate` : le
+  // chiffre est ce qui part.
   const tripRefs = tripReferences(itinerary)
-  const noteLink = (url: unknown) => {
-    if (hasText(url) && !isShareableBookingUrl(url, tripRefs)) {
+  const privacy = stayPrivacy(itinerary, options.privateStays, null)
+  const noteLink = (url: unknown, withheld = false) => {
+    if (!hasText(url)) return
+    if (
+      withheld ||
+      !isShareableBookingUrl(url, tripRefs) ||
+      urlHasAddress(url, privacy.search)
+    ) {
       privateLinks.add(url.trim())
     }
   }
@@ -605,15 +1515,18 @@ export function summarizeTemplateCleaning(
       if (hasText(url) && !isPortableImageUrl(url)) deviceImages.add(url)
     }
   }
+  // Un conseil qui n'était que l'adresse masquée ne part pas.
+  const isPublishedTip = (tip: unknown) =>
+    hasText(tip) && hasText(scrubAddresses(tip, privacy.search))
 
   for (const day of itinerary) {
-    tips += (day.tips ?? []).filter(hasText).length
+    tips += (day.tips ?? []).filter(isPublishedTip).length
     if (hasText(day.notes)) notes += 1
     noteImages(day.images?.map((image) => image?.url))
 
     for (const activity of day.activities) {
       activities += 1
-      if (hasText(activity.tips)) tips += 1
+      if (isPublishedTip(activity.tips)) tips += 1
       if (hasInformativeStatus(activity)) statuses += 1
       if (typeof activity.price === 'number') prices += 1
       noteLink(activity.bookingUrl)
@@ -641,12 +1554,12 @@ export function summarizeTemplateCleaning(
 
     const accommodation = day.accommodation
     if (accommodation) {
-      const key = accommodationKey(accommodation)
+      const key = stayKey(accommodation)
       stays.set(key, [...(stays.get(key) ?? []), accommodation])
       if (hasText(accommodation.bookingReference)) {
         references.add(nameKey(accommodation.bookingReference))
       }
-      noteLink(accommodation.bookingUrl)
+      noteLink(accommodation.bookingUrl, privacy.hidden.has(accommodation))
       noteImages(accommodation.images)
     }
   }
@@ -672,8 +1585,264 @@ export function summarizeTemplateCleaning(
       prices: options.includePrices ? 0 : prices,
       privateLinks: privateLinks.size,
       deviceImages: deviceImages.size,
+      privateStays: new Set(Array.from(privacy.hidden, stayKey)).size,
     },
   }
+}
+
+// ── Écran A2 : hébergements privés ────────────────────────────────────────────
+
+/** Un hébergement du voyage, tel que A2 le propose à « Ne publier que le nom et la ville ». */
+export interface TemplateStay {
+  /** Sa clé (`stayKey`), à mettre dans `TemplateOptions.privateStays`. */
+  key: string
+  /** Nom saisi, celui de la première nuit qui en a un ; `''` sans nom. */
+  name: string
+  /** Villes des journées qui le portent, dans l'ordre du voyage, sans doublon. */
+  cities: string[]
+  /** Adresse saisie, la première non vide : ce qui ne partirait pas. `''` sans adresse. */
+  address: string
+  /**
+   * Nuits passées : celles de `checkIn` à `checkOut` quand ces dates se
+   * lisent (un hôtel porté par la seule journée d'arrivée compte toutes ses
+   * nuits), sinon une par journée qui le porte. Au moins 1.
+   */
+  nights: number
+  /** Ressemble à un logement privé (`looksLikePrivateStay`) : à cocher d'office. */
+  suggestedPrivate: boolean
+}
+
+/** Au-delà, des dates d'arrivée et de départ sont une erreur de saisie. */
+const MAX_STAY_NIGHTS = MAX_TEMPLATE_DAYS
+
+/** Les nuits de `checkIn` à `checkOut` (numéros de jour), ou `null` si elles ne se lisent pas. */
+function stayRange(
+  accommodation: Accommodation,
+): { from: number; to: number } | null {
+  const checkIn =
+    typeof accommodation.checkIn === 'string'
+      ? splitIsoDateValue(accommodation.checkIn)
+      : null
+  const checkOut =
+    typeof accommodation.checkOut === 'string'
+      ? splitIsoDateValue(accommodation.checkOut)
+      : null
+  if (!checkIn || !checkOut) return null
+  const from = toDayNumber(checkIn.date)
+  const to = toDayNumber(checkOut.date)
+  return to > from && to - from <= MAX_STAY_NIGHTS ? { from, to } : null
+}
+
+/**
+ * Les hébergements du voyage, un par clé `stayKey`, dans l'ordre du voyage :
+ * de quoi proposer, sur l'écran A2, « Ne publier que le nom et la ville »
+ * pour chacun, coché d'office quand `suggestedPrivate`.
+ */
+export function templateStays(
+  itinerary: readonly DayItinerary[],
+): TemplateStay[] {
+  const stays = new Map<
+    string,
+    { stay: TemplateStay; nights: Set<string>; cityKeys: Set<string> }
+  >()
+  itinerary.forEach((day, index) => {
+    const accommodation = day.accommodation
+    if (!accommodation || typeof accommodation !== 'object') return
+    const key = stayKey(accommodation)
+    let entry = stays.get(key)
+    if (!entry) {
+      entry = {
+        stay: {
+          key,
+          name: '',
+          cities: [],
+          address: '',
+          nights: 0,
+          suggestedPrivate: false,
+        },
+        nights: new Set(),
+        cityKeys: new Set(),
+      }
+      stays.set(key, entry)
+    }
+    const { stay } = entry
+    if (!stay.name && hasText(accommodation.name)) {
+      stay.name = accommodation.name.trim()
+    }
+    if (!stay.address && hasText(accommodation.address)) {
+      stay.address = accommodation.address.trim()
+    }
+    if (hasText(day.city) && !entry.cityKeys.has(nameKey(day.city))) {
+      entry.cityKeys.add(nameKey(day.city))
+      stay.cities.push(day.city.trim())
+    }
+    stay.suggestedPrivate ||= looksLikePrivateStay(accommodation)
+    const range = stayRange(accommodation)
+    if (range) {
+      for (let night = range.from; night < range.to; night += 1) {
+        entry.nights.add(`n${night}`)
+      }
+    } else {
+      entry.nights.add(
+        isIsoDate(day.date) ? `n${toDayNumber(day.date)}` : `d${index}`,
+      )
+    }
+  })
+  return Array.from(stays.values(), ({ stay, nights }) => ({
+    ...stay,
+    nights: nights.size,
+  }))
+}
+
+/** Mots entiers, sur un texte sans accents ni casse (`fold`). */
+function wordsPattern(words: readonly string[]): RegExp {
+  return new RegExp(
+    `(?:^|[^\\p{L}\\p{N}])(?:${words.join('|')})(?![\\p{L}\\p{N}])`,
+    'u',
+  )
+}
+
+/**
+ * Hôtels, auberges, ryokans, campings… : une adresse publique, jamais
+ * proposée comme privée, même avec un étage dans l'adresse.
+ */
+const COMMERCIAL_STAY = wordsPattern([
+  'hotels?',
+  'hostels?',
+  'hostal',
+  'motel',
+  'auberges?',
+  'ryokan',
+  'campings?',
+  'glamping',
+  'resorts?',
+  'inn',
+  'lodge',
+  'b\\s*&\\s*b',
+  'bnb',
+  'bed\\s*(?:and|&)\\s*breakfast',
+  'guest\\s*house',
+  'guesthouse',
+  "maisons?\\s+d['’]\\s*hotes",
+  "chambres?\\s+d['’]\\s*hotes",
+  'pension',
+  'pousada',
+  'agriturismo',
+  'minshuku',
+  'apart\\s*-?\\s*hotel',
+  'aparthotel',
+])
+/** Les mêmes, en écritures sans espace entre les mots (japonais, chinois, coréen). */
+const COMMERCIAL_STAY_CJK =
+  /ホテル|旅館|民宿|ゲストハウス|酒店|宾馆|賓館|旅馆|旅舍|客栈|호텔|게스트하우스/u
+
+/** Noms qui annoncent un logement privé : chez des proches, une location. */
+const PRIVATE_HOME = wordsPattern([
+  'chez',
+  'familles?',
+  'family',
+  'parents',
+  'amis?',
+  'amies?',
+  'friends?',
+  'proches',
+  'cousins?',
+  'cousines?',
+  'tantes?',
+  'oncles?',
+  'freres?',
+  'soeurs?',
+  'copains?',
+  'copines?',
+  'potes',
+  'appartement',
+  'appart',
+  'appt',
+  'apt',
+  'apartment',
+  'studio',
+  'maison',
+  'house\\s+of',
+  'airbnb',
+  'vrbo',
+  'abritel',
+  'logement',
+  'home',
+  'flat',
+  'villa\\s+privee',
+  'private\\s+(?:villa|home|house|flat)',
+  'domicile',
+  'coloc(?:ation)?',
+])
+/** Location chez l'habitant, au Japon (« minpaku »). */
+const PRIVATE_HOME_CJK = /民泊/u
+
+/** Airbnb écrit en morceaux (« Air BnB », « Air B&B », « Air B & B »), sur un nom plié. */
+const AIRBNB = /(?:^|[^\p{L}\p{N}])air\s*b\s*(?:n|&)\s*b(?![\p{L}\p{N}])/u
+
+/**
+ * Détails qui ne figurent qu'à l'adresse d'un logement : étage, bâtiment,
+ * porte, digicode, interphone, appartement, `floor`, `unit`, `#12`…
+ */
+const HOME_DETAIL = wordsPattern([
+  'etages?',
+  'batiment',
+  'bat\\.?\\s*[a-z0-9](?![\\p{L}\\p{N}])',
+  'porte\\s*(?:n°?\\s*)?\\d+[a-z]?',
+  // « porte B », mais pas « Porte d'Italie » : l'apostrophe suit la lettre.
+  "porte\\s+[a-z](?![\\p{L}\\p{N}'’])",
+  'porte\\s+(?:gauche|droite|face)',
+  'digicode',
+  "code\\s*(?:porte|immeuble|portail|d['’]entree|entree)?\\s*:?\\s*[a-z]?\\d+[a-z]?",
+  'interphone',
+  'escalier\\s+[a-z0-9](?![\\p{L}\\p{N}])',
+  'esc\\.\\s*[a-z0-9]',
+  'apt',
+  'appt',
+  'app\\.\\s*\\d+[a-z]?',
+  'appartement',
+  'apartment',
+  '\\d+\\s*(?:st|nd|rd|th|e|er|eme)?\\s*floor',
+  'floor\\s*\\d+',
+  'unit\\s*#?\\s*\\d+[a-z]?',
+  'room\\s*#?\\s*\\d+',
+  'flat\\s*#?\\s*\\d+[a-z]?',
+  'chez',
+  'c/o',
+])
+/** Sans frontière de mot : `#12`, et le numéro de chambre japonais (`302号室`). */
+const HOME_DETAIL_ANYWHERE = /#\s*\d|号室/u
+
+/**
+ * Cet hébergement ressemble-t-il à un logement privé ? Vrai si son nom
+ * l'annonce (« Chez Marie », « Appartement Alfama (Airbnb) », « Maison de
+ * famille », « Flat in Shoreditch ») ou si son nom ou son adresse portent un
+ * détail d'accès (« 3e étage », « digicode 4521 », « Apt 4B », « 2nd floor »,
+ * « #12 »). Jamais pour un hôtel, une auberge, un ryokan ou un camping
+ * (`COMMERCIAL_STAY`, lu dans le nom) : leur adresse est publique.
+ *
+ * Ce n'est qu'une suggestion pour l'écran A2 : l'auteur coche ou décoche.
+ */
+export function looksLikePrivateStay(
+  accommodation: Pick<Accommodation, 'name' | 'address'>,
+): boolean {
+  const name = typeof accommodation.name === 'string' ? accommodation.name : ''
+  const address =
+    typeof accommodation.address === 'string' ? accommodation.address : ''
+  const foldedName = fold(name)
+  // « Air BnB », « Air B&B » : une location chez l'habitant, que le « bnb »
+  // des chambres d'hôtes (`COMMERCIAL_STAY`) ne doit pas faire passer pour un hôtel.
+  if (AIRBNB.test(foldedName)) return true
+  if (COMMERCIAL_STAY.test(foldedName) || COMMERCIAL_STAY_CJK.test(name)) {
+    return false
+  }
+  return (
+    PRIVATE_HOME.test(foldedName) ||
+    PRIVATE_HOME_CJK.test(name) ||
+    [foldedName, fold(address)].some(
+      (text) => HOME_DETAIL.test(text) || HOME_DETAIL_ANYWHERE.test(text),
+    )
+  )
 }
 
 // ── Écran A3 : données sensibles dans les notes ───────────────────────────────

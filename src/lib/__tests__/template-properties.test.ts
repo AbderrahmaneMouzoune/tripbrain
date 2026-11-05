@@ -27,7 +27,9 @@ import {
   noteExcerpts,
   sensitiveSpans,
   summarizeTemplateCleaning,
+  looksLikePrivateStay,
   templateKnownPlaces,
+  templateStays,
   type SensitiveSpan,
 } from '@/lib/template-clean'
 import {
@@ -39,6 +41,7 @@ import {
 import {
   COUNTRY_CODES,
   MAX_SLUG_LENGTH,
+  MAX_STAY_KEY_LENGTH,
   MAX_TEMPLATE_CITIES,
   MAX_TEMPLATE_CITY_LENGTH,
   MAX_TEMPLATE_DAYS,
@@ -47,14 +50,18 @@ import {
   countrySlug,
   createTemplateId,
   idSuffixedSlug,
+  isStayKey,
   isTemplateId,
   isTemplateSlug,
+  parsePrivateStays,
   slugify,
+  stayKey,
   suffixedSlug,
   templateCities,
   templateSlug,
   tripYear,
   type TemplateOptions,
+  type TemplateOrigin,
 } from '@/lib/template-model'
 import {
   buildTemplateOrigin,
@@ -71,6 +78,8 @@ import {
   parseTemplateUpdate,
 } from '@/lib/template-request'
 import { normalizeItineraryShape } from '@/lib/template-shape'
+import { normalizeTransportType } from '@/lib/transport-type'
+import { templatePublishBlocker, type StoredTrip } from '@/lib/trips'
 import { findStay } from '@/components/day/day-logic'
 import {
   compressedBytes,
@@ -152,8 +161,20 @@ function expectNoSharedObject(output: unknown, input: unknown): void {
   }
 }
 
-function randomOptions(rng: Rng): TemplateOptions {
-  return { includeNotes: rng.bool(), includePrices: rng.bool() }
+/**
+ * Réglages tirés au hasard ; les hébergements privés parmi ceux du voyage
+ * (`templateStays`), plus parfois une clé qui ne désigne rien.
+ */
+function randomOptions(
+  rng: Rng,
+  itinerary: readonly DayItinerary[] = [],
+): TemplateOptions {
+  const keys = templateStays(itinerary).map((stay) => stay.key)
+  const privateStays = rng.bool(0.5) ? rng.subset(keys, 0.6) : []
+  if (rng.bool(0.1)) {
+    privateStays.push(rng.pick(['inconnu', '#absent', 'chezpersonne']))
+  }
+  return { includeNotes: rng.bool(), includePrices: rng.bool(), privateStays }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -212,7 +233,10 @@ const ACTIVITY_SHAPE: EntityShape = {
 }
 
 const TRANSPORT_SHAPE: EntityShape = {
-  required: { id: isText, type: oneOf('train', 'car', 'plane', 'bus') },
+  required: {
+    id: isText,
+    type: oneOf('train', 'car', 'plane', 'bus', 'boat', 'other'),
+  },
   optional: {
     from: isText,
     to: isText,
@@ -557,10 +581,14 @@ function randomStartDate(rng: Rng): string {
 
 function retimeCase(rng: Rng): RetimeCase {
   // Ce que l'app reprend : un modèle servi par l'API, donc nettoyé (§5).
-  const itinerary = cleanForTemplate(
-    randomItinerary(rng, { maxDays: 16 }),
-    randomOptions(rng),
-  )
+  // Deux interrupteurs tirés, sans hébergement privé : le recalage ignore
+  // les adresses, et le flux aléatoire reste celui des contre-exemples
+  // connus du recalage (`KNOWN_BUG`).
+  const itinerary = cleanForTemplate(randomItinerary(rng, { maxDays: 16 }), {
+    includeNotes: rng.bool(),
+    includePrices: rng.bool(),
+    privateStays: [],
+  })
   const ids = itinerary.map((day) => day.id)
   let keptDayIds = rng.subset(ids, rng.pick([0.3, 0.6, 0.9, 1]))
   if (keptDayIds.length === 0) keptDayIds = [rng.pick(ids)]
@@ -744,6 +772,19 @@ function cleanedErrors(
           errors.push(`${path}.images non http(s) : ${image.url}`)
       }
     }
+    // « Ne publier que le nom et la ville » : ni adresse, ni lien, ni photo.
+    if (
+      source.accommodation &&
+      options.privateStays.includes(stayKey(source.accommodation))
+    ) {
+      const kept = day.accommodation
+      if (kept?.address !== '')
+        errors.push(`${path}.accommodation.address privée gardée`)
+      if (kept?.bookingUrl !== '')
+        errors.push(`${path}.accommodation.bookingUrl privé gardé`)
+      if (kept && Object.hasOwn(kept, 'images'))
+        errors.push(`${path}.accommodation.images privées gardées`)
+    }
     bookingUrlErrors(
       day.accommodation?.bookingUrl,
       source.accommodation?.bookingReference,
@@ -769,15 +810,17 @@ function cleanedErrors(
 }
 
 describe('propriétés — cleanForTemplate', () => {
-  const generate = (rng: Rng) => ({
-    itinerary: randomItinerary(rng),
-    options: randomOptions(rng),
-  })
+  const generate = (rng: Rng) => {
+    const itinerary = randomItinerary(rng)
+    return { itinerary, options: randomOptions(rng, itinerary) }
+  }
   const valid = (input: ReturnType<typeof generate>) =>
     isRecord(input) &&
     isRecord(input.options) &&
     typeof input.options.includeNotes === 'boolean' &&
     typeof input.options.includePrices === 'boolean' &&
+    Array.isArray(input.options.privateStays) &&
+    input.options.privateStays.every((key) => typeof key === 'string') &&
     isTypedItinerary(input.itinerary)
 
   it(
@@ -875,35 +918,786 @@ describe('propriétés — cleanForTemplate', () => {
           )
           if (options.includeNotes) expect(summary.stays.notes).toBe(0)
           if (options.includePrices) expect(summary.stays.prices).toBe(0)
-
-          // Liens retirés ou vidés : exactement les liens privés comptés.
-          const removed = new Set<string>()
-          itinerary.forEach((day, index) => {
-            const out = output[index]
-            const pairs: [unknown, unknown][] = [
-              [day.accommodation?.bookingUrl, out.accommodation?.bookingUrl],
-              [day.transport?.bookingUrl, out.transport?.bookingUrl],
-              ...day.activities.map(
-                (activity, k) =>
-                  [activity.bookingUrl, out.activities[k].bookingUrl] as [
-                    unknown,
-                    unknown,
-                  ],
-              ),
-            ]
-            for (const [before, after] of pairs) {
-              if (
-                typeof before === 'string' &&
-                before.trim() !== '' &&
-                after !== before
-              ) {
-                removed.add(before.trim())
-              }
-            }
-          })
-          expect(summary.stays.privateLinks).toBe(removed.size)
+          expect(summary.stays.privateLinks).toBe(
+            removedLinks(itinerary, output).size,
+          )
+          expect(summary.stays.privateStays).toBe(
+            hiddenStayKeys(itinerary, options).size,
+          )
+          expect(summary.goes.accommodations).toBe(
+            templateStays(itinerary).length,
+          )
         },
         { shrinkValid: valid },
+      )
+    },
+    TIMEOUT,
+  )
+})
+
+/** Liens retirés ou vidés par le nettoyage, sans espaces autour, sans doublon. */
+function removedLinks(
+  itinerary: readonly DayItinerary[],
+  output: readonly DayItinerary[],
+): Set<string> {
+  const removed = new Set<string>()
+  itinerary.forEach((day, index) => {
+    const out = output[index]
+    const pairs: [unknown, unknown][] = [
+      [day.accommodation?.bookingUrl, out.accommodation?.bookingUrl],
+      [day.transport?.bookingUrl, out.transport?.bookingUrl],
+      ...day.activities.map(
+        (activity, k) =>
+          [activity.bookingUrl, out.activities[k].bookingUrl] as [
+            unknown,
+            unknown,
+          ],
+      ),
+    ]
+    for (const [before, after] of pairs) {
+      if (
+        typeof before === 'string' &&
+        before.trim() !== '' &&
+        after !== before
+      ) {
+        removed.add(before.trim())
+      }
+    }
+  })
+  return removed
+}
+
+/** Clés des hébergements du voyage que l'auteur a choisi de masquer. */
+function hiddenStayKeys(
+  itinerary: readonly DayItinerary[],
+  options: TemplateOptions,
+): Set<string> {
+  const wanted = new Set(options.privateStays)
+  return new Set(
+    itinerary.flatMap((day) =>
+      day.accommodation && wanted.has(stayKey(day.accommodation))
+        ? [stayKey(day.accommodation)]
+        : [],
+    ),
+  )
+}
+
+// ── Hébergements privés (§3.1) ────────────────────────────────────────────────
+
+const HOME_STREETS = [
+  'rue des Lilas',
+  'Rua dos Remédios',
+  "rue de l'Église",
+  'avenue Jean-Jaurès',
+  'Calle Mayor',
+  'Baker Street',
+  'Kabukicho',
+] as const
+const HOME_DETAILS = ['', '3e étage', 'digicode 4521', 'Apt 4B', 'porte 12']
+
+interface HomeAddress {
+  address: string
+  /**
+   * Ce qui désigne le logement : l'adresse, la rue et son numéro, le détail
+   * d'accès ; sans numéro, l'adresse entière seulement.
+   */
+  needles: string[]
+  /** Façons dont un voyageur la recopie ailleurs dans son voyage. */
+  variants: string[]
+}
+
+/** Maisons à la campagne, sans numéro : on ne cherche que l'adresse entière. */
+const HOME_HOUSES = [
+  'Quinta das Rosas',
+  'Le Mas des Oliviers',
+  'Villa Les Tamaris',
+  'Casa Azul',
+  'Ferme de la Combe',
+] as const
+const HOME_PLACES = [
+  'chemin de la Source',
+  'lieu-dit Kerbrat',
+  'hameau des Granges',
+  "route de l'Étang",
+  'Estrada de Monserrate',
+] as const
+
+/** « <maison>, <lieu-dit ou chemin>, <ville> » : aucun chiffre, plusieurs morceaux. */
+function randomCountryHome(rng: Rng, city: string): HomeAddress {
+  const address = [rng.pick(HOME_HOUSES), rng.pick(HOME_PLACES), city.trim()]
+    .filter(Boolean)
+    .join(', ')
+  return {
+    address,
+    needles: [address],
+    variants: [
+      address,
+      address.toUpperCase(),
+      address.toLowerCase(),
+      address.replace(/ /g, '  '),
+      address.replace(/, /g, ' ; '),
+      address.normalize('NFD').replace(/\p{M}/gu, ''),
+      address.replace(/'/g, '’'),
+    ],
+  }
+}
+
+function randomHomeAddress(rng: Rng, city: string): HomeAddress {
+  if (rng.bool(0.25)) return randomCountryHome(rng, city)
+  const street = `${rng.int(1, 240)} ${rng.pick(HOME_STREETS)}`
+  const detail = rng.pick(HOME_DETAILS)
+  const town = `${rng.int(10000, 99999)} ${city}`.trim()
+  const address = [street, detail, town].filter(Boolean).join(', ')
+  return {
+    address,
+    needles: [address, street, ...(detail ? [detail] : [])],
+    variants: [
+      address,
+      street,
+      address.toUpperCase(),
+      street.toLowerCase(),
+      street.replace(' ', ', '),
+      address.replace(/ /g, '  '),
+      street.normalize('NFD').replace(/\p{M}/gu, ''),
+      street.replace(/'/g, '’'),
+      ...(detail ? [detail] : []),
+    ],
+  }
+}
+
+/** Recopie l'adresse (`variant`) quelque part dans le voyage, comme le ferait un voyageur. */
+function leakAddress(
+  rng: Rng,
+  itinerary: DayItinerary[],
+  variant: string,
+  address: string,
+  serial: number,
+): void {
+  const day = rng.pick(itinerary)
+  const id = `home-${serial}`
+  switch (rng.int(0, 11)) {
+    case 0:
+      day.notes = `${day.notes ?? ''} Adresse : ${variant}.`
+      break
+    case 1:
+      day.tips = [...(day.tips ?? []), `Rentrer au ${variant} avant minuit`]
+      break
+    case 2:
+      day.highlights = [...(day.highlights ?? []), variant]
+      break
+    case 3:
+      day.title = `${day.title} — ${variant}`
+      break
+    case 4:
+      day.packingTips = [...(day.packingTips ?? []), variant]
+      break
+    case 5:
+      day.activities.push({
+        id,
+        name: `Dîner au ${variant}`,
+        type: 'food',
+        address: variant,
+        coordinates: [48.85, 2.38],
+        description: `Chez nous : ${variant}`,
+        tips: variant,
+      })
+      break
+    case 6:
+      day.activities.push({
+        id,
+        name: 'Plan',
+        type: 'visit',
+        bookingUrl: `https://www.google.com/maps/search/${encodeURIComponent(address)}`,
+      })
+      break
+    case 7:
+      day.activities.push({
+        id,
+        name: 'Carte',
+        type: 'visit',
+        images: [
+          `https://maps.googleapis.com/maps/api/staticmap?center=${address.replace(/ /g, '+')}`,
+        ],
+      })
+      break
+    case 8:
+      day.transport = day.transport
+        ? {
+            ...day.transport,
+            departureAddress: variant,
+            details: `Taxi depuis ${variant}`,
+          }
+        : { id, type: 'car', from: variant, to: day.city }
+      break
+    case 9:
+      day.images = [
+        ...(day.images ?? []),
+        {
+          url: `https://example.com/carte?q=${encodeURIComponent(variant)}`,
+          caption: `Vue du ${variant}`,
+        },
+      ]
+      break
+    case 10:
+      day.walkingDistance = `3 km depuis le ${variant}`
+      break
+    default:
+      day.activities.push({
+        id,
+        name: 'Courses',
+        type: 'shopping',
+        tags: ['marché', variant],
+        openAt: `08:00, devant le ${variant}`,
+      })
+  }
+}
+
+interface PrivateStayCase {
+  itinerary: DayItinerary[]
+  options: TemplateOptions
+  /** Les morceaux des adresses masquées, à ne retrouver nulle part. */
+  needles: string[]
+}
+
+/**
+ * Un voyage où l'auteur masque un ou plusieurs hébergements, dont l'adresse
+ * (avec numéro, parfois étage ou digicode) revient dans les notes, les
+ * conseils, les activités, les trajets, les liens et les images. Parfois le
+ * nom porte aussi la rue (« Hôtel Saint-Pierre 12 rue des Lilas »).
+ */
+function privateStayCase(rng: Rng): PrivateStayCase {
+  const itinerary = randomItinerary(rng, { maxDays: 8 })
+  if (!itinerary.some((day) => day.accommodation)) {
+    itinerary[0].accommodation = {
+      id: 'acc-home',
+      name: rng.pick(['Chez Marie', '']),
+      address: '',
+      bookingUrl: 'https://www.airbnb.fr/rooms/12345678901234',
+      checkIn: itinerary[0].date,
+      checkOut: '',
+      images: ['https://images.example.com/salon.jpeg'],
+    }
+  }
+  const stays = templateStays(itinerary)
+  const chosen = rng.subset(stays, 0.5)
+  if (chosen.length === 0) chosen.push(rng.pick(stays))
+  const hidden = new Set<Accommodation>()
+  const needles: string[] = []
+  let serial = 0
+  for (const stay of chosen) {
+    const home = randomHomeAddress(rng, stay.cities[0] ?? '')
+    const renamed = rng.bool(0.2)
+    for (const day of itinerary) {
+      const accommodation = day.accommodation
+      if (!accommodation || stayKey(accommodation) !== stay.key) continue
+      if (hidden.has(accommodation)) continue
+      accommodation.address = home.address
+      // Le nom porte aussi la rue (ou, sans numéro, l'adresse entière).
+      if (renamed) {
+        accommodation.name = `${accommodation.name} ${home.needles[1] ?? home.address}`
+      }
+      hidden.add(accommodation)
+    }
+    needles.push(...home.needles)
+    for (let count = rng.int(1, 6); count > 0; count -= 1) {
+      leakAddress(rng, itinerary, rng.pick(home.variants), home.address, serial)
+      serial += 1
+    }
+  }
+  const privateStays = [...new Set(Array.from(hidden, stayKey))]
+  if (rng.bool(0.1)) privateStays.push('#absent')
+  return {
+    itinerary,
+    options: {
+      includeNotes: rng.bool(),
+      includePrices: rng.bool(),
+      privateStays,
+    },
+    needles,
+  }
+}
+
+/** Sans accents ni casse, apostrophes et tirets unifiés, séparateurs ramenés à une espace. */
+function refPlain(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[’‘ʼ`]/g, "'")
+    .replace(/[‐‑‒–—]/g, '-')
+    .replace(/[\s,;]+/gu, ' ')
+}
+
+/** Le texte contient-il l'un des morceaux, en mots entiers ? `url` : lu aussi décodé. */
+function refHasNeedle(
+  text: string,
+  needles: readonly string[],
+  url = false,
+): boolean {
+  const forms = [text]
+  if (url) {
+    const spaced = text.replace(/\+/g, ' ')
+    forms.push(spaced)
+    try {
+      forms.push(decodeURIComponent(spaced))
+    } catch {
+      // Séquence `%` invalide : les formes brutes suffisent.
+    }
+  }
+  const isWord = (char: string | undefined) =>
+    char !== undefined && /[\p{L}\p{N}]/u.test(char)
+  return forms.some((form) => {
+    const hay = refPlain(form)
+    return needles.some((needle) => {
+      const plainNeedle = refPlain(needle).trim()
+      for (
+        let at = hay.indexOf(plainNeedle);
+        at !== -1;
+        at = hay.indexOf(plainNeedle, at + 1)
+      ) {
+        const end = at + plainNeedle.length
+        const opens = isWord(plainNeedle[0]) && isWord(hay[at - 1])
+        const closes =
+          isWord(plainNeedle[plainNeedle.length - 1]) && isWord(hay[end])
+        if (!opens && !closes) return true
+      }
+      return false
+    })
+  })
+}
+
+const URL_KEYS = new Set(['bookingUrl', 'url'])
+
+/** Chemins des textes du modèle où l'un des morceaux d'adresse ressort. */
+function addressLeaks(
+  value: unknown,
+  needles: readonly string[],
+  path = '',
+  key = '',
+  inImages = false,
+): string[] {
+  if (typeof value === 'string') {
+    if (key === 'id') return []
+    return refHasNeedle(value, needles, inImages || URL_KEYS.has(key))
+      ? [`${path} : ${value}`]
+      : []
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      addressLeaks(item, needles, `${path}[${index}]`, '', key === 'images'),
+    )
+  }
+  if (isRecord(value)) {
+    return Object.entries(value).flatMap(([name, item]) =>
+      addressLeaks(item, needles, `${path}.${name}`, name, false),
+    )
+  }
+  return []
+}
+
+/**
+ * Ce que le masquage ne doit pas toucher : chaque texte, lien, image ou
+ * coordonnée sans adresse masquée reste celui d'un nettoyage sans
+ * hébergement privé (`baseline`). Seuls l'adresse, le lien et les photos de
+ * l'hébergement masqué changent.
+ */
+function collateralDamage(
+  baseline: readonly DayItinerary[],
+  output: readonly DayItinerary[],
+  needles: readonly string[],
+  hiddenDays: ReadonlySet<number>,
+): string[] {
+  const errors: string[] = []
+  const compare = (
+    before: unknown,
+    after: unknown,
+    path: string,
+    skip: readonly string[] = [],
+  ) => {
+    if (!isRecord(before)) return
+    const kept = isRecord(after) ? after : {}
+    for (const [key, value] of Object.entries(before)) {
+      if (skip.includes(key) || key === 'activities') continue
+      if (typeof value === 'string') {
+        if (refHasNeedle(value, needles, URL_KEYS.has(key))) continue
+        if (kept[key] !== value) {
+          errors.push(
+            `${path}.${key} : « ${value} » → « ${String(kept[key])} »`,
+          )
+        }
+      } else if (Array.isArray(value) && key !== 'coordinates') {
+        const after = Array.isArray(kept[key]) ? (kept[key] as unknown[]) : []
+        for (const item of value) {
+          const text =
+            typeof item === 'string'
+              ? item
+              : isRecord(item)
+                ? `${item.url} ${item.caption}`
+                : ''
+          if (refHasNeedle(text, needles, key === 'images')) continue
+          if (
+            !after.some(
+              (other) => JSON.stringify(other) === JSON.stringify(item),
+            )
+          ) {
+            errors.push(`${path}.${key} : ${JSON.stringify(item)} perdu`)
+          }
+        }
+      }
+    }
+  }
+  baseline.forEach((day, index) => {
+    const out = output[index]
+    const path = `[${index}]`
+    compare(day, out, path, ['accommodation', 'transport'])
+    compare(day.transport, out.transport, `${path}.transport`)
+    compare(
+      day.accommodation,
+      out.accommodation,
+      `${path}.accommodation`,
+      hiddenDays.has(index) ? ['address', 'bookingUrl', 'images'] : [],
+    )
+    day.activities.forEach((activity, k) => {
+      const after = out.activities[k]
+      compare(activity, after, `${path}.activities[${k}]`)
+      const located = [activity.name, activity.address ?? '']
+      if (
+        activity.coordinates &&
+        !located.some((text) => refHasNeedle(text, needles)) &&
+        JSON.stringify(after.coordinates) !==
+          JSON.stringify(activity.coordinates)
+      ) {
+        errors.push(`${path}.activities[${k}].coordinates perdues`)
+      }
+    })
+  })
+  return errors
+}
+
+describe('propriétés — hébergements privés', () => {
+  const valid = (input: PrivateStayCase) =>
+    isRecord(input) &&
+    isRecord(input.options) &&
+    Array.isArray(input.options.privateStays) &&
+    input.options.privateStays.every((key) => typeof key === 'string') &&
+    typeof input.options.includeNotes === 'boolean' &&
+    typeof input.options.includePrices === 'boolean' &&
+    Array.isArray(input.needles) &&
+    // Un morceau vide ou réduit à rien se trouverait partout.
+    input.needles.every(
+      (needle) => typeof needle === 'string' && needle.trim().length >= 6,
+    ) &&
+    isTypedItinerary(input.itinerary)
+
+  it(
+    'ne laisse l’adresse masquée nulle part, et ne touche à rien d’autre',
+    () => {
+      checkProperty(
+        'adresse masquée partout',
+        privateStayCase,
+        ({ itinerary, options, needles }) => {
+          const output = cleanForTemplate(deepFreeze(itinerary), options)
+          const errors = cleanedErrors(itinerary, output, options)
+          if (errors.length > 0) throw new Error(errors.slice(0, 5).join(' ; '))
+          const leaks = addressLeaks(output, needles)
+          if (leaks.length > 0) {
+            throw new Error(
+              `adresse publiée : ${leaks.slice(0, 5).join(' ; ')}`,
+            )
+          }
+          const wanted = new Set(options.privateStays)
+          const hiddenDays = new Set(
+            itinerary.flatMap((day, index) =>
+              day.accommodation && wanted.has(stayKey(day.accommodation))
+                ? [index]
+                : [],
+            ),
+          )
+          const baseline = cleanForTemplate(itinerary, {
+            ...options,
+            privateStays: [],
+          })
+          const damage = collateralDamage(baseline, output, needles, hiddenDays)
+          if (damage.length > 0) throw new Error(damage.slice(0, 5).join(' ; '))
+        },
+        { shrinkValid: valid },
+      )
+    },
+    TIMEOUT,
+  )
+
+  it(
+    'reste idempotente, typée, et résumée exactement (A2)',
+    () => {
+      checkProperty(
+        'masquage idempotent et résumé',
+        privateStayCase,
+        ({ itinerary, options }) => {
+          const output = cleanForTemplate(itinerary, options)
+          expect(cleanForTemplate(deepFreeze(output), options)).toStrictEqual(
+            output,
+          )
+          expect(JSON.parse(JSON.stringify(output))).toStrictEqual(output)
+          expect(normalizeItineraryShape(output)).toStrictEqual(output)
+          expect(output.map((day) => day.id)).toEqual(
+            itinerary.map((day) => day.id),
+          )
+          const summary = summarizeTemplateCleaning(itinerary, options)
+          expect(summary.stays.privateLinks).toBe(
+            removedLinks(itinerary, output).size,
+          )
+          expect(summary.stays.privateStays).toBe(
+            hiddenStayKeys(itinerary, options).size,
+          )
+        },
+        { shrinkValid: valid },
+      )
+    },
+    TIMEOUT,
+  )
+
+  it(
+    'templateStays : un hébergement par clé, dans l’ordre du voyage, clés valides',
+    () => {
+      checkProperty(
+        'hébergements du voyage',
+        (rng) => randomItinerary(rng),
+        (itinerary) => {
+          const stays = templateStays(itinerary)
+          const keys = stays.map((stay) => stay.key)
+          const inOrder = itinerary
+            .flatMap((day) =>
+              day.accommodation ? [stayKey(day.accommodation)] : [],
+            )
+            .filter((key, index, all) => all.indexOf(key) === index)
+          expect(keys).toEqual(inOrder)
+          expect(parsePrivateStays(keys)).toEqual(keys)
+          for (const stay of stays) {
+            const days = itinerary.filter(
+              (day) =>
+                day.accommodation && stayKey(day.accommodation) === stay.key,
+            )
+            expect(stay.nights).toBeGreaterThanOrEqual(1)
+            expect(stay.name).toBe(stay.name.trim())
+            const cities = days.map((day) => day.city.trim())
+            for (const city of stay.cities) expect(cities).toContain(city)
+            expect(stay.suggestedPrivate).toBe(
+              days.some((day) =>
+                looksLikePrivateStay(day.accommodation as Accommodation),
+              ),
+            )
+          }
+        },
+        { shrinkValid: isTypedItinerary },
+      )
+    },
+    TIMEOUT,
+  )
+
+  it(
+    'stayKey : stable, bornée, insensible aux espaces, acceptée par la validation',
+    () => {
+      checkProperty(
+        'clé d’hébergement',
+        (rng) => ({
+          name: rng.bool(0.8) ? randomUnicode(rng, 60) : rng.pick(HOME_STREETS),
+          padding: rng.pick(['', ' ', '  ', ' ', '\t']),
+        }),
+        ({ name, padding }) => {
+          const key = stayKey({ id: 'acc-1', name })
+          expect(isStayKey(key)).toBe(true)
+          expect(key.length).toBeLessThanOrEqual(MAX_STAY_KEY_LENGTH)
+          expect(
+            stayKey({
+              id: 'acc-1',
+              name: `${padding}${name.replace(/ /g, '  ')}${padding}`,
+            }),
+          ).toBe(key)
+          if (!key.startsWith('#')) {
+            expect(stayKey({ id: 'acc-2', name: key })).toBe(key)
+          }
+        },
+      )
+    },
+    TIMEOUT,
+  )
+})
+
+// ── Republier un voyage repris (§2.4) ─────────────────────────────────────────
+
+/** Le voyage d'un repreneur : `itinerary`, repris de `base`. */
+function takenTrip(
+  base: readonly DayItinerary[],
+  itinerary: DayItinerary[],
+): StoredTrip {
+  const origin: TemplateOrigin = {
+    templateId: '0123456789abcdef',
+    version: 1,
+    title: 'Modèle',
+    authorName: null,
+    tripYear: null,
+    startDate: '2027-01-01',
+    keptDayIds: base.map((day) => day.id),
+    base: JSON.parse(JSON.stringify(base)) as DayItinerary[],
+    takenAt: 0,
+  }
+  return {
+    id: 'trip-repris',
+    title: 'Repris',
+    itinerary,
+    source: 'template',
+    createdAt: 0,
+    updatedAt: 0,
+    origin,
+  }
+}
+
+/** Tout le voyage décalé de `offset` jours, ids compris tels quels. */
+function shiftedKeepingIds(
+  itinerary: readonly DayItinerary[],
+  offset: number,
+): DayItinerary[] {
+  return itinerary.map((day) => {
+    const moved = refShiftDeep(day, offset)
+    return {
+      ...moved,
+      id: day.id,
+      activities: moved.activities.map((activity, k) => ({
+        ...activity,
+        id: day.activities[k].id,
+      })),
+      ...(moved.accommodation && day.accommodation
+        ? {
+            accommodation: { ...moved.accommodation, id: day.accommodation.id },
+          }
+        : {}),
+      ...(moved.transport && day.transport
+        ? { transport: { ...moved.transport, id: day.transport.id } }
+        : {}),
+    }
+  })
+}
+
+/**
+ * Ce que le repreneur change sans que rien ne parte jamais dans un modèle.
+ * Une référence n'est ajoutée que là où il n'y en a pas : en remplacer une
+ * rendrait public un lien qui la contenait, ce qui change bien le modèle.
+ */
+function privateOnlyEdits(rng: Rng, days: DayItinerary[]): DayItinerary[] {
+  let edited = structuredClone(days)
+  for (const day of edited) {
+    for (const activity of day.activities) {
+      if (rng.bool(0.3))
+        activity.status = rng.pick(['done', 'skipped'] as const)
+      if (rng.bool(0.1) && activity.bookingUrl === undefined) {
+        activity.bookingUrl =
+          'https://secure.booking.com/confirmation.fr.html?aid=1'
+      }
+      if (rng.bool(0.1)) {
+        activity.images = [
+          ...(activity.images ?? []),
+          'blob:https://app.tripbrain.fr/6f1c',
+        ]
+      }
+    }
+    if (day.transport && rng.bool(0.4)) {
+      day.transport = {
+        ...day.transport,
+        status: 'booked',
+        bookingReference: day.transport.bookingReference ?? 'ZQ9X7W2K',
+        seat: '12A',
+        gate: 'B42',
+      }
+    }
+    if (day.accommodation && rng.bool(0.4)) {
+      day.accommodation = {
+        ...day.accommodation,
+        status: 'checked-in',
+        bookingReference: day.accommodation.bookingReference ?? 'ZQ9X7W2K',
+      }
+    }
+  }
+  if (rng.bool(0.3))
+    edited = shiftedKeepingIds(edited, rng.pick([-28, -7, -1, 1, 3, 30, 365]))
+  return edited
+}
+
+/** Une vraie retouche, de celles qui changent le modèle publié. */
+function contentEdit(rng: Rng, days: DayItinerary[]): string {
+  const day = rng.pick(days)
+  const kind = rng.int(0, 6)
+  if (kind === 0 && days.length > 1) {
+    days.splice(days.indexOf(day), 1)
+    return 'journée retirée'
+  }
+  if (kind === 1 && days.length > 1) {
+    days.reverse()
+    return 'journées inversées'
+  }
+  if (kind === 2) {
+    day.title = `${day.title} (modifié)`
+    return 'titre de journée'
+  }
+  if (kind === 3) {
+    day.tips = [...(day.tips ?? []), 'Nouveau conseil']
+    return 'conseil ajouté'
+  }
+  if (kind === 4 && day.accommodation) {
+    day.accommodation = {
+      ...day.accommodation,
+      name: `${day.accommodation.name} (autre)`,
+    }
+    return 'hôtel changé'
+  }
+  if (kind === 5 && day.activities.length > 0) {
+    const activity = rng.pick(day.activities)
+    activity.price = (activity.price ?? 0) + 1
+    return 'prix changé'
+  }
+  day.activities.push({
+    id: 'nouvelle-activite',
+    name: 'Nouvelle activité',
+    type: 'visit',
+  })
+  return 'activité ajoutée'
+}
+
+describe('propriétés — templatePublishBlocker', () => {
+  it(
+    'un voyage repris ne se republie qu’une fois son contenu retouché',
+    () => {
+      checkProperty(
+        'reprise retouchée',
+        (rng) => {
+          const base = randomItinerary(rng, { maxDays: 8 })
+          const untouched = privateOnlyEdits(rng, base)
+          const edited = structuredClone(untouched)
+          const edit = contentEdit(rng, edited)
+          return { base, untouched, edited, edit }
+        },
+        ({ base, untouched, edited, edit }) => {
+          expect(
+            templatePublishBlocker(takenTrip(base, structuredClone(base))),
+          ).toBe('unmodified-take')
+          expect(templatePublishBlocker(takenTrip(base, untouched))).toBe(
+            'unmodified-take',
+          )
+          expect(
+            templatePublishBlocker(takenTrip(base, edited)),
+            edit,
+          ).toBeNull()
+        },
+        {
+          shrinkValid: (input) =>
+            isRecord(input) &&
+            typeof input.edit === 'string' &&
+            isTypedItinerary(input.base) &&
+            input.base.length > 0 &&
+            isTypedItinerary(input.untouched) &&
+            input.untouched.length > 0 &&
+            isTypedItinerary(input.edited) &&
+            input.edited.length > 0,
+        },
       )
     },
     TIMEOUT,
@@ -940,6 +1734,52 @@ describe('propriétés — normalizeItineraryShape', () => {
         if (once === null) return
         expect(normalizeItineraryShape(once)).toStrictEqual(once)
       })
+    },
+    TIMEOUT,
+  )
+
+  it(
+    'garde chaque trajet qui a un id, son type ramené à un type de l’app',
+    () => {
+      // Ce qu'un tableur, une autre version de l'app ou msgpack peut dire.
+      const rawTypes = [
+        'Ferry',
+        'navette maritime',
+        'TGV',
+        'Métro',
+        'taxi',
+        'teleporter',
+        '',
+        'BOAT',
+        42,
+        null,
+        { type: 'ferry' },
+      ] as const
+      checkProperty(
+        'trajets gardés',
+        (rng) =>
+          randomItinerary(rng, { maxDays: 6, unknownKeys: false }).map((day) =>
+            day.transport && rng.bool(0.6)
+              ? {
+                  ...day,
+                  transport: {
+                    ...day.transport,
+                    type: rng.pick(rawTypes) as unknown as string,
+                  },
+                }
+              : day,
+          ),
+        (itinerary) => {
+          const output = normalizeItineraryShape(itinerary)
+          expect(output).not.toBeNull()
+          itinerary.forEach((day, index) => {
+            const kept = output?.[index].transport
+            if (!day.transport) return expect(kept).toBeUndefined()
+            expect(kept?.id).toBe(day.transport.id)
+            expect(kept?.type).toBe(normalizeTransportType(day.transport.type))
+          })
+        },
+      )
     },
     TIMEOUT,
   )
@@ -2217,7 +3057,9 @@ describe('propriétés — templateTodo et tripYear', () => {
           expect(todo.accommodations).toEqual([...hotels.values()])
           expect(todo.transports).toBe(
             retimed.filter((day) =>
-              ['train', 'plane', 'bus'].includes(day.transport?.type ?? ''),
+              ['train', 'plane', 'bus', 'boat'].includes(
+                day.transport?.type ?? '',
+              ),
             ).length,
           )
           expect(todo.bookableActivities).toBe(
@@ -2259,7 +3101,7 @@ describe('propriétés — templateTodo et tripYear', () => {
             const transport = day.transport
             if (transport) {
               const expected =
-                ['train', 'plane', 'bus'].includes(transport.type) &&
+                ['train', 'plane', 'bus', 'boat'].includes(transport.type) &&
                 blank(transport.bookingReference) &&
                 !booked(transport.status)
               expect(needsBooking(transport)).toBe(expected)
@@ -2480,7 +3322,9 @@ describe('défauts corrigés (anciens it.fails, gardés en non-régression)', ()
             expect(after[rank]?.key ?? null).toBe(before[index]?.key ?? null)
           }
         },
-        { ...KNOWN_BUG, shrinkValid: isValidRetimeCase },
+        // Graine libre : le défaut que figeait `KNOWN_BUG` est corrigé, la
+        // propriété suit désormais FUZZ_SEED et FUZZ_RUNS comme les autres.
+        { shrinkValid: isValidRetimeCase },
       )
     },
     TIMEOUT,
@@ -2552,9 +3396,10 @@ describe('défauts corrigés (anciens it.fails, gardés en non-régression)', ()
       checkProperty(
         'bords du calendrier',
         (rng) => {
+          const authored = randomItinerary(rng, { maxDays: 6 })
           const itinerary = cleanForTemplate(
-            randomItinerary(rng, { maxDays: 6 }),
-            randomOptions(rng),
+            authored,
+            randomOptions(rng, authored),
           )
           return {
             itinerary,

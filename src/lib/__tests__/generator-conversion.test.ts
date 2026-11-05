@@ -1,5 +1,6 @@
 import { analyzeItinerary } from '@/lib/generator/itinerary-quality'
 import {
+  parseGeneratedItinerary,
   toDayItineraries,
   type GeneratedItinerary,
 } from '@/lib/generator/itinerary-schema'
@@ -142,4 +143,48 @@ describe('readGeneratedItinerary', () => {
       ).itinerary,
     ).toBeNull()
   })
+})
+
+describe('type de trajet généré', () => {
+  const withTransport = (type: unknown) => ({
+    ...GENERATED,
+    days: [
+      { ...GENERATED.days[1], transport: { type, from: 'Nice', to: 'Bastia' } },
+    ],
+  })
+
+  it('accepte le bateau', () => {
+    const { itinerary, droppedDays } = parseGeneratedItinerary(
+      withTransport('boat'),
+    )
+    expect(droppedDays).toBe(0)
+    expect(itinerary?.days[0].transport?.type).toBe('boat')
+    expect(toDayItineraries(itinerary!)[0].transport?.type).toBe('boat')
+  })
+
+  it.each([
+    ['ferry', 'boat'],
+    ['Ferry', 'boat'],
+    ['flight', 'plane'],
+    ['TGV', 'train'],
+    ['taxi', 'car'],
+  ])('ramène « %s » à %s plutôt que d’écarter la journée', (raw, expected) => {
+    const { itinerary, droppedDays } = parseGeneratedItinerary(
+      withTransport(raw),
+    )
+    expect(droppedDays).toBe(0)
+    expect(itinerary?.days[0].transport?.type).toBe(expected)
+  })
+
+  it.each(['other', 'teleporter', undefined])(
+    'écarte toujours la journée d’un type non classé (%s)',
+    (raw) => {
+      const { itinerary, droppedDays, issues } = parseGeneratedItinerary(
+        withTransport(raw),
+      )
+      expect(itinerary).toBeNull()
+      expect(droppedDays).toBe(1)
+      expect(issues[0].path).toBe('transport.type')
+    },
+  )
 })

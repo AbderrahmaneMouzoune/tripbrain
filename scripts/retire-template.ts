@@ -1,10 +1,12 @@
 // Retrait d'un itinéraire modèle par l'opérateur : contenu signalé, abus, ou
 // auteur qui a perdu son téléphone (et avec lui le jeton qui lui permettait
 // de retirer son modèle). Mêmes effets qu'un retrait par l'auteur : pierre
-// tombale, versions supprimées, sortie de l'index public, slugs gardés — le
-// slug actuel et ceux d'avant une mise à jour, et avec eux le pays, le nombre
-// de jours et jusqu'à 3 villes qu'ils contiennent. Un ancien slug désigne le
-// modèle aussi bien que l'actuel.
+// tombale sans slug, versions supprimées, sortie de l'index public, slugs
+// réservés pour toujours mais seulement sous leur empreinte SHA-256 — le slug
+// actuel et ceux d'avant une mise à jour, sans que le bucket dise encore quel
+// pays, quelle durée ni quelles villes ils portaient. Un ancien slug désigne
+// le modèle aussi bien que l'actuel, avant comme après le retrait : la
+// commande le hache pour retrouver sa réservation.
 //
 //   bun --no-env-file scripts/retire-template.ts <id|slug|lien>
 //
@@ -21,12 +23,7 @@
 
 import { fileURLToPath } from 'node:url'
 import { getTemplateStore } from '@/lib/template-bucket'
-import {
-  isListed,
-  isRetiredTemplateMeta,
-  isTemplateId,
-  isTemplateSlug,
-} from '@/lib/template-model'
+import { isListed, isTemplateId, isTemplateSlug } from '@/lib/template-model'
 import {
   isTemplateStoreError,
   readTemplateForOperator,
@@ -88,17 +85,20 @@ function versions(left: number | null, retired: boolean): string {
 /** L'état d'un modèle, en quelques lignes lisibles. Jamais l'empreinte du jeton. */
 export function describeState(state: OperatorTemplateState): string[] {
   if (state.status === 'missing') return ['introuvable']
-  const { meta, inIndex, versionsLeft } = state
-  if (isRetiredTemplateMeta(meta)) {
+  const { inIndex, versionsLeft } = state
+  if (state.status === 'retired') {
+    const { meta } = state
+    // La pierre tombale ne garde aucun slug : l'id seul la désigne.
     return [
       `retiré le ${meta.retiredAt} · ${index(inIndex)}`,
-      `id ${meta.id} · slug ${meta.slug} · version ${meta.version}`,
+      `id ${meta.id} · version ${meta.version}`,
       versions(versionsLeft, true),
       meta.wasListed
         ? 'était listé : https://tripbrain.fr/itineraires/<slug> répond 410, anciens slugs compris'
         : 'n’était pas listé : https://tripbrain.fr/itineraires/<slug> répond 404, anciens slugs compris',
     ]
   }
+  const { meta } = state
   return [
     `en ligne · ${isListed(meta) ? 'listé sur tripbrain.fr' : 'non listé (lien seulement)'} · ${index(inIndex)}`,
     `id ${meta.id} · slug ${meta.slug} · version ${meta.version}`,
@@ -157,7 +157,11 @@ export async function retireTemplateCommand(
       deps.error(`Aucun modèle pour « ${ref} ».`)
       return 1
     }
-    if (isTemplateSlug(ref) && before.meta.slug !== ref) {
+    if (
+      before.status === 'active' &&
+      isTemplateSlug(ref) &&
+      before.meta.slug !== ref
+    ) {
       deps.log(
         `« ${ref} » est un ancien slug de ce modèle : son slug actuel est ${before.meta.slug}.`,
       )
@@ -167,7 +171,7 @@ export async function retireTemplateCommand(
     deps.log(
       retirement.alreadyRetired
         ? 'Déjà retiré : versions et index revus.'
-        : 'Retiré.',
+        : 'Retiré. Ses slugs ne restent réservés que sous leur empreinte.',
     )
 
     const after = await readTemplateForOperator(bucket, ref)
@@ -177,20 +181,18 @@ export async function retireTemplateCommand(
       after.inIndex !== false ||
       after.versionsLeft !== 0
     ) {
-      deps.error(
-        'Le modèle n’est pas entièrement retiré. Relancez la commande.',
-      )
+      deps.error('Le modèle n’est pas entièrement retiré. Relance la commande.')
       return 1
     }
     return 0
   } catch (error) {
     if (isTemplateStoreError(error) && error.code === 'index') {
       deps.error(
-        'La pierre tombale est en place (le modèle répond 410), mais l’index public n’a pas suivi. Relancez la même commande.',
+        'La pierre tombale est en place (le modèle répond 410), mais l’index public n’a pas suivi. Relance la même commande.',
       )
     } else if (isTemplateStoreError(error) && error.code === 'versions') {
       deps.error(
-        'La pierre tombale est en place (le modèle répond 410), mais ses versions (le contenu de l’auteur) n’ont pas été supprimées. Relancez la même commande.',
+        'La pierre tombale est en place (le modèle répond 410), mais ses versions (le contenu de l’auteur) n’ont pas été supprimées. Relance la même commande.',
       )
     } else {
       deps.error(`Échec : ${message(error)}`)

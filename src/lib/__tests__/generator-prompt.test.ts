@@ -114,6 +114,25 @@ describe('buildBriefPrompt', () => {
   })
 })
 
+describe('bateau', () => {
+  it('le format JSON propose le type "boat" pour les ferries', () => {
+    expect(JSON_SHAPE).toContain('"type":"train|car|plane|bus|boat"')
+    expect(JSON_SHAPE).not.toContain('other')
+    const { system } = buildExpressPrompt('Les Cyclades', '2027-06-01', 7)
+    expect(system).toContain('un ferry ou un bateau prend le type "boat"')
+  })
+
+  it('le voyageur peut autoriser le bateau parmi ses transports', () => {
+    const rules = buildBriefRules({
+      ...SAMPLE_BRIEF,
+      transports: ['train', 'boat'],
+    })
+    expect(rules.join('\n')).toContain(
+      'uniquement avec le train et le bateau ou le ferry',
+    )
+  })
+})
+
 describe('buildBriefRules', () => {
   it('laisse la marche possible quand les transports sont restreints', () => {
     const rules = buildBriefRules({ ...SAMPLE_BRIEF, transports: ['train'] })

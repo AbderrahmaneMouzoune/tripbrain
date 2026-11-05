@@ -1,18 +1,28 @@
 import {
+  DEFAULT_TEMPLATE_OPTIONS,
   MAX_SLUG_LENGTH,
+  MAX_STAY_KEY_LENGTH,
   MAX_TEMPLATE_CITIES,
   MAX_TEMPLATE_CITY_LENGTH,
+  MAX_TEMPLATE_PRIVATE_STAYS,
+  checkPrivateStays,
   idSuffixedSlug,
   isListed,
-  isRetiredTemplateMeta,
+  isStayKey,
   isTemplateSlug,
+  isTombstone,
+  parsePrivateStays,
+  privateStayIds,
   slugify,
+  stayKey,
   suffixedSlug,
   templateCities,
   templateSlug,
   toIndexEntry,
-  type RetiredTemplateMeta,
+  toPublicTemplate,
+  unmatchedPrivateStays,
   type TemplateMeta,
+  type TemplateTombstone,
 } from '@/lib/template-model'
 import { day } from './helpers/template-fixtures'
 
@@ -27,6 +37,7 @@ function meta(overrides: Partial<TemplateMeta> = {}): TemplateMeta {
     indexable: true,
     includesNotes: false,
     includesPrices: true,
+    privateStays: [],
     dayCount: 3,
     cities: ['Tokyo', 'Kyoto'],
     tripYear: 2026,
@@ -214,9 +225,8 @@ describe('toIndexEntry', () => {
 })
 
 describe('modèle en ligne ou pierre tombale', () => {
-  const tombstone: RetiredTemplateMeta = {
+  const tombstone: TemplateTombstone = {
     id: '0123456789abcdef',
-    slug: 'japon-3-jours-tokyo-kyoto',
     version: 2,
     publishedAt: '2026-11-03T10:00:00.000Z',
     retiredAt: '2026-11-04T08:30:00.000Z',
@@ -225,8 +235,19 @@ describe('modèle en ligne ou pierre tombale', () => {
   }
 
   it('distingue une pierre tombale par sa date de retrait', () => {
-    expect(isRetiredTemplateMeta(meta())).toBe(false)
-    expect(isRetiredTemplateMeta(tombstone)).toBe(true)
+    expect(isTombstone(meta())).toBe(false)
+    expect(isTombstone(tombstone)).toBe(true)
+  })
+
+  it('ne garde aucun slug dans la pierre tombale', () => {
+    expect(tombstone).not.toHaveProperty('slug')
+    // Le type le refuse : un slug dirait le pays, la durée et les villes.
+    const withSlug: TemplateTombstone = {
+      ...tombstone,
+      // @ts-expect-error — `slug` n'appartient pas à `TemplateTombstone`.
+      slug: 'japon-3-jours-tokyo-kyoto',
+    }
+    expect(isTombstone(withSlug)).toBe(true)
   })
 
   it('ne liste qu’un modèle visible, d’au moins deux jours et en ligne', () => {
@@ -240,5 +261,160 @@ describe('modèle en ligne ou pierre tombale', () => {
         retiredAt: tombstone.retiredAt,
       }),
     ).toBe(false)
+  })
+})
+
+describe('toPublicTemplate', () => {
+  it('ne dit jamais quels hébergements sont des logements privés', () => {
+    const template = toPublicTemplate(
+      meta({ privateStays: ['cheztantelurdes'] }),
+      [],
+    )
+    expect(template).not.toHaveProperty('privateStays')
+    expect(template).not.toHaveProperty('ownerTokenHash')
+    expect(template).not.toHaveProperty('retiredAt')
+    expect(JSON.stringify(template)).not.toContain('cheztantelurdes')
+    expect(template).toMatchObject({ includesPrices: true, listed: true })
+  })
+})
+
+describe('hébergements privés : clés et réglages', () => {
+  it('publie par défaut toutes les adresses', () => {
+    expect(DEFAULT_TEMPLATE_OPTIONS.privateStays).toEqual([])
+  })
+
+  it('donne la même clé à chaque écriture du même nom', () => {
+    const key = stayKey({ id: 'acc-1', name: 'Chez Tante Lurdes' })
+    expect(key).toBe('cheztantelurdes')
+    for (const name of [
+      'chez tante lurdes',
+      '  CHEZ   TANTE  LURDES ',
+      'Chéz Tânte Lurdes',
+      'Chez Tante Lurdes',
+      'Ｃｈｅｚ Tante Lurdes',
+    ]) {
+      expect(stayKey({ id: 'acc-2', name })).toBe(key)
+    }
+    expect(stayKey({ id: 'acc-3', name: 'Chez Tante Lurdes 2' })).not.toBe(key)
+  })
+
+  it('désigne un hébergement sans nom par son id', () => {
+    expect(stayKey({ id: 'acc-7', name: '' })).toBe('#acc-7')
+    expect(stayKey({ id: 'acc-7', name: ' ​ ' })).toBe('#acc-7')
+  })
+
+  it('donne une clé stable, bornée, que la validation accepte', () => {
+    for (const name of [
+      'İstanbul Evi',
+      'ℌaus am See',
+      'Ǆungla',
+      '東京の家',
+      '🏠 Maison',
+      'x'.repeat(500),
+      `${'🏠'.repeat(150)}`,
+    ]) {
+      const key = stayKey({ id: 'acc', name })
+      expect(key.length).toBeLessThanOrEqual(MAX_STAY_KEY_LENGTH)
+      expect(key.isWellFormed()).toBe(true)
+      expect(stayKey({ id: 'autre', name: key })).toBe(key)
+      expect(isStayKey(key)).toBe(true)
+    }
+  })
+
+  it('refuse un nom brut, un texte vide ou trop long', () => {
+    expect(isStayKey('cheztantelurdes')).toBe(true)
+    expect(isStayKey('#acc-7')).toBe(true)
+    expect(isStayKey('Chez Tante Lurdes')).toBe(false)
+    expect(isStayKey('chez tante')).toBe(false)
+    expect(isStayKey('')).toBe(false)
+    expect(isStayKey('x'.repeat(MAX_STAY_KEY_LENGTH + 1))).toBe(false)
+    expect(isStayKey('\ud83c')).toBe(false)
+    expect(isStayKey(42)).toBe(false)
+  })
+
+  it('valide une liste reçue : clés valides, sans doublon, bornée', () => {
+    expect(parsePrivateStays([])).toEqual([])
+    expect(
+      parsePrivateStays(['cheztantelurdes', '#acc-7', 'cheztantelurdes']),
+    ).toEqual(['cheztantelurdes', '#acc-7'])
+    expect(parsePrivateStays(undefined)).toBeNull()
+    expect(parsePrivateStays('cheztantelurdes')).toBeNull()
+    expect(parsePrivateStays(['Chez Tante Lurdes'])).toBeNull()
+    expect(parsePrivateStays([null])).toBeNull()
+    expect(
+      parsePrivateStays(
+        Array.from({ length: MAX_TEMPLATE_PRIVATE_STAYS }, (_, i) => `#${i}`),
+      ),
+    ).toHaveLength(MAX_TEMPLATE_PRIVATE_STAYS)
+    expect(
+      parsePrivateStays(
+        Array.from(
+          { length: MAX_TEMPLATE_PRIVATE_STAYS + 1 },
+          (_, i) => `#${i}`,
+        ),
+      ),
+    ).toBeNull()
+  })
+})
+
+describe('hébergements privés renommés après la publication (A4)', () => {
+  const marie = (id: string, name = 'Chez Marie') => ({
+    id,
+    name,
+    address: '12 rue des Lilas, 3e étage',
+    bookingUrl: '',
+    checkIn: '2026-04-01',
+    checkOut: '2026-04-03',
+  })
+  const published = (name: string) => [
+    day(1, { accommodation: marie('acc-marie-1', name) }),
+    day(2, { accommodation: marie('acc-marie-2', name) }),
+    day(3, {
+      accommodation: {
+        ...marie('acc-hotel'),
+        name: 'Hotel Gracery',
+        address: '',
+      },
+    }),
+  ]
+
+  it('retient les ids des hébergements masqués, une fois chacun', () => {
+    expect(privateStayIds(published('Chez Marie'), ['chezmarie'])).toEqual([
+      'acc-marie-1',
+      'acc-marie-2',
+    ])
+    expect(privateStayIds(published('Chez Marie'), [])).toEqual([])
+  })
+
+  it('repère une clé qui ne désigne plus aucun hébergement', () => {
+    const renamed = published('Chez Marie & Paul')
+    expect(unmatchedPrivateStays(renamed, ['chezmarie'])).toEqual(['chezmarie'])
+    expect(unmatchedPrivateStays(renamed, ['chezmarie&paul'])).toEqual([])
+    expect(
+      unmatchedPrivateStays(published('Chez Marie'), ['chezmarie']),
+    ).toEqual([])
+  })
+
+  it('retrouve par son id un hébergement masqué puis renommé', () => {
+    const info = {
+      privateStays: ['chezmarie'],
+      privateStayIds: privateStayIds(published('Chez Marie'), ['chezmarie']),
+    }
+    expect(checkPrivateStays(published('Chez Marie'), info)).toEqual({
+      privateStays: ['chezmarie'],
+      carried: [],
+      unmatched: [],
+    })
+    expect(checkPrivateStays(published('Chez Marie & Paul'), info)).toEqual({
+      privateStays: ['chezmarie&paul'],
+      carried: ['chezmarie&paul'],
+      unmatched: ['chezmarie'],
+    })
+    // Publié avant `privateStayIds` : la clé perdue est signalée quand même.
+    expect(
+      checkPrivateStays(published('Chez Marie & Paul'), {
+        privateStays: ['chezmarie'],
+      }),
+    ).toEqual({ privateStays: [], carried: [], unmatched: ['chezmarie'] })
   })
 })

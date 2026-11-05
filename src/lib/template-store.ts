@@ -8,9 +8,11 @@
 //   <id>/meta       TemplateMeta — `ifAbsent` à la création, puis `ifMatch`
 //   <id>/v/<n>      { version, title, itinerary } — `ifAbsent`, jamais
 //                   réécrit ; seule la version publiée survit à une mise à jour
-//   slugs/<slug>    { id } — `ifAbsent`, jamais réutilisé ; un modèle dont la
-//                   durée ou les villes changent en prend un nouveau, et ses
-//                   anciens slugs continuent de pointer vers lui
+//   slugs/<empr.>   { id }, sous l'empreinte SHA-256 du slug — `ifAbsent`,
+//                   jamais réutilisé ; un modèle dont la durée ou les villes
+//                   changent en prend un nouveau, et ses anciens slugs
+//                   continuent de pointer vers lui. Aucun slug n'est écrit en
+//                   clair ailleurs que dans la méta d'un modèle en ligne.
 //   owners/<empr.>  { id } — `ifAbsent`, réservé avant toute autre écriture
 //                   par une publication dont le téléphone a tiré le jeton :
 //                   la rejouer retrouve le même modèle (`publishTemplate`)
@@ -22,8 +24,9 @@
 // versions précédentes : la base de fusion de la V1.1 vit sur le téléphone du
 // repreneur (`StoredTrip.origin.base`), et une note ou un prix que l'auteur
 // retire ne doit pas rester en ligne. Retiré, un modèle ne garde qu'une
-// pierre tombale (`RetiredTemplateMeta`), par son auteur comme par l'opérateur
-// (`retireTemplateAsOperator`, `scripts/retire-template.ts`). L'index suit toujours la méta
+// pierre tombale sans slug (`TemplateTombstone`), par son auteur comme par
+// l'opérateur (`retireTemplateAsOperator`, `scripts/retire-template.ts`) :
+// plus rien de lisible ne dit ce qu'il contenait. L'index suit toujours la méta
 // stockée, relue au moment de l'écrire (`syncIndex`). S'il échoue sur un
 // ajout, le modèle manque au sitemap jusqu'à sa prochaine écriture ; sur une
 // sortie (masqué, retiré), la requête échoue pour que l'auteur la rejoue. Une
@@ -33,13 +36,16 @@
 // `resyncTemplateIndex` rattrape ensuite les modèles restés dehors.
 //
 // Les dates du voyage sont floutées avant tout stockage (`blurTemplateDates`) :
-// le modèle d'un voyage à venir ne dit pas quand son auteur sera absent.
+// le modèle d'un voyage à venir ne dit pas quand son auteur sera absent. Les
+// hébergements privés (`TemplateOptions.privateStays`) sont gardés dans la
+// méta, jamais publiés, et réappliqués à chaque mise à jour.
 //
 // Aucune écriture ne passe `expiresIn` : un modèle reste en ligne tant que son
 // auteur ne le retire pas.
 //
 // Conception : `docs/itineraire-modele-technique.md` §4.
 
+import { createHash } from 'node:crypto'
 import {
   isS3ndError,
   type GetSnapshotOptions,
@@ -50,7 +56,11 @@ import {
 import { cleanAuthor } from '@/lib/group-sync'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { SHARE_APP } from '@/lib/share-store'
-import { cleanForTemplate } from '@/lib/template-clean'
+import {
+  MAX_ADDRESS_SEARCH_WORK,
+  cleanForTemplate,
+  isAddressSearchTooCostlyError,
+} from '@/lib/template-clean'
 import { blurTemplateDates } from '@/lib/template-dates'
 import {
   MAX_TEMPLATE_TITLE_LENGTH,
@@ -60,21 +70,23 @@ import {
   idSuffixedSlug,
   isCountryCode,
   isListed,
-  isRetiredTemplateMeta,
   isTemplateId,
   isTemplateSlug,
+  isTombstone,
+  parsePrivateStays,
   suffixedSlug,
   templateCities,
   templateSlug,
   toIndexEntry,
   toPublicTemplate,
   tripYear,
+  unmatchedPrivateStays,
   type PublicTemplate,
-  type RetiredTemplateMeta,
-  type StoredTemplateMeta,
+  type StoredTemplateRecord,
   type TemplateIndexEntry,
   type TemplateMeta,
   type TemplateOptions,
+  type TemplateTombstone,
 } from '@/lib/template-model'
 import { normalizeItineraryShape } from '@/lib/template-shape'
 import {
@@ -107,6 +119,16 @@ export interface TemplateBucket {
   ): Promise<Snapshot<unknown> | null>
   delete(key: string | string[]): Promise<void>
 }
+
+// ── Méta stockée ──────────────────────────────────────────────────────────────
+
+/*
+ * `<id>/meta` contient un `StoredTemplateRecord` (`template-model.ts`) : la
+ * méta d'un modèle en ligne, ou sa pierre tombale `TemplateTombstone`, sans
+ * aucun slug — retiré, un modèle n'en laisse plus que les empreintes, dans
+ * `slugs/<empreinte>` (`templateSlugKey`).
+ */
+export type { StoredTemplateRecord, TemplateTombstone }
 
 /**
  * Version du format des snapshots de modèle. À incrémenter si leur forme
@@ -207,8 +229,23 @@ export function templateVersionKey(id: string, version: number): string {
   return `${id}/v/${version}`
 }
 
+/**
+ * Empreinte d'un slug : SHA-256 de son texte, en hexadécimal minuscule
+ * (64 caractères). C'est sous elle, jamais en clair, que le slug est réservé.
+ */
+export function hashTemplateSlug(slug: string): string {
+  return createHash('sha256').update(slug, 'utf8').digest('hex')
+}
+
+/**
+ * Réservation d'un slug : `slugs/<empreinte>` → `{ id }`. Le slug n'apparaît
+ * ni dans la clé ni dans la valeur : retiré, un modèle ne laisse dans le
+ * bucket ni son pays, ni sa durée, ni ses villes. Une lecture par le slug
+ * (`readTemplateBySlug`, l'opérateur) le hache pour retrouver la réservation ;
+ * personne ne peut lister les slugs réservés.
+ */
 export function templateSlugKey(slug: string): string {
-  return `slugs/${slug}`
+  return `slugs/${hashTemplateSlug(slug)}`
 }
 
 /**
@@ -243,17 +280,20 @@ const ERROR_MESSAGES: Record<TemplateStoreErrorCode, string> = {
   missing: 'Ce modèle n’existe pas.',
   retired: 'Ce modèle a été retiré.',
   forbidden: 'Cet appareil n’est pas autorisé à modifier ce modèle.',
-  conflict: 'Le modèle a changé entre-temps. Réessayez.',
+  conflict: 'Le modèle a changé entre-temps. Réessaie.',
   invalid: 'Ce modèle est invalide.',
   index:
-    'Le modèle n’a pas pu être retiré de la liste publique de tripbrain.fr. Réessayez.',
+    'Le modèle n’a pas pu être retiré de la liste publique de tripbrain.fr. Réessaie.',
   versions:
-    'Le modèle est retiré, mais son contenu n’a pas pu être effacé. Réessayez.',
+    'Le modèle est retiré, mais son contenu n’a pas pu être effacé. Réessaie.',
 }
 
 /** `versions` levé par une mise à jour : le modèle, lui, est à jour. */
 const STALE_VERSIONS_MESSAGE =
-  'Le modèle est à jour, mais ses versions précédentes n’ont pas pu être effacées. Réessayez.'
+  'Le modèle est à jour, mais ses versions précédentes n’ont pas pu être effacées. Réessaie.'
+
+/** `privateStays` mal formé (`parsePrivateStays`). */
+export const INVALID_PRIVATE_STAYS = 'Hébergements privés invalides.'
 
 /** Refus prévisible du store, que la route traduit en statut HTTP. */
 export class TemplateStoreError extends Error {
@@ -312,11 +352,20 @@ function isStoredDay(value: unknown): value is DayItinerary {
  * Méta relue et recopiée champ par champ : une clé inconnue glissée dans
  * l'objet stocké ne ressortira jamais par `toPublicTemplate`.
  */
-function parseMeta(value: unknown): StoredTemplateMeta | null {
+function parseMeta(value: unknown): StoredTemplateRecord | null {
   if (!isRecord(value)) return null
   return typeof value.retiredAt === 'string'
-    ? parseRetiredMeta(value)
+    ? parseTombstone(value)
     : parseActiveMeta(value)
+}
+
+/**
+ * `privateStays` d'une méta en ligne : absent (méta écrite avant ce champ),
+ * aucun ; sinon validé comme à la réception (`parsePrivateStays`), `null`
+ * s'il ne l'est pas.
+ */
+function storedPrivateStays(value: unknown): string[] | null {
+  return value === undefined ? [] : parsePrivateStays(value)
 }
 
 function parseActiveMeta(value: Record<string, unknown>): TemplateMeta | null {
@@ -338,7 +387,9 @@ function parseActiveMeta(value: Record<string, unknown>): TemplateMeta | null {
     retiredAt,
     ownerTokenHash,
   } = value
+  const privateStays = storedPrivateStays(value.privateStays)
   if (
+    privateStays === null ||
     !isTemplateId(id) ||
     typeof slug !== 'string' ||
     !isPositiveInteger(version) ||
@@ -368,6 +419,7 @@ function parseActiveMeta(value: Record<string, unknown>): TemplateMeta | null {
     indexable,
     includesNotes,
     includesPrices,
+    privateStays,
     dayCount,
     cities,
     tripYear: year,
@@ -379,43 +431,27 @@ function parseActiveMeta(value: Record<string, unknown>): TemplateMeta | null {
 }
 
 /**
- * Pierre tombale. Une pierre tombale écrite avant `wasListed` est la méta
- * entière, titre, prénom et villes vidés : on en déduit `wasListed` comme on
- * le faisait alors, d'après `indexable` et `dayCount`, et on n'en garde rien
- * d'autre.
+ * Pierre tombale, recopiée champ par champ comme la méta : rien d'autre n'en
+ * ressort, pas même un slug qu'elle porterait encore. Aucune n'a été écrite
+ * en production avant cette forme (§4) : une pierre tombale sans `wasListed`
+ * est illisible.
  */
-function parseRetiredMeta(
+function parseTombstone(
   value: Record<string, unknown>,
-): RetiredTemplateMeta | null {
-  const { id, slug, version, publishedAt, retiredAt, ownerTokenHash } = value
+): TemplateTombstone | null {
+  const { id, version, publishedAt, retiredAt, ownerTokenHash, wasListed } =
+    value
   if (
     !isTemplateId(id) ||
-    typeof slug !== 'string' ||
     !isPositiveInteger(version) ||
     typeof publishedAt !== 'string' ||
     typeof retiredAt !== 'string' ||
-    typeof ownerTokenHash !== 'string'
+    typeof ownerTokenHash !== 'string' ||
+    typeof wasListed !== 'boolean'
   ) {
     return null
   }
-  const { wasListed, indexable, dayCount } = value
-  let listed: boolean
-  if (typeof wasListed === 'boolean') {
-    listed = wasListed
-  } else if (typeof indexable === 'boolean' && typeof dayCount === 'number') {
-    listed = isListed({ indexable, dayCount, retiredAt: null })
-  } else {
-    return null
-  }
-  return {
-    id,
-    slug,
-    version,
-    publishedAt,
-    retiredAt,
-    ownerTokenHash,
-    wasListed: listed,
-  }
+  return { id, version, publishedAt, retiredAt, ownerTokenHash, wasListed }
 }
 
 /**
@@ -481,13 +517,13 @@ function parseIndexShard(
 // ── Lectures internes ─────────────────────────────────────────────────────────
 
 interface StoredMeta {
-  meta: StoredTemplateMeta
+  meta: StoredTemplateRecord
   etag: string | undefined
 }
 
 /** Une méta prête à être remplacée en `ifMatch`. */
 interface WritableMeta {
-  meta: StoredTemplateMeta
+  meta: StoredTemplateRecord
   etag: string
 }
 
@@ -563,13 +599,13 @@ export async function assertTemplateOwner(
   token: string,
 ): Promise<void> {
   const { meta } = await loadVerifiedMeta(bucket, id, token)
-  if (isRetiredTemplateMeta(meta)) throw new TemplateStoreError('retired')
+  if (isTombstone(meta)) throw new TemplateStoreError('retired')
 }
 
 /** La version publiée d'un modèle, lue avec la méta qui la désigne. */
 type PublishedVersion =
   | { status: 'active'; meta: TemplateMeta; itinerary: DayItinerary[] }
-  | { status: 'retired'; tombstone: RetiredTemplateMeta }
+  | { status: 'retired'; tombstone: TemplateTombstone }
   | { status: 'missing' }
   /** Méta en ligne, version absente, et rien ne l'explique : incohérence (§4). */
   | { status: 'broken'; meta: TemplateMeta }
@@ -596,7 +632,7 @@ async function loadPublished(
     }
     const latest = await loadMeta(bucket, current.id)
     if (!latest) return { status: 'missing' }
-    if (isRetiredTemplateMeta(latest.meta)) {
+    if (isTombstone(latest.meta)) {
       return { status: 'retired', tombstone: latest.meta }
     }
     if (latest.meta.version === current.version) break
@@ -656,6 +692,11 @@ interface TemplateContent {
   dayCount: number
   cities: string[]
   tripYear: number | null
+  /**
+   * Une clé de `options.privateStays` ne désigne aucun hébergement de
+   * l'itinéraire reçu (`unmatchedPrivateStays`) : renommé ou retiré.
+   */
+  privateStaysUnmatched: boolean
 }
 
 /**
@@ -681,6 +722,27 @@ function templateTitle(
 }
 
 /**
+ * Nettoyage du serveur : la recherche des adresses masquées est bornée
+ * (`MAX_ADDRESS_SEARCH_WORK`), car n'importe qui peut envoyer une adresse
+ * forgée pour l'occuper. Au-delà, 400 : le modèle ne part jamais sans elle.
+ */
+function cleanOnServer(
+  itinerary: readonly DayItinerary[],
+  options: TemplateOptions,
+): DayItinerary[] {
+  try {
+    return cleanForTemplate(itinerary, options, {
+      maxAddressSearchWork: MAX_ADDRESS_SEARCH_WORK,
+    })
+  } catch (error) {
+    if (isAddressSearchTooCostlyError(error)) {
+      throw new TemplateStoreError('invalid', error.message)
+    }
+    throw error
+  }
+}
+
+/**
  * Le serveur renettoie toujours, avec les réglages qu'il va stocker : le
  * nettoyage fait sur le téléphone sert l'aperçu, il ne garantit rien. Puis il
  * floute les dates (`blurTemplateDates`) : l'aperçu A2 ne montre pas de dates,
@@ -697,7 +759,7 @@ function prepareContent(
   if (!shaped) {
     throw new TemplateStoreError('invalid', 'Itinéraire illisible.')
   }
-  const cleaned = blurTemplateDates(cleanForTemplate(shaped, options))
+  const cleaned = blurTemplateDates(cleanOnServer(shaped, options))
   if (cleaned.length === 0) {
     throw new TemplateStoreError(
       'invalid',
@@ -711,6 +773,8 @@ function prepareContent(
     dayCount: cleaned.length,
     cities: templateCities(cleaned),
     tripYear: tripYear(cleaned),
+    privateStaysUnmatched:
+      unmatchedPrivateStays(shaped, options.privateStays).length > 0,
   }
 }
 
@@ -721,11 +785,49 @@ function versionData(
   return { version, title: content.title, itinerary: content.itinerary }
 }
 
+/**
+ * Les réglages d'une écriture, recopiés champ par champ. `privateStays` passe
+ * par `parsePrivateStays` (absent : aucun) : le store le garde dans la méta
+ * et le réapplique à chaque mise à jour, rien de mal formé ne doit y entrer.
+ */
+function checkedOptions(options: TemplateOptions): TemplateOptions {
+  const privateStays = parsePrivateStays(options.privateStays ?? [])
+  if (!privateStays) {
+    throw new TemplateStoreError('invalid', INVALID_PRIVATE_STAYS)
+  }
+  return {
+    includeNotes: options.includeNotes,
+    includePrices: options.includePrices,
+    privateStays,
+  }
+}
+
+/** Les réglages de la version publiée, hébergements privés compris. */
 function optionsOf(meta: TemplateMeta): TemplateOptions {
   return {
     includeNotes: meta.includesNotes,
     includePrices: meta.includesPrices,
+    privateStays: [...meta.privateStays],
   }
+}
+
+/**
+ * Les réglages d'une mise à jour : chaque réglage absent garde sa valeur
+ * publiée. Pour `privateStays`, c'est ce qui empêche l'adresse d'un logement
+ * privé de repartir avec une mise à jour qui ne les renverrait pas ; une
+ * liste envoyée, même vide, remplace celle de la méta (l'auteur a pu décocher
+ * un hébergement).
+ */
+function updatedOptions(
+  meta: TemplateMeta,
+  options: Partial<TemplateOptions> | undefined,
+): TemplateOptions {
+  const published = optionsOf(meta)
+  return checkedOptions({
+    includeNotes: options?.includeNotes ?? published.includeNotes,
+    includePrices: options?.includePrices ?? published.includePrices,
+    privateStays: options?.privateStays ?? published.privateStays,
+  })
 }
 
 /** Champs de la méta qui suivent le contenu de la version publiée. */
@@ -734,6 +836,7 @@ function contentFields(content: TemplateContent) {
     title: content.title,
     includesNotes: content.options.includeNotes,
     includesPrices: content.options.includePrices,
+    privateStays: content.options.privateStays,
     dayCount: content.dayCount,
     cities: content.cities,
     tripYear: content.tripYear,
@@ -774,13 +877,13 @@ function compareIndexEntries(
 }
 
 /** Le modèle a-t-il sa page sur tripbrain.fr ? Jamais une pierre tombale. */
-function isListedMeta(meta: StoredTemplateMeta | null): meta is TemplateMeta {
-  return meta !== null && !isRetiredTemplateMeta(meta) && isListed(meta)
+function isListedMeta(meta: StoredTemplateRecord | null): meta is TemplateMeta {
+  return meta !== null && !isTombstone(meta) && isListed(meta)
 }
 
 /** La ligne qu'un modèle doit avoir dans l'index, ou `null` s'il n'y a pas sa place. */
 function indexEntryOf(
-  meta: StoredTemplateMeta | null,
+  meta: StoredTemplateRecord | null,
 ): TemplateIndexEntry | null {
   return isListedMeta(meta) ? toIndexEntry(meta) : null
 }
@@ -800,7 +903,7 @@ function sameIndexLine(
 function nextIndex(
   current: TemplateIndexEntry[],
   id: string,
-  latest: StoredTemplateMeta | null,
+  latest: StoredTemplateRecord | null,
 ): TemplateIndexEntry[] | null {
   const existing = current.find((entry) => entry.id === id) ?? null
   const others = current.filter((entry) => entry.id !== id)
@@ -897,7 +1000,7 @@ async function syncIndex(bucket: TemplateBucket, id: string): Promise<boolean> {
  */
 async function settleIndex(
   bucket: TemplateBucket,
-  meta: StoredTemplateMeta,
+  meta: StoredTemplateRecord,
 ): Promise<void> {
   const synced = await syncIndex(bucket, meta.id)
   if (!synced && !isListedMeta(meta)) throw new TemplateStoreError('index')
@@ -929,7 +1032,22 @@ export interface TemplateWriteResult {
   meta: TemplateMeta
   /** Ce que l'API renvoie. */
   template: PublicTemplate
+  /**
+   * Mise à jour seulement : une clé des hébergements privés envoyés ne
+   * désigne plus aucun hébergement (renommé ou retiré depuis la
+   * publication). Son adresse a pu partir ; la route le dit au téléphone
+   * (`privateStaysUnmatched: true`), sans jamais dire quelle clé.
+   */
+  privateStaysUnmatched?: boolean
 }
+
+/**
+ * Mise à jour sans liste d'hébergements privés, alors qu'une clé gardée dans
+ * la méta ne désigne plus rien : le téléphone a « oublié » la liste, et
+ * l'hébergement renommé partirait avec son adresse.
+ */
+export const PRIVATE_STAYS_UNMATCHED =
+  'Un hébergement masqué a changé de nom ou n’est plus dans le voyage : choisis de nouveau ceux à masquer, puis réessaie.'
 
 export interface PublishTemplateResult extends TemplateWriteResult {
   /** Rendu à son auteur seulement, jamais stocké ni journalisé. */
@@ -1049,7 +1167,7 @@ async function reserveSlug(
   }
   throw new TemplateStoreError(
     'conflict',
-    'Aucune adresse libre pour ce modèle. Réessayez.',
+    'Aucune adresse libre pour ce modèle. Réessaie.',
   )
 }
 
@@ -1060,13 +1178,13 @@ async function reserveSlug(
  */
 async function alreadyPublished(
   bucket: TemplateBucket,
-  meta: StoredTemplateMeta,
+  meta: StoredTemplateRecord,
   ownerTokenHash: string,
 ): Promise<TemplateWriteResult> {
   if (meta.ownerTokenHash !== ownerTokenHash) {
     throw new Error(`Réservation de publication incohérente (${meta.id}).`)
   }
-  if (isRetiredTemplateMeta(meta)) throw new TemplateStoreError('retired')
+  if (isTombstone(meta)) throw new TemplateStoreError('retired')
   await syncIndex(bucket, meta.id)
   return currentTemplate(bucket, meta)
 }
@@ -1112,7 +1230,11 @@ export async function publishTemplate(
   if (input.ownerToken !== undefined && !isOwnerToken(input.ownerToken)) {
     throw new TemplateStoreError('forbidden')
   }
-  const content = prepareContent(input.itinerary, input.options, input.title)
+  const content = prepareContent(
+    input.itinerary,
+    checkedOptions(input.options),
+    input.title,
+  )
   const at = (input.now ?? new Date()).toISOString()
   const ownerToken = input.ownerToken ?? createOwnerToken()
   const ownerTokenHash = hashOwnerToken(ownerToken)
@@ -1169,7 +1291,7 @@ export async function publishTemplate(
     if (stored?.meta.ownerTokenHash !== ownerTokenHash) throw error
     // Même jeton, autre version : un envoi simultané avec ce jeton a publié
     // avant nous. Notre version n'est désignée par aucune méta.
-    if (isRetiredTemplateMeta(stored.meta) || stored.meta.version !== version) {
+    if (isTombstone(stored.meta) || stored.meta.version !== version) {
       await discard(bucket, [templateVersionKey(id, version)])
       return {
         ...(await alreadyPublished(bucket, stored.meta, ownerTokenHash)),
@@ -1200,8 +1322,14 @@ export interface UpdateTemplateInput {
   itinerary: readonly DayItinerary[]
   /** Absent : le titre actuel est gardé. Vide : tiré des étapes. */
   title?: string | null
-  /** Absent : les réglages publiés sont gardés. */
-  options?: TemplateOptions
+  /**
+   * Chaque réglage absent garde sa valeur publiée, `privateStays` compris :
+   * les hébergements privés de la méta sont réappliqués à la nouvelle
+   * version. Une liste envoyée, même vide, les remplace. Absente alors
+   * qu'une clé de la méta ne désigne plus aucun hébergement (renommé) :
+   * `conflict` (409, `PRIVATE_STAYS_UNMATCHED`), rien n'est écrit.
+   */
+  options?: Partial<TemplateOptions>
   now?: Date
 }
 
@@ -1319,6 +1447,18 @@ export async function updateTemplate(
   return result
 }
 
+/** Ce que rend une mise à jour écrite. */
+function updateResult(
+  meta: TemplateMeta,
+  content: TemplateContent,
+): TemplateWriteResult {
+  return {
+    meta,
+    template: toPublicTemplate(meta, content.itinerary),
+    ...(content.privateStaysUnmatched ? { privateStaysUnmatched: true } : {}),
+  }
+}
+
 /** Version puis méta : le cœur de `updateTemplate`, sans l'index. */
 async function writeNewVersion(
   bucket: TemplateBucket,
@@ -1335,7 +1475,7 @@ async function writeNewVersion(
    * échoue, `versions` (503), et l'auteur rejoue le retrait.
    */
   async function purgeAfterRetirement(
-    tombstone: RetiredTemplateMeta,
+    tombstone: TemplateTombstone,
   ): Promise<never> {
     const keys = versionKeysOf(tombstone)
     if (written) {
@@ -1354,7 +1494,7 @@ async function writeNewVersion(
   try {
     for (let attempt = 1; attempt <= META_ATTEMPTS; attempt++) {
       const { meta, etag } = await loadOwnedMeta(bucket, id, token)
-      if (isRetiredTemplateMeta(meta)) {
+      if (isTombstone(meta)) {
         if (written) await purgeAfterRetirement(meta)
         throw new TemplateStoreError('retired')
       }
@@ -1362,10 +1502,7 @@ async function writeNewVersion(
       // La méta pointe déjà vers notre version : seule cette requête a pu
       // écrire `v/<n>` (`ifAbsent`), notre écriture de la méta a donc abouti.
       if (written && written.version === meta.version) {
-        return {
-          meta,
-          template: toPublicTemplate(meta, written.content.itinerary),
-        }
+        return updateResult(meta, written.content)
       }
       // Une autre mise à jour a publié par-dessus notre emplacement : notre
       // version passerait pour plus ancienne que l'actuelle. On en reprend un.
@@ -1376,9 +1513,18 @@ async function writeNewVersion(
       if (!written) {
         const content = prepareContent(
           input.itinerary,
-          input.options ?? optionsOf(meta),
+          updatedOptions(meta, input.options),
           input.title === undefined ? meta.title : input.title,
         )
+        // Liste absente et clé de la méta orpheline : un hébergement masqué
+        // a été renommé, et le téléphone n'a pas renvoyé la liste. Rien
+        // n'est écrit : l'auteur choisit de nouveau ses hébergements privés.
+        if (
+          content.privateStaysUnmatched &&
+          input.options?.privateStays === undefined
+        ) {
+          throw new TemplateStoreError('conflict', PRIVATE_STAYS_UNMATCHED)
+        }
         const version = await claimVersion(
           bucket,
           id,
@@ -1390,7 +1536,7 @@ async function writeNewVersion(
         // suppression est passée avant elle se voit forcément ici, quelle
         // que soit l'issue de l'écriture de la méta qui suit.
         const latest = await loadMeta(bucket, id)
-        if (latest && isRetiredTemplateMeta(latest.meta)) {
+        if (latest && isTombstone(latest.meta)) {
           await purgeAfterRetirement(latest.meta)
         }
       }
@@ -1416,20 +1562,14 @@ async function writeNewVersion(
         const latest = await loadMeta(bucket, id)
         if (
           latest &&
-          !isRetiredTemplateMeta(latest.meta) &&
+          !isTombstone(latest.meta) &&
           latest.meta.version === written.version
         ) {
-          return {
-            meta: latest.meta,
-            template: toPublicTemplate(latest.meta, written.content.itinerary),
-          }
+          return updateResult(latest.meta, written.content)
         }
         continue
       }
-      return {
-        meta: next,
-        template: toPublicTemplate(next, written.content.itinerary),
-      }
+      return updateResult(next, written.content)
     }
     throw new TemplateStoreError('conflict')
   } catch (error) {
@@ -1501,7 +1641,7 @@ export async function patchTemplate(
   const at = (patch.now ?? new Date()).toISOString()
   for (let attempt = 1; attempt <= META_ATTEMPTS; attempt++) {
     const { meta, etag } = await loadOwnedMeta(bucket, id, token)
-    if (isRetiredTemplateMeta(meta)) throw new TemplateStoreError('retired')
+    if (isTombstone(meta)) throw new TemplateStoreError('retired')
 
     const indexable = patch.indexable ?? meta.indexable
     const authorName =
@@ -1546,24 +1686,21 @@ export async function patchTemplate(
 // ── Retrait ──────────────────────────────────────────────────────────────────
 
 /**
- * Pierre tombale : la méta reste pour que les lectures répondent 410 et que
- * le slug ne serve jamais à un autre modèle. Hors du slug, elle ne garde rien
- * de ce que l'auteur a écrit ou choisi — ni titre, ni prénom, ni année, ni
- * réglages, ni les champs pays et villes —, seulement s'il était listé,
- * calculé ici. Le jeton (son empreinte) reste, pour qu'un second retrait soit
- * encore autorisé.
+ * Pierre tombale : la méta reste pour que les lectures répondent 410 et
+ * qu'un second retrait soit encore autorisé (l'empreinte du jeton). Elle ne
+ * garde rien de ce que l'auteur a écrit ou choisi — ni slug, ni titre, ni
+ * prénom, ni année, ni réglages (hébergements privés compris), ni les champs
+ * pays et villes —, seulement s'il était listé, calculé ici.
  *
- * Le slug, lui, reste pour toujours, ici et dans `slugs/<slug>` : il porte le
- * pays (son nom français), le nombre de jours et jusqu'à 3 villes, telles que
- * l'auteur les a tapées, mises en forme de slug (`japon-3-jours-tokyo-kyoto`).
- * Les slugs qu'il a portés avant une mise à jour aussi : chacun pointe
- * toujours vers la pierre tombale, et répond comme le slug actuel (410 s'il
- * était listé au retrait, 404 sinon).
+ * Ses slugs, l'actuel comme ceux d'avant une mise à jour, restent réservés
+ * pour toujours, mais seulement sous leur empreinte (`templateSlugKey`) :
+ * chacun pointe vers la pierre tombale et répond comme le slug actuel (410
+ * s'il était listé au retrait, 404 sinon), sans que le bucket dise encore
+ * quel pays, quelle durée ni quelles villes ils portaient.
  */
-function toTombstone(meta: TemplateMeta, at: string): RetiredTemplateMeta {
+function toTombstone(meta: TemplateMeta, at: string): TemplateTombstone {
   return {
     id: meta.id,
-    slug: meta.slug,
     version: meta.version,
     publishedAt: meta.publishedAt,
     retiredAt: at,
@@ -1579,7 +1716,7 @@ function toTombstone(meta: TemplateMeta, at: string): RetiredTemplateMeta {
  * orphelin (supprimer une clé absente ne coûte rien).
  */
 function versionKeysOf(
-  meta: Pick<StoredTemplateMeta, 'id' | 'version'>,
+  meta: Pick<StoredTemplateRecord, 'id' | 'version'>,
 ): string[] {
   const keys: string[] = []
   for (let n = 1; n <= meta.version + VERSION_SLOTS; n++) {
@@ -1598,7 +1735,7 @@ function versionKeysOf(
  */
 async function retiredKeysOf(
   bucket: TemplateBucket,
-  tombstone: RetiredTemplateMeta,
+  tombstone: TemplateTombstone,
 ): Promise<string[]> {
   const keys = versionKeysOf(tombstone)
   if (isOwnerTokenHash(tombstone.ownerTokenHash)) {
@@ -1616,7 +1753,12 @@ async function retiredKeysOf(
 }
 
 interface Retirement {
-  tombstone: RetiredTemplateMeta
+  tombstone: TemplateTombstone
+  /**
+   * Le slug du modèle juste avant ce retrait, lu sur sa méta en ligne ;
+   * `null` s'il était déjà retiré : la pierre tombale ne le garde pas.
+   */
+  slug: string | null
   /** Déjà retiré : seuls les versions et l'index ont été revus. */
   alreadyRetired: boolean
 }
@@ -1640,9 +1782,10 @@ async function retireStored(
 ): Promise<Retirement> {
   for (let attempt = 1; attempt <= META_ATTEMPTS; attempt++) {
     const { meta, etag } = await load()
-    const alreadyRetired = isRetiredTemplateMeta(meta)
-    let tombstone: RetiredTemplateMeta
-    if (isRetiredTemplateMeta(meta)) {
+    const alreadyRetired = isTombstone(meta)
+    const slug = isTombstone(meta) ? null : meta.slug
+    let tombstone: TemplateTombstone
+    if (isTombstone(meta)) {
       tombstone = meta
     } else {
       tombstone = toTombstone(meta, now.toISOString())
@@ -1669,7 +1812,7 @@ async function retireStored(
     // s'il ne suit pas, et le retrait rejoué refera les deux.
     await settleIndex(bucket, tombstone)
     if (!versionsDeleted) throw new TemplateStoreError('versions')
-    return { tombstone, alreadyRetired }
+    return { tombstone, slug, alreadyRetired }
   }
   throw new TemplateStoreError('conflict')
 }
@@ -1694,7 +1837,11 @@ export async function retireTemplate(
 /** Ce que l'opérateur apprend d'un retrait. */
 export interface OperatorRetirement {
   id: string
-  slug: string
+  /**
+   * Le slug actuel du modèle que ce retrait vient de retirer ; `null` s'il
+   * l'était déjà : sa pierre tombale ne garde aucun slug.
+   */
+  slug: string | null
   /** ISO 8601. */
   retiredAt: string
   /** Listé au moment du retrait : sa page tripbrain.fr répond 410, sinon 404. */
@@ -1704,11 +1851,13 @@ export interface OperatorRetirement {
 }
 
 /**
- * Le modèle que désigne `ref` — son id, ou l'un de ses slugs via
- * `slugs/<slug>` —, ou `null`. Un slug mène au modèle même si ce n'est plus
- * le sien (`meta.slug`) : la durée ou les villes ont changé depuis, et
- * l'ancienne adresse redirige vers la nouvelle. Une publication interrompue
- * peut avoir réservé un slug sans jamais écrire sa méta : `null`.
+ * Le modèle que désigne `ref` — son id, ou l'un de ses slugs, haché pour
+ * retrouver sa réservation (`templateSlugKey`) —, ou `null`. Un slug mène au
+ * modèle même si ce n'est plus le sien (`meta.slug`) : la durée ou les villes
+ * ont changé depuis, et l'ancienne adresse redirige vers la nouvelle. Il mène
+ * aussi à la pierre tombale d'un modèle retiré, qui ne connaît plus ses
+ * slugs. Une publication interrompue peut avoir réservé un slug sans jamais
+ * écrire sa méta : `null`.
  */
 async function findTemplate(
   bucket: TemplateBucket,
@@ -1725,10 +1874,11 @@ async function findTemplate(
 /**
  * Retrait par l'opérateur, **sans le jeton** : contenu signalé, abus, ou
  * auteur qui a perdu son téléphone. Mêmes effets que `retireTemplate`
- * (pierre tombale, versions supprimées, slug gardé, sortie de l'index,
- * `TemplateStoreError('index')` si l'index ne suit pas, `'versions'` si les
- * versions n'ont pas été supprimées), et idempotent comme lui. `ref` est
- * l'id ou le slug du modèle.
+ * (pierre tombale sans slug, versions supprimées, slugs gardés sous leur
+ * empreinte, sortie de l'index, `TemplateStoreError('index')` si l'index ne
+ * suit pas, `'versions'` si les versions n'ont pas été supprimées), et
+ * idempotent comme lui. `ref` est l'id ou l'un des slugs du modèle, actuel ou
+ * ancien, retiré ou non.
  *
  * Aucune route n'y mène : seul `scripts/retire-template.ts` l'appelle, avec
  * les identifiants R2 de production. Procédure : `docs/modeles-moderation.md`.
@@ -1738,7 +1888,7 @@ export async function retireTemplateAsOperator(
   ref: string,
   now: Date = new Date(),
 ): Promise<OperatorRetirement> {
-  const { tombstone, alreadyRetired } = await retireStored(
+  const { tombstone, slug, alreadyRetired } = await retireStored(
     bucket,
     async () => {
       const stored = await findTemplate(bucket, ref)
@@ -1751,29 +1901,38 @@ export async function retireTemplateAsOperator(
   )
   return {
     id: tombstone.id,
-    slug: tombstone.slug,
+    slug,
     retiredAt: tombstone.retiredAt,
     wasListed: tombstone.wasListed,
     alreadyRetired,
   }
 }
 
+/** Ce que l'opérateur voit d'un modèle trouvé, en ligne ou retiré. */
+interface OperatorTemplateFound {
+  /** Présent dans l'index public ; `null` si l'index est illisible. */
+  inIndex: boolean | null
+  /**
+   * Versions encore stockées parmi celles qu'un retrait supprime (`v/1`
+   * à `v/<version + 3>`) : le contenu de l'auteur. `0` une fois retiré ;
+   * `null` si l'une d'elles n'a pas pu être lue.
+   */
+  versionsLeft: number | null
+}
+
 /** L'état d'un modèle vu par l'opérateur, avant et après un retrait. */
 export type OperatorTemplateState =
   | { status: 'missing' }
-  | {
-      status: 'active' | 'retired'
+  | (OperatorTemplateFound & {
+      status: 'active'
       /** Méta stockée — `ownerTokenHash` compris : ne pas l'afficher. */
-      meta: StoredTemplateMeta
-      /** Présent dans l'index public ; `null` si l'index est illisible. */
-      inIndex: boolean | null
-      /**
-       * Versions encore stockées parmi celles qu'un retrait supprime (`v/1`
-       * à `v/<version + 3>`) : le contenu de l'auteur. `0` une fois retiré ;
-       * `null` si l'une d'elles n'a pas pu être lue.
-       */
-      versionsLeft: number | null
-    }
+      meta: TemplateMeta
+    })
+  | (OperatorTemplateFound & {
+      status: 'retired'
+      /** Pierre tombale : sans slug, `ownerTokenHash` à ne pas afficher. */
+      meta: TemplateTombstone
+    })
 
 /**
  * Ce que l'opérateur doit voir avant de retirer un modèle (le bon titre, le
@@ -1794,12 +1953,13 @@ export async function readTemplateForOperator(
   } catch {
     inIndex = null
   }
-  return {
-    status: isRetiredTemplateMeta(stored.meta) ? 'retired' : 'active',
-    meta: stored.meta,
+  const found: OperatorTemplateFound = {
     inIndex,
     versionsLeft: await countVersions(bucket, stored.meta),
   }
+  return isTombstone(stored.meta)
+    ? { status: 'retired', meta: stored.meta, ...found }
+    : { status: 'active', meta: stored.meta, ...found }
 }
 
 /**
@@ -1809,7 +1969,7 @@ export async function readTemplateForOperator(
  */
 async function countVersions(
   bucket: TemplateBucket,
-  meta: StoredTemplateMeta,
+  meta: StoredTemplateRecord,
 ): Promise<number | null> {
   try {
     const found = await Promise.all(
@@ -1835,10 +1995,10 @@ export type TemplateReadResult =
  */
 async function resolveTemplate(
   bucket: TemplateBucket,
-  meta: StoredTemplateMeta,
+  meta: StoredTemplateRecord,
   bySlug = false,
 ): Promise<TemplateReadResult> {
-  if (isRetiredTemplateMeta(meta)) return { status: 'retired' }
+  if (isTombstone(meta)) return { status: 'retired' }
   const published = await loadPublished(bucket, meta)
   switch (published.status) {
     case 'active':
@@ -1886,7 +2046,8 @@ export async function readTemplate(
  * Un ancien slug (le modèle en a changé à une mise à jour, sa durée ou ses
  * villes ayant changé) mène au même modèle : `template.slug` est alors le
  * slug actuel, différent de celui demandé, et le site vitrine redirige (301).
- * Retiré, le modèle répond de même sur tous ses slugs.
+ * Retiré, le modèle répond de même sur tous ses slugs : leur empreinte
+ * (`templateSlugKey`) mène à la pierre tombale, qui ne les connaît plus.
  */
 export async function readTemplateBySlug(
   bucket: TemplateBucket,
@@ -1898,7 +2059,7 @@ export async function readTemplateBySlug(
   const { meta } = stored
   // La pierre tombale garde `wasListed`, calculé au retrait : on sait encore
   // si le modèle avait une page.
-  if (isRetiredTemplateMeta(meta)) {
+  if (isTombstone(meta)) {
     return meta.wasListed ? { status: 'retired' } : { status: 'missing' }
   }
   if (!isListed(meta)) return { status: 'missing' }
@@ -1970,7 +2131,8 @@ export async function readIndexPage(
 /** Ce que l'opérateur apprend d'un rattrapage de l'index. */
 export interface IndexResync {
   id: string
-  slug: string
+  /** Son slug actuel ; `null` pour un modèle retiré, dont la pierre tombale n'en garde aucun. */
+  slug: string | null
   /** La méta dit que le modèle doit figurer dans l'index. */
   listed: boolean
   /** Sa ligne est accordée à sa méta (présente si listé, absente sinon). */
@@ -1990,10 +2152,10 @@ export async function resyncTemplateIndex(
 ): Promise<IndexResync | null> {
   const stored = await findTemplate(bucket, ref)
   if (!stored) return null
-  const { id, slug } = stored.meta
+  const { id } = stored.meta
   return {
     id,
-    slug,
+    slug: isTombstone(stored.meta) ? null : stored.meta.slug,
     listed: isListedMeta(stored.meta),
     synced: await syncIndex(bucket, id),
   }

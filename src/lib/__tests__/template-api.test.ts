@@ -4,6 +4,7 @@ import {
   TemplateForbiddenError,
   TemplateInvalidError,
   TemplateNotFoundError,
+  TemplatePrivateStaysChangedError,
   TemplateRetiredError,
   TemplateTooLargeError,
   TemplateUnavailableError,
@@ -47,7 +48,7 @@ const INPUT: TemplatePublishInput = {
   title: 'Japon en trois jours',
   authorName: 'Yanis',
   country: 'JP',
-  options: { includeNotes: false, includePrices: true },
+  options: { includeNotes: false, includePrices: true, privateStays: [] },
   indexable: true,
 }
 
@@ -166,7 +167,7 @@ describe('publishTemplate', () => {
       title: 'Japon en trois jours',
       authorName: 'Yanis',
       country: 'JP',
-      options: { includeNotes: false, includePrices: true },
+      options: { includeNotes: false, includePrices: true, privateStays: [] },
       indexable: true,
     })
     // Ce qui ne doit pas partir ne quitte pas le téléphone.
@@ -331,7 +332,7 @@ describe('écritures de l’auteur', () => {
     const fetchMock = respondWith({ template: template({ version: 2 }) })
 
     await updateTemplate(ID, TOKEN, japanTrip(), {
-      options: { includeNotes: true, includePrices: true },
+      options: { includeNotes: true, includePrices: true, privateStays: [] },
     })
 
     const request = sentRequest(fetchMock)
@@ -378,9 +379,86 @@ describe('écritures de l’auteur', () => {
     expect(sentRequest(fetchMock).method).toBe('DELETE')
   })
 
+  it('n’envoie pas une liste d’hébergements privés dont une clé ne désigne plus rien (renommé)', async () => {
+    const fetchMock = respondWith({ template: template({ version: 2 }) })
+    const trip = japanTrip()
+    trip[0] = {
+      ...trip[0],
+      accommodation: {
+        id: 'acc-tante',
+        name: 'Chez Tante Lurdes & Rui',
+        address: '12 rue des Lilas, 3e étage',
+        bookingUrl: '',
+        checkIn: '2026-04-01',
+        checkOut: '2026-04-02',
+      },
+    }
+    const stale = {
+      includeNotes: true,
+      includePrices: true,
+      privateStays: ['cheztantelurdes'],
+    }
+
+    const refused = await updateTemplate(ID, TOKEN, trip, {
+      options: stale,
+    }).catch((error: unknown) => error)
+    expect(refused).toBeInstanceOf(TemplatePrivateStaysChangedError)
+    expect((refused as TemplatePrivateStaysChangedError).unmatched).toEqual([
+      'cheztantelurdes',
+    ])
+    expect(templateFailureReason(refused)).toBe('invalid')
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    // La liste confirmée (nouvelle clé) part, sans l'adresse.
+    await updateTemplate(ID, TOKEN, trip, {
+      options: { ...stale, privateStays: ['cheztantelurdes&rui'] },
+    })
+    const sent = JSON.stringify(
+      decompressItinerary((await sentRequest(fetchMock).json()).data),
+    )
+    expect(sent).not.toContain('Lilas')
+  })
+
+  it('envoie les hébergements privés, et leur adresse ne quitte pas le téléphone', async () => {
+    const fetchMock = respondWith({ template: template({ version: 2 }) })
+    const trip = japanTrip()
+    trip[0] = {
+      ...trip[0],
+      accommodation: {
+        id: 'acc-tante',
+        name: 'Chez Tante Lurdes',
+        address: '12 rue des Lilas, 3e étage',
+        bookingUrl: 'https://maps.example/12-rue-des-Lilas',
+        checkIn: '2026-04-01',
+        checkOut: '2026-04-02',
+      },
+    }
+    const options = {
+      includeNotes: true,
+      includePrices: true,
+      privateStays: ['cheztantelurdes'],
+    }
+
+    await updateTemplate(ID, TOKEN, trip, { options })
+
+    const body = await sentRequest(fetchMock).json()
+    expect(body.options).toEqual(options)
+    const sent: DayItinerary[] = decompressItinerary(body.data)
+    expect(sent[0].accommodation).toMatchObject({
+      name: 'Chez Tante Lurdes',
+      address: '',
+      bookingUrl: '',
+    })
+    expect(JSON.stringify(sent)).not.toContain('Lilas')
+  })
+
   it('nettoie aussi une mise à jour : rien de ce que l’auteur a exclu ne quitte le téléphone', async () => {
     const fetchMock = respondWith({ template: template({ version: 2 }) })
-    const options = { includeNotes: false, includePrices: false }
+    const options = {
+      includeNotes: false,
+      includePrices: false,
+      privateStays: [],
+    }
 
     await updateTemplate(ID, TOKEN, tripWithBoardingPass(), { options })
 
@@ -409,7 +487,7 @@ describe('écritures de l’auteur', () => {
     const fetchMock = respondWith({ template: template({ version: 2 }) })
 
     await updateTemplate(ID, TOKEN, tripWithBoardingPass(), {
-      options: { includeNotes: true, includePrices: true },
+      options: { includeNotes: true, includePrices: true, privateStays: [] },
     })
 
     const body = await sentRequest(fetchMock).json()
@@ -472,7 +550,7 @@ describe('erreurs typées', () => {
 
   it('traduit 503, y compris l’index public qui n’a pas suivi, en TemplateUnavailableError', async () => {
     const indexMessage =
-      'Le modèle n’a pas pu être retiré de la liste publique de tripbrain.fr. Réessayez.'
+      'Le modèle n’a pas pu être retiré de la liste publique de tripbrain.fr. Réessaie.'
     respondWith({ error: indexMessage }, 503)
     const retired = await caught(() => retireTemplate(ID, TOKEN))
     expect(retired).toBeInstanceOf(TemplateUnavailableError)
@@ -499,7 +577,7 @@ describe('erreurs typées', () => {
       )
       expect(error).toBeInstanceOf(TemplateUnavailableError)
       expect(error).toMatchObject({ status })
-      expect((error as Error).message).toMatch(/Réessayez/)
+      expect((error as Error).message).toMatch(/Réessaie/)
     }
   })
 
@@ -513,11 +591,11 @@ describe('erreurs typées', () => {
   })
 
   it('laisse les autres échecs en Error, avec le message du serveur', async () => {
-    respondWith({ error: 'Le modèle a changé entre-temps. Réessayez.' }, 409)
+    respondWith({ error: 'Le modèle a changé entre-temps. Réessaie.' }, 409)
     const error = await caught(publish)
     expect(error).not.toBeInstanceOf(TemplateUnavailableError)
     expect((error as Error).message).toBe(
-      'Le modèle a changé entre-temps. Réessayez.',
+      'Le modèle a changé entre-temps. Réessaie.',
     )
   })
 })
@@ -613,7 +691,7 @@ describe('parcours complet contre les routes', () => {
     const tooLarge = await caught(() =>
       publishTemplate([{ ...first, notes: 'x'.repeat(40_000) }], {
         ...INPUT,
-        options: { includeNotes: true, includePrices: true },
+        options: { includeNotes: true, includePrices: true, privateStays: [] },
       }),
     )
     expect(tooLarge).toBeInstanceOf(TemplateTooLargeError)
@@ -659,6 +737,7 @@ describe('parcours complet contre les routes', () => {
         options: {
           includeNotes: published.includesNotes,
           includePrices: published.includesPrices,
+          privateStays: INPUT.options.privateStays,
         },
       },
     )

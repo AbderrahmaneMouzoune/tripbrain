@@ -3,20 +3,24 @@
 Quand retirer un modèle sans son auteur : contenu signalé, abus, ou auteur qui a perdu son
 téléphone (le jeton qui lui permettait de retirer son modèle était dessus). Le retrait est
 **définitif** et a les mêmes effets qu'un retrait par l'auteur : le lien et la page répondent
-410, les versions (tout l'itinéraire) sont supprimées, le titre et le prénom sont effacés, le
-modèle sort de la liste publique. Les slugs, eux, restent réservés **pour toujours** : le slug
-actuel et ceux que le modèle a portés avant une mise à jour (le slug suit la durée et les 3
-premières villes). Chacun contient le pays (en toutes lettres), un nombre de jours et jusqu'à 3
-villes saisies par l'auteur, par exemple `japon-3-jours-tokyo-kyoto`. Ils restent dans les
-adresses de la page et dans les clés R2 `templates/slugs/<slug>`. Conception :
+410, les versions (tout l'itinéraire) sont supprimées, le titre, le prénom et les slugs en clair
+sont effacés de R2, le modèle sort de la liste publique. Il ne reste qu'une pierre tombale (id,
+dates, empreinte du jeton, « était listé ou non »). Conception :
 `docs/itineraire-modele-technique.md` §4.
 
+Les slugs restent tout de même réservés **pour toujours**, mais seulement sous leur empreinte
+SHA-256 (clés R2 `templates/slugs/<64 caractères hexadécimaux>`) : le slug actuel et ceux que le
+modèle a portés avant une mise à jour (le slug suit la durée et les 3 premières villes). Un slug
+contient le pays (en toutes lettres), un nombre de jours et jusqu'à 3 villes saisies par
+l'auteur, par exemple `japon-3-jours-tokyo-kyoto` : après le retrait, R2 ne dit plus lesquels.
+Qui connaît l'adresse de la page (lien partagé, moteur de recherche) obtient un 410, et le slug
+ne servira jamais à un autre modèle.
+
 > **Abus dans un nom de ville.** Chaque slug du modèle reprend les 3 premières villes du voyage
-> au moment où il a été pris (en minuscules, sans accents). Si le contenu signalé est l'une
-> d'elles, il est dans un slug : la procédure ci-dessous ne peut pas l'effacer. L'adresse
-> `https://tripbrain.fr/itineraires/<slug>` et la clé R2 `templates/slugs/<slug>` le garderont,
-> même si l'auteur a changé ses villes depuis. Retirez quand même le modèle (tout le reste
-> disparaît), puis signalez le cas à l'équipe technique.
+> au moment où il a été pris (en minuscules, sans accents). Le retrait les efface de R2 et la
+> page répond 410, ce qui la fait sortir des moteurs de recherche. Ce qui reste hors de notre
+> portée : les liens `https://tripbrain.fr/itineraires/<slug>` déjà partagés ailleurs, et les
+> copies en cache des moteurs le temps qu'ils repassent.
 
 ## 1. Qui reçoit les demandes
 
@@ -37,28 +41,29 @@ partagé.
 
 Un ancien slug (la page d'avant une mise à jour qui a changé la durée ou les villes) désigne le
 modèle aussi bien que l'actuel : le script le signale (« … est un ancien slug de ce modèle : son
-slug actuel est … ») et retire le modèle sur tous ses slugs.
+slug actuel est … ») et retire le modèle sur tous ses slugs. Un slug désigne aussi un modèle déjà
+retiré : le script le hache pour retrouver sa réservation, même si R2 ne le contient plus.
 
-Parti d'un slug, vous n'avez pas encore l'id : le script l'affiche (§3), et la vérification du §4
-en a besoin.
+Parti d'un slug, tu n'as pas encore l'id : le script l'affiche (§3), et la vérification du §4 en
+a besoin.
 
 ## 3. Retirer
 
 Il faut Bun, ce dépôt, et les 4 variables R2 de **production** : Vercel → projet de l'app →
 Settings → Environment Variables → filtre _Production_.
 
-- Si Vercel affiche les valeurs (icône en forme d'œil), copiez-les.
+- Si Vercel affiche les valeurs (icône en forme d'œil), copie-les.
 - Si elles sont marquées _Sensitive_, leur valeur ne peut plus être relue nulle part, ni dans
-  Vercel ni dans Cloudflare. Créez plutôt une clé temporaire :
-  1. Cloudflare → R2 → _Overview_ : copiez l'_Account ID_ (`R2_ACCOUNT_ID`) et le nom du bucket
+  Vercel ni dans Cloudflare. Crée plutôt une clé temporaire :
+  1. Cloudflare → R2 → _Overview_ : copie l'_Account ID_ (`R2_ACCOUNT_ID`) et le nom du bucket
      de production (`R2_BUCKET_NAME`). S'il y a plusieurs buckets et que Vercel masque aussi ce
-     nom, demandez-le à l'équipe technique plutôt que de deviner.
+     nom, demande-le à l'équipe technique plutôt que de deviner.
   2. Même page → _Manage API tokens_ (selon l'interface : _API Tokens_ → _Manage_) → créer un
      token : permission _Object Read & Write_, limitée à ce seul bucket (_Apply to specific
      buckets only_).
-  3. Copiez **tout de suite** l'_Access Key ID_ (`R2_ACCESS_KEY_ID`) et le _Secret Access Key_
+  3. Copie **tout de suite** l'_Access Key ID_ (`R2_ACCESS_KEY_ID`) et le _Secret Access Key_
      (`R2_SECRET_ACCESS_KEY`) : Cloudflare ne les affiche qu'une fois.
-  4. Une fois le retrait vérifié (§4), supprimez ce token dans _Manage API tokens_.
+  4. Une fois le retrait vérifié (§4), supprime ce token dans _Manage API tokens_.
 
 ```sh
 export R2_ACCOUNT_ID='<id du compte Cloudflare>'
@@ -70,21 +75,21 @@ bun --no-env-file scripts/retire-template.ts '<id, slug ou lien>'
 
 `--no-env-file` empêche Bun de compléter avec un `.env` local : seules les variables du shell
 comptent. Le script affiche le bucket visé, l'état du modèle avant (id, slug, titre, prénom,
-pays : de quoi vérifier que c'est le bon), puis après. Notez l'id de la ligne
-`id <16 caractères> · slug …` : c'est lui qui va dans la vérification du §4, même si vous êtes
-parti d'un slug.
+pays : de quoi vérifier que c'est le bon), puis après — sans slug : la pierre tombale n'en garde
+aucun. Note l'id de la ligne `id <16 caractères> · …` : c'est lui qui va dans la vérification du
+§4, même si tu es parti d'un slug.
 
 - Code de sortie `0` : retiré, hors de la liste publique, et plus aucune version stockée
   (`versions : aucune, contenu effacé`). La réservation de sa publication
   (`templates/owners/<empreinte>`, quand le téléphone avait tiré le jeton) part avec les
   versions.
-- `1` avec « l'index public n'a pas suivi » : le modèle répond déjà 410. Relancez la même
+- `1` avec « l'index public n'a pas suivi » : le modèle répond déjà 410. Relance la même
   commande, sans risque.
 - `1` avec « ses versions (le contenu de l'auteur) n'ont pas été supprimées » : le modèle répond
-  déjà 410, mais son itinéraire est encore dans R2. Relancez la même commande, sans risque,
+  déjà 410, mais son itinéraire est encore dans R2. Relance la même commande, sans risque,
   jusqu'au code `0`.
 - `1` avec « pas entièrement retiré » : la vérification finale a trouvé le modèle encore dans
-  la liste publique ou une version encore stockée (ligne `versions : …` de « Après »). Relancez
+  la liste publique ou une version encore stockée (ligne `versions : …` de « Après »). Relance
   la même commande.
 - `2` : argument absent ou mal formé.
 
@@ -96,7 +101,7 @@ L'API répond 410 tout de suite (jamais en cache) :
 curl -s -o /dev/null -w '%{http_code}\n' https://app.tripbrain.fr/api/templates/<id>
 ```
 
-`<id>` : celui que le script a affiché sur la ligne `id … · slug …` (avec un slug à la place, cette
+`<id>` : celui que le script a affiché sur la ligne `id … · …` (avec un slug à la place, cette
 adresse répond 404).
 
 La page du site vitrine répond 410 dans l'heure (régénération ISR), si le modèle était listé,
@@ -120,7 +125,7 @@ l'app → _Logs_, recherche `template_index_full`) :
 template_index_full : le morceau d’index index/k ne peut plus grandir, le modèle k3x9m2… n’y entre pas.
 ```
 
-Notez chaque id cité : ce sont les modèles à rattraper.
+Note chaque id cité : ce sont les modèles à rattraper.
 
 **La procédure** (mêmes variables R2 de production qu'au §3) :
 
@@ -136,7 +141,8 @@ Notez chaque id cité : ce sont les modèles à rattraper.
    ```
 
    Code `0` : chaque modèle a sa ligne (`dans l’index public`), ou n'en a pas parce qu'il
-   n'est plus listé. Code `1` avec « l'index n'a pas suivi » : le morceau est encore plein,
-   reprendre à l'étape 2. Rejouer la commande est sans risque.
+   n'est plus listé (un modèle retiré s'affiche par son id seul, `<id> (retiré)`). Code `1`
+   avec « l'index n'a pas suivi » : le morceau est encore plein, reprends à l'étape 2. Rejouer
+   la commande est sans risque.
 
 Le site vitrine reprend les modèles rattrapés à sa régénération suivante (une heure au plus).

@@ -316,8 +316,11 @@ function reroute(
  *    aucune date ne décale rien, seule la date de chaque journée est posée ;
  * 4. chaque séjour (nuits consécutives gardées au même hébergement) va du
  *    soir de sa première journée au lendemain de sa dernière, à l'heure
- *    d'origine. Si le repreneur a retiré la journée d'arrivée qui portait
- *    l'hébergement, celui-ci passe sur la première journée gardée du séjour ;
+ *    d'origine ; un champ vide ou illisible le reste. Une nuit gardée que le
+ *    séjour couvrait garde son toit : si plus rien avant elle ne la couvre
+ *    (journée d'arrivée retirée, ou copie gardée de l'hôtel sans `checkOut`
+ *    lisible alors que la copie retirée le donnait), l'hébergement qui la
+ *    couvrait dans le modèle passe sur elle ;
  * 5. les trajets qui touchent une étape retirée (des journées consécutives
  *    dans une ville, dont aucune n'est gardée ; voir `removedEnds`) sont
  *    recousus entre l'étape gardée précédente et la suivante. Ils ne gardent
@@ -398,27 +401,30 @@ function placeDays(
   for (const run of runsOf(kept, ({ stay }) => stay?.key ?? null)) {
     const checkIn = fromDayNumber(start + run.first)
     const checkOut = fromDayNumber(start + run.last + 1)
+    /** L'hébergement d'une nuit d'avant, dans ce séjour, couvre-t-il celle-ci ? */
+    let covered = false
     for (let rank = run.first; rank <= run.last; rank++) {
-      const accommodation = days[rank].accommodation
-      if (!accommodation) continue
-      days[rank] = {
-        ...days[rank],
-        accommodation: redateStay(accommodation, checkIn, checkOut),
+      let accommodation = days[rank].accommodation
+      const stay = kept[rank].stay
+      if (!accommodation) {
+        if (covered || !stay) continue
+        // Cette nuit n'a pas d'hébergement, et rien avant elle dans le séjour
+        // ne la couvre : la journée qui portait l'hôtel est retirée — celle
+        // de l'arrivée, ou une copie dont le `checkOut` couvrait cette nuit
+        // quand la copie gardée avant elle n'en a pas de lisible (§3.2.4).
+        // Même si l'hôtel est répété plus loin dans le séjour, `findStay` ne
+        // regarde qu'en arrière : sans ce report, cette nuit n'aurait plus de
+        // toit.
+        accommodation = sameId(
+          shiftDatesDeep(stay.accommodation, offsets[rank]),
+          stay.accommodation,
+        )
       }
-    }
-    const stay = kept[run.first].stay
-    if (days[run.first].accommodation || !stay) continue
-    // La première nuit gardée du séjour n'a pas d'hébergement : sa journée
-    // d'arrivée, qui le portait, est retirée (§3.2.4). Même si l'hôtel est
-    // répété plus loin dans le séjour, `findStay` ne regarde qu'en arrière :
-    // sans ce report, cette nuit n'aurait plus de toit.
-    const moved = sameId(
-      shiftDatesDeep(stay.accommodation, offsets[run.first]),
-      stay.accommodation,
-    )
-    days[run.first] = {
-      ...days[run.first],
-      accommodation: redateStay(moved, checkIn, checkOut),
+      const redated = redateStay(accommodation, checkIn, checkOut)
+      days[rank] = { ...days[rank], accommodation: redated }
+      // Un `checkOut` vide ou illisible le reste : il ne couvre aucune nuit
+      // suivante. Lisible, il va au lendemain de la dernière nuit du séjour.
+      covered = splitIsoDateValue(redated.checkOut) !== null
     }
   }
 
@@ -561,21 +567,25 @@ export interface TemplateTodo {
    * (`needsBooking`). Un hébergement sans nom n'est pas listé.
    */
   accommodations: string[]
-  /** Trajets en train, avion ou bus qui restent à réserver (`needsBooking`). */
+  /** Trajets en train, avion, bus ou bateau qui restent à réserver (`needsBooking`). */
   transports: number
   /** Activités sur réservation qui restent à réserver (`needsBooking`). */
   bookableActivities: number
 }
 
-const BOOKABLE_TRANSPORTS: ReadonlySet<string> = new Set([
-  'train',
-  'plane',
-  'bus',
-])
-const TRANSPORT_TYPES: ReadonlySet<string> = new Set([
-  ...BOOKABLE_TRANSPORTS,
-  'car',
-])
+/**
+ * Chaque type de trajet, et s'il se réserve : `tsc` échoue si un type manque.
+ * La voiture ne se réserve pas forcément, un trajet non classé (`other`) non
+ * plus : rien ne dit qu'il y a un billet.
+ */
+const TRANSPORT_BOOKABLE: Readonly<Record<Transport['type'], boolean>> = {
+  train: true,
+  plane: true,
+  bus: true,
+  boat: true,
+  car: false,
+  other: false,
+}
 /** Statuts d'un hébergement ou d'un trajet déjà réservé (« Réservé » et la suite). */
 const BOOKED_STATUSES: ReadonlySet<string> = new Set([
   'booked',
@@ -597,13 +607,14 @@ function hasReference(value: string | undefined): boolean {
  * comme pour la pastille de chaque carte :
  * - hébergement : ni référence, ni statut « Réservé » (`booked`,
  *   `checked-in`, `completed`) ;
- * - trajet : de même, et seulement en train, avion ou bus (la voiture ne se
- *   réserve pas forcément) ;
+ * - trajet : de même, et seulement en train, avion, bus ou bateau (la
+ *   voiture ne se réserve pas forcément, un trajet non classé non plus) ;
  * - activité : marquée « réservation nécessaire », et ni faite ni
  *   abandonnée (`done`, `skipped`).
  *
  * L'hébergement se reconnaît à son `checkIn` (champ requis), le trajet à son
- * type (`train`, `car`, `plane`, `bus`) ; le reste est une activité.
+ * type (`train`, `car`, `plane`, `bus`, `boat`, `other`) ; le reste est une
+ * activité.
  */
 export function needsBooking(
   entity: Accommodation | Transport | Activity,
@@ -614,10 +625,10 @@ export function needsBooking(
       !BOOKED_STATUSES.has(entity.status ?? '')
     )
   }
-  if (TRANSPORT_TYPES.has(entity.type)) {
+  if (Object.hasOwn(TRANSPORT_BOOKABLE, entity.type)) {
     const transport = entity as Transport
     return (
-      BOOKABLE_TRANSPORTS.has(transport.type) &&
+      TRANSPORT_BOOKABLE[transport.type] &&
       !hasReference(transport.bookingReference) &&
       !BOOKED_STATUSES.has(transport.status ?? '')
     )

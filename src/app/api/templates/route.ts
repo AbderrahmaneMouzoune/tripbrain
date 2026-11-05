@@ -67,7 +67,7 @@ export async function POST(request: Request) {
   } catch (error) {
     return templateErrorResponse(
       error,
-      'La publication du modèle a échoué. Réessayez.',
+      'La publication du modèle a échoué. Réessaie.',
     )
   }
 }

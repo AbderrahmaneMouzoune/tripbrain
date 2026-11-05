@@ -9,9 +9,14 @@
  */
 
 import type { TripGroup } from '@/lib/group-sync'
+import { splitIsoDateValue, toDayNumber } from '@/lib/iso-date'
 import type { DayItinerary } from '@/lib/itinerary-data'
+import { cleanForTemplate } from '@/lib/template-clean'
+import { templateDateAnchor } from '@/lib/template-dates'
+import { normalizeItineraryTransports } from '@/lib/transport-type'
 import type {
   PublishedTemplateInfo,
+  TemplateOptions,
   TemplateOrigin,
 } from '@/lib/template-model'
 
@@ -55,9 +60,42 @@ export interface StoredTrip {
   /**
    * Côté repreneur : le modèle d'où vient ce voyage, avec la version reprise
    * telle qu'elle a été recalée. Champ facultatif, donc sans migration
-   * IndexedDB : les enregistrements sont stockés entiers.
+   * IndexedDB : les enregistrements sont stockés entiers. Tant que le voyage
+   * n'a pas été retouché, il ne se republie pas (`templatePublishBlocker`).
    */
   origin?: TemplateOrigin
+}
+
+/** Les journées, chaque trajet ramené à un type de l'app ; les mêmes si rien ne change. */
+function withKnownTransports(days: DayItinerary[]): DayItinerary[] {
+  const normalized = normalizeItineraryTransports(days)
+  return normalized.every((day, index) => day === days[index])
+    ? days
+    : normalized
+}
+
+/**
+ * Un voyage lu sur l'appareil, chaque trajet ramené à un type de l'app
+ * (`normalizeItineraryTransports`) : dans le voyage et dans la base d'un
+ * voyage repris (`origin.base`). Avant cette règle, un import CSV ou XLSX
+ * gardait le type saisi (« Ferry », « TGV ») et un import JSON n'importe
+ * quel texte : l'icône du trajet manquait et l'écran de la journée
+ * plantait. Le même objet revient si rien ne change.
+ */
+export function normalizeStoredTrip(trip: StoredTrip): StoredTrip {
+  const itinerary = Array.isArray(trip.itinerary)
+    ? withKnownTransports(trip.itinerary)
+    : trip.itinerary
+  const base = trip.origin?.base
+  const normalizedBase = Array.isArray(base) ? withKnownTransports(base) : base
+  if (itinerary === trip.itinerary && normalizedBase === base) return trip
+  return {
+    ...trip,
+    itinerary,
+    ...(trip.origin && normalizedBase !== base
+      ? { origin: { ...trip.origin, base: normalizedBase as DayItinerary[] } }
+      : {}),
+  }
 }
 
 /** Ce qu'il faut pour lister les voyages, sans traîner tout l'itinéraire. */
@@ -265,12 +303,141 @@ export function tripCopyOf(trip: StoredTrip): TripCopy {
 }
 
 /**
- * Le voyage peut-il être publié comme itinéraire modèle ? Ni la démo, ni une
- * copie de la démo (spec des modèles, §9 : « Voyage de démo : non
- * publiable »), ni un voyage sans journée.
+ * Pourquoi un voyage ne se publie pas comme itinéraire modèle :
+ * - `demo` : le voyage d'exemple (spec des modèles, §9) ;
+ * - `demo-copy` : une copie de la démo (`copiedFromDemo`) ;
+ * - `empty` : aucune journée ;
+ * - `unmodified-take` : repris d'un modèle (`origin`) et pas retouché — le
+ *   republier ne ferait qu'un doublon du modèle d'un autre.
  */
+export type TemplatePublishBlocker =
+  | 'demo'
+  | 'demo-copy'
+  | 'empty'
+  | 'unmodified-take'
+
+/**
+ * Ce qu'on compare entre un voyage repris et le modèle tel qu'il a été repris :
+ * tout ce qui pourrait partir, notes et prix compris, sans hébergement masqué.
+ */
+const COMPARED_CONTENT: TemplateOptions = {
+  includeNotes: true,
+  includePrices: true,
+  privateStays: [],
+}
+
+/** La partie date d'une valeur `AAAA-MM-JJ…`, hors ids ; `null` sinon. */
+function dateOf(value: unknown, key?: string): string | null {
+  if (typeof value !== 'string' || key === 'id') return null
+  return splitIsoDateValue(value)?.date ?? null
+}
+
+/** Les clés d'un objet dans l'ordre alphabétique, sans valeur `undefined`. */
+function sortedEntries(value: object): [string, unknown][] {
+  return Object.keys(value)
+    .sort()
+    .flatMap((name) => {
+      const item: unknown = Reflect.get(value, name)
+      return item === undefined ? [] : [[name, item] as [string, unknown]]
+    })
+}
+
+/**
+ * La première date d'une structure, clés parcourues dans l'ordre
+ * alphabétique : le même champ des deux côtés d'une comparaison, quel que
+ * soit l'ordre d'écriture des clés.
+ */
+function firstDate(value: unknown, key?: string): string | null {
+  const own = dateOf(value, key)
+  if (own !== null) return own
+  const children: [string | undefined, unknown][] = Array.isArray(value)
+    ? value.map((item) => [undefined, item])
+    : value && typeof value === 'object'
+      ? sortedEntries(value)
+      : []
+  for (const [name, item] of children) {
+    const found = firstDate(item, name)
+    if (found !== null) return found
+  }
+  return null
+}
+
+/**
+ * Le contenu publiable d'un itinéraire, comparable d'un voyage à l'autre :
+ * nettoyé comme pour un modèle (statuts, références, sièges… retirés), les
+ * clés dans l'ordre, et chaque date comptée en jours depuis une date repère
+ * — celle du voyage (`templateDateAnchor`), sinon la première trouvée (un
+ * voyage sans date de journée peut dater ses hôtels). Décaler tout le voyage
+ * n'y change donc rien. Les ids restent tels quels, même quand ils ont la
+ * forme d'une date.
+ */
+function publishableContent(itinerary: readonly DayItinerary[]): string {
+  const cleaned = cleanForTemplate(itinerary, COMPARED_CONTENT)
+  const anchor = templateDateAnchor(cleaned) ?? firstDate(cleaned)
+  const origin = anchor === null ? 0 : toDayNumber(anchor)
+  const comparable = (value: unknown, key?: string): unknown => {
+    if (typeof value === 'string') {
+      const date = dateOf(value, key)
+      return date === null
+        ? value
+        : `@${toDayNumber(date) - origin}${value.slice(date.length)}`
+    }
+    if (Array.isArray(value)) return value.map((item) => comparable(item))
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        sortedEntries(value).map(([name, item]) => [
+          name,
+          comparable(item, name),
+        ]),
+      )
+    }
+    return value
+  }
+  return JSON.stringify(comparable(cleaned))
+}
+
+/**
+ * Le voyage repris a-t-il été retouché ? Vrai dès que ce qui partirait dans
+ * un modèle diffère du modèle tel qu'il a été repris (`origin.base`) : une
+ * journée, une activité, un conseil, un hôtel, un trajet, un prix, une note
+ * ou l'ordre. Un statut (« fait »), une référence de réservation ou un lien
+ * de confirmation ne comptent pas : ils ne partent jamais. Décaler tout le
+ * voyage non plus : le repreneur recale de toute façon le modèle à ses dates.
+ */
+function isRetouchedTake(
+  itinerary: readonly DayItinerary[],
+  origin: TemplateOrigin,
+): boolean {
+  // Une base illisible ne permet pas de comparer : on ne bloque pas.
+  if (!Array.isArray(origin.base)) return true
+  try {
+    return publishableContent(itinerary) !== publishableContent(origin.base)
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Ce qui empêche de publier le voyage comme itinéraire modèle, ou `null`. Un
+ * voyage de groupe se publie : l'écran A3 prévient que les retouches des
+ * autres voyageurs deviennent publiques. Un voyage déjà publié reste géré
+ * (A4) quoi qu'il arrive : la règle vaut pour publier, pas pour retirer.
+ */
+export function templatePublishBlocker(
+  trip: StoredTrip,
+): TemplatePublishBlocker | null {
+  if (trip.isDemo) return 'demo'
+  if (trip.copiedFromDemo) return 'demo-copy'
+  if (trip.itinerary.length === 0) return 'empty'
+  if (trip.origin && !isRetouchedTake(trip.itinerary, trip.origin)) {
+    return 'unmodified-take'
+  }
+  return null
+}
+
+/** Le voyage peut-il être publié comme itinéraire modèle (`templatePublishBlocker`) ? */
 export function canPublishTemplate(trip: StoredTrip): boolean {
-  return !trip.isDemo && !trip.copiedFromDemo && trip.itinerary.length > 0
+  return templatePublishBlocker(trip) === null
 }
 
 /**

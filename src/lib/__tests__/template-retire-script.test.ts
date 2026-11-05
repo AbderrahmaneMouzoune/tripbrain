@@ -7,6 +7,7 @@ import {
 } from '../../../scripts/retire-template'
 import {
   isTemplateIndexKey,
+  retireTemplate,
   templateIndexKey,
   templateOwnerKey,
   publishTemplate,
@@ -57,7 +58,7 @@ function publish(indexable = true, ownerToken?: string) {
     title: 'Deux semaines au Japon',
     authorName: 'Yanis',
     country: 'JP',
-    options: { includeNotes: false, includePrices: true },
+    options: { includeNotes: false, includePrices: true, privateStays: [] },
     indexable,
     now: new Date('2026-11-03T10:00:00.000Z'),
   })
@@ -160,6 +161,15 @@ describe('scripts/retire-template.ts', () => {
     expect(out).toContain('versions : aucune, contenu effacé')
     expect(out).not.toContain(meta.ownerTokenHash)
     expect(versionKeys(meta.id)).toEqual([])
+    // La pierre tombale ne garde aucun slug : « Après » ne peut plus le montrer,
+    // et le bucket ne le contient plus, ni en clé ni en valeur.
+    const after = out.slice(out.indexOf('Après :'))
+    expect(after).not.toContain(meta.slug)
+    expect(after).toContain(`id ${meta.id} · version 1`)
+    for (const key of bucket.keys()) {
+      expect(key).not.toContain(meta.slug)
+      expect(JSON.stringify(bucket.peek(key))).not.toContain(meta.slug)
+    }
 
     expect(await readTemplate(bucket, meta.id)).toEqual({ status: 'retired' })
     expect(await readTemplateBySlug(bucket, meta.slug)).toEqual({
@@ -189,6 +199,11 @@ describe('scripts/retire-template.ts', () => {
       expect(await readTemplateBySlug(bucket, slug)).toEqual({
         status: 'retired',
       })
+      // Retiré, il se retrouve encore par chacun : la commande le hache.
+      const again = await run([`https://tripbrain.fr/itineraires/${slug}`])
+      expect(again.code).toBe(0)
+      expect(again.out).toContain('Déjà retiré')
+      expect(again.out).not.toContain('ancien slug')
     }
     // La réservation de sa publication part avec ses versions.
     expect(bucket.keys()).not.toContain(templateOwnerKey(hashOwnerToken(token)))
@@ -213,7 +228,7 @@ describe('scripts/retire-template.ts', () => {
 
     const failed = await run([meta.id])
     expect(failed.code).toBe(1)
-    expect(failed.err).toContain('Relancez la même commande')
+    expect(failed.err).toContain('Relance la même commande')
     expect(await readTemplate(bucket, meta.id)).toEqual({ status: 'retired' })
 
     bucket.beforePut = null
@@ -234,8 +249,9 @@ describe('scripts/retire-template.ts', () => {
     const failed = await run([meta.slug])
     expect(failed.code).toBe(1)
     expect(failed.out).not.toContain('Retiré.')
+    expect(failed.out).not.toContain('Déjà retiré')
     expect(failed.err).toContain('ses versions (le contenu de l’auteur)')
-    expect(failed.err).toContain('Relancez la même commande')
+    expect(failed.err).toContain('Relance la même commande')
     expect(await readTemplate(bucket, meta.id)).toEqual({ status: 'retired' })
     expect(versionKeys(meta.id)).toEqual([`${meta.id}/v/1`])
 
@@ -322,5 +338,17 @@ describe('scripts/resync-template-index.ts', () => {
     const missing = await resync(['k3x9m2abcdefghjk'])
     expect(missing.code).toBe(1)
     expect(missing.err).toContain('introuvable')
+  })
+
+  it('montre un modèle retiré par son id seul : il n’a plus de slug lisible', async () => {
+    const token = createOwnerToken()
+    const { meta } = await publish(true, token)
+    await retireTemplate(bucket, meta.id, token, LATER)
+    const done = await resync([`https://tripbrain.fr/itineraires/${meta.slug}`])
+    expect(done.code).toBe(0)
+    expect(done.out).toContain(
+      `${meta.id} (retiré) : hors de l’index public (non listé ou retiré)`,
+    )
+    expect(done.out).not.toContain(meta.slug)
   })
 })

@@ -1278,6 +1278,35 @@ describe('retimeTemplate', () => {
       }
     })
 
+    it('garde le toit d’une nuit que couvrait une copie retirée de l’hôtel, quand la copie gardée n’a pas de départ', () => {
+      // Contre-exemple réduit du fuzz (« chaque nuit gardée garde son toit ») :
+      // l'hôtel est noté sur les deux premières journées, sans dates la 1ʳᵉ
+      // fois ; c'est la 2ᵉ copie (départ le 17) qui couvre la nuit du 16. Les
+      // deux premières journées n'ont pas de date : elles se situent d'après
+      // la 3ᵉ (14 et 15 octobre). Le repreneur retire la 2ᵉ journée.
+      const template = [
+        day('day-2', '', '', '', {
+          accommodation: hotel('acc-1', '柃居B&B', '', ''),
+        }),
+        day('day-3', '', '', '', {
+          accommodation: hotel('acc-1', '柃居B&B', '', '2053-10-17'),
+        }),
+        day('day-5', '2053-10-16', '', ''),
+      ]
+      const result = retimeTemplate(template, {
+        startDate: '2027-06-12',
+        keptDayIds: ['day-2', 'day-5'],
+      })
+      // La copie gardée reste telle quelle : un champ vide reste vide.
+      expect(result[0].accommodation).toEqual(template[0].accommodation)
+      // La nuit du 13 reçoit la copie qui la couvrait dans le modèle.
+      expect(result[1].accommodation).toEqual({
+        ...template[1].accommodation,
+        checkOut: '2027-06-14',
+      })
+      expect(findStay(result, 1)?.accommodation.name).toBe('柃居B&B')
+    })
+
     it('raccourcit un séjour dont une nuit est retirée', () => {
       const result = retimeTemplate(demoItinerary, {
         startDate: '2026-11-20',
@@ -1442,8 +1471,8 @@ describe('needsBooking', () => {
     }
   })
 
-  it('un trajet en train, avion ou bus de même ; une voiture jamais', () => {
-    for (const type of ['train', 'plane', 'bus'] as const) {
+  it('un trajet en train, avion, bus ou bateau de même ; une voiture ou un trajet non classé jamais', () => {
+    for (const type of ['train', 'plane', 'bus', 'boat'] as const) {
       const transport: Transport = { id: 't', type, from: 'Tokyo', to: 'Kyoto' }
       expect(needsBooking(transport)).toBe(true)
       expect(needsBooking({ ...transport, status: 'planned' })).toBe(true)
@@ -1454,6 +1483,26 @@ describe('needsBooking', () => {
       )
     }
     expect(needsBooking({ id: 't', type: 'car', from: 'Rome' })).toBe(false)
+    expect(needsBooking({ id: 't', type: 'other', from: 'Hakone' })).toBe(false)
+  })
+
+  it('compte le ferry parmi les trajets à réserver du modèle, pas un trajet non classé', () => {
+    const [first] = japanTemplate()
+    const ferry = {
+      ...first,
+      transport: {
+        id: 'tr-ferry',
+        type: 'boat' as const,
+        from: 'Tokyo',
+        to: 'Oshima',
+      },
+    }
+    const unclassified = {
+      ...first,
+      transport: { id: 'tr-x', type: 'other' as const, from: 'Hakone' },
+    }
+    expect(templateTodo([ferry]).transports).toBe(1)
+    expect(templateTodo([unclassified]).transports).toBe(0)
   })
 
   it('une activité sur réservation, ni faite ni abandonnée', () => {

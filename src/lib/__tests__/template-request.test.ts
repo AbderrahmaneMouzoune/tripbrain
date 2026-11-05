@@ -3,8 +3,10 @@ import { S3ndError } from '@s3nd/core'
 import { itinerary as demoItinerary } from '@/lib/itinerary-data'
 import { compressItinerary } from '@/lib/share'
 import {
+  MAX_STAY_KEY_LENGTH,
   MAX_TEMPLATE_DAYS,
   MAX_TEMPLATE_DAY_ACTIVITIES,
+  MAX_TEMPLATE_PRIVATE_STAYS,
   MAX_TEMPLATE_TITLE_LENGTH,
 } from '@/lib/template-model'
 import {
@@ -23,6 +25,7 @@ import {
   readJsonBody,
   templateErrorReply,
   templateErrorResponse,
+  tooManyTemplateRequests,
 } from '@/lib/template-request'
 import { TemplateStoreError } from '@/lib/template-store'
 import {
@@ -316,6 +319,8 @@ describe('forme des valeurs décodées', () => {
         highlights: ['Shibuya'],
         images: [{ url: 'https://example.com/tokyo.jpg', caption: 'Tokyo' }],
         activities: [{ ...activity({ id: 'act-ok' }), images: [] }],
+        // Un ferry n'est pas retiré : il devient un trajet en bateau.
+        transport: { ...transport(), type: 'boat' },
         accommodation: {
           id: 'acc-1',
           name: 'Ryokan Sawanoya',
@@ -368,7 +373,7 @@ describe('parseTemplatePublish', () => {
         title: null,
         authorName: null,
         country: 'JP',
-        options: { includeNotes: false, includePrices: true },
+        options: { includeNotes: false, includePrices: true, privateStays: [] },
         indexable: true,
       },
     })
@@ -386,9 +391,67 @@ describe('parseTemplatePublish', () => {
     expect(parsed.ok && parsed.data).toMatchObject({
       title: 'Japon en 3 jours',
       authorName: 'Yanis',
-      options: { includeNotes: true, includePrices: true },
+      options: { includeNotes: true, includePrices: true, privateStays: [] },
       indexable: false,
     })
+  })
+
+  it('garde les hébergements privés, dédoublonnés, dans l’ordre reçu', () => {
+    const parsed = parseTemplatePublish({
+      data,
+      country: 'JP',
+      options: {
+        privateStays: ['cheztantelurdes', '#acc-7', 'cheztantelurdes'],
+      },
+    })
+    expect(parsed.ok && parsed.data.options).toEqual({
+      includeNotes: false,
+      includePrices: true,
+      privateStays: ['cheztantelurdes', '#acc-7'],
+    })
+  })
+
+  it('refuse des hébergements privés mal formés (400), sans rien publier', () => {
+    const tooMany = Array.from(
+      { length: MAX_TEMPLATE_PRIVATE_STAYS + 1 },
+      (_, index) => `#acc-${index}`,
+    )
+    for (const privateStays of [
+      'cheztantelurdes',
+      [42],
+      [''],
+      ['Chez Marie'],
+      ['x'.repeat(MAX_STAY_KEY_LENGTH + 1)],
+      tooMany,
+      null,
+      { 0: 'chezmarie' },
+    ]) {
+      expect(
+        failure(
+          parseTemplatePublish({
+            data,
+            country: 'JP',
+            options: { privateStays },
+          }),
+        ),
+      ).toEqual({
+        ok: false,
+        status: 400,
+        error: 'Hébergements privés invalides.',
+      })
+    }
+    // À la borne, tout passe.
+    const bounded = Array.from(
+      { length: MAX_TEMPLATE_PRIVATE_STAYS },
+      (_, index) => `#acc-${index}`,
+    )
+    bounded[0] = 'x'.repeat(MAX_STAY_KEY_LENGTH)
+    const parsed = parseTemplatePublish({
+      data,
+      country: 'JP',
+      options: { privateStays: bounded },
+    })
+    expect(parsed.ok && parsed.data.options.privateStays).toEqual(bounded)
   })
 
   it('borne le titre à 120 caractères', () => {
@@ -506,15 +569,40 @@ describe('parseTemplateUpdate', () => {
     expect(parsed.ok && parsed.data).toHaveProperty('title', null)
   })
 
-  it('complète des réglages partiels avec les valeurs par défaut', () => {
+  it('ne garde que les réglages envoyés : les autres restent ceux publiés', () => {
     const parsed = parseTemplateUpdate({
       data,
       options: { includePrices: false },
     })
-    expect(parsed.ok && parsed.data.options).toEqual({
-      includeNotes: false,
-      includePrices: false,
+    // Ni `includeNotes` ni `privateStays` : le store garde ceux de la méta.
+    expect(parsed.ok && parsed.data.options).toEqual({ includePrices: false })
+  })
+
+  it('distingue des hébergements privés absents d’une liste vide', () => {
+    const cleared = parseTemplateUpdate({ data, options: { privateStays: [] } })
+    expect(cleared.ok && cleared.data.options).toEqual({ privateStays: [] })
+    const sent = parseTemplateUpdate({
+      data,
+      options: { privateStays: ['chezmarie', 'chezmarie'] },
     })
+    expect(sent.ok && sent.data.options).toEqual({
+      privateStays: ['chezmarie'],
+    })
+    expect(
+      failure(
+        parseTemplateUpdate({
+          data,
+          options: { privateStays: ['Chez Marie'] },
+        }),
+      ),
+    ).toEqual({
+      ok: false,
+      status: 400,
+      error: 'Hébergements privés invalides.',
+    })
+    expect(
+      failure(parseTemplateUpdate({ data, options: { includeNotes: null } })),
+    ).toMatchObject({ status: 400 })
   })
 
   it('refuse une mise à jour sans itinéraire', () => {
@@ -752,7 +840,7 @@ describe('templateErrorReply', () => {
       status: 503,
       body: {
         error:
-          'Le modèle n’a pas pu être retiré de la liste publique de tripbrain.fr. Réessayez.',
+          'Le modèle n’a pas pu être retiré de la liste publique de tripbrain.fr. Réessaie.',
       },
     })
   })
@@ -766,7 +854,7 @@ describe('templateErrorReply', () => {
       status: 503,
       body: {
         error:
-          'Le modèle est retiré, mais son contenu n’a pas pu être effacé. Réessayez.',
+          'Le modèle est retiré, mais son contenu n’a pas pu être effacé. Réessaie.',
       },
     })
     expect(reply.body.error).not.toMatch(/code|expir/i)
@@ -850,6 +938,11 @@ describe('messages d’erreur', () => {
       parseTemplatePublish({ data, country: 'JP', title: 1 }),
       parseTemplatePublish({ data, country: 'JP', authorName: 1 }),
       parseTemplatePublish({ data, country: 'JP', options: 1 }),
+      parseTemplatePublish({
+        data,
+        country: 'JP',
+        options: { privateStays: 'chezmarie' },
+      }),
       parseTemplatePublish({ data, country: 'JP', indexable: 1 }),
       parseTemplatePublish({
         data: await compressItinerary([]),
@@ -866,6 +959,18 @@ describe('messages d’erreur', () => {
     expect(messages.length).toBeGreaterThan(15)
     for (const message of messages) {
       expect(message.toLowerCase()).not.toMatch(/code|expir/)
+      // Décision du propriétaire : l'app tutoie, partout.
+      expect(message).not.toMatch(
+        /\bvous\b|\bvotre\b|\bvos\b|réessayez|mettez|relancez|vérifiez/i,
+      )
     }
+    expect(
+      templateErrorReply(new S3ndError('SNAPSHOT_TOO_NEW', ''), '').body.error,
+    ).toBe(
+      'Ce modèle vient d’une version plus récente de TripBrain. Mets l’application à jour.',
+    )
+    expect(await tooManyTemplateRequests(30).json()).toEqual({
+      error: 'Trop de tentatives. Réessaie dans un instant.',
+    })
   })
 })

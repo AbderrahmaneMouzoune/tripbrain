@@ -6,6 +6,8 @@ import type {
 } from '@/lib/itinerary-data'
 import { itinerary as demoItinerary } from '@/lib/itinerary-data'
 import {
+  AddressSearchTooCostlyError,
+  MAX_ADDRESS_SEARCH_WORK,
   NOTE_EXCERPT_LENGTH,
   cleanForTemplate,
   isPrivateBookingUrl,
@@ -13,21 +15,25 @@ import {
   sensitiveSpans,
   summarizeTemplateCleaning,
   templateKnownPlaces,
+  PRIVATE_STAY_NAME,
+  looksLikePrivateStay,
   templateNoteStats,
+  templateStays,
   type SensitiveSpan,
 } from '@/lib/template-clean'
 import {
   DEFAULT_TEMPLATE_OPTIONS,
+  stayKey,
   type TemplateOptions,
 } from '@/lib/template-model'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const ALL_OPTIONS: TemplateOptions[] = [
-  { includeNotes: false, includePrices: true },
-  { includeNotes: false, includePrices: false },
-  { includeNotes: true, includePrices: true },
-  { includeNotes: true, includePrices: false },
+  { includeNotes: false, includePrices: true, privateStays: [] },
+  { includeNotes: false, includePrices: false, privateStays: [] },
+  { includeNotes: true, includePrices: true, privateStays: [] },
+  { includeNotes: true, includePrices: false, privateStays: [] },
 ]
 
 const CONFIRMATION_URL =
@@ -334,6 +340,7 @@ describe('cleanForTemplate', () => {
     const [first, , third] = cleanForTemplate(japanTrip(), {
       includeNotes: true,
       includePrices: true,
+      privateStays: [],
     })
     expect(first.notes).toBe(
       'Kenji nous attend à la sortie, appeler le 080-3312-4471 en cas de retard.',
@@ -355,6 +362,7 @@ describe('cleanForTemplate', () => {
     const cleaned = cleanForTemplate(japanTrip(), {
       includeNotes: true,
       includePrices: false,
+      privateStays: [],
     })
     const keys = allKeys(cleaned)
     expect(keys).not.toContain('price')
@@ -861,6 +869,7 @@ describe('summarizeTemplateCleaning', () => {
         privateLinks: 3,
         // blob: d'une journée et d'une activité, data: d'un hébergement
         deviceImages: 3,
+        privateStays: 0,
       },
     })
   })
@@ -869,6 +878,7 @@ describe('summarizeTemplateCleaning', () => {
     const { stays } = summarizeTemplateCleaning(japanTrip(), {
       includeNotes: false,
       includePrices: false,
+      privateStays: [],
     })
     // 4 activités + 2 trajets + 2 hébergements distincts
     expect(stays.prices).toBe(8)
@@ -878,6 +888,7 @@ describe('summarizeTemplateCleaning', () => {
     const { stays } = summarizeTemplateCleaning(japanTrip(), {
       includeNotes: true,
       includePrices: true,
+      privateStays: [],
     })
     expect(stays.notes).toBe(0)
   })
@@ -912,6 +923,7 @@ describe('summarizeTemplateCleaning', () => {
         prices: 0,
         privateLinks: 0,
         deviceImages: 0,
+        privateStays: 0,
       },
     })
   })
@@ -930,6 +942,7 @@ describe('summarizeTemplateCleaning', () => {
       prices: 0,
       privateLinks: 0,
       deviceImages: 0,
+      privateStays: 0,
     })
   })
 })
@@ -1476,5 +1489,753 @@ describe('noteExcerpts', () => {
       ['phone', '080-3312-4471'],
     ])
     expect(notes.includes(excerpt.text.slice(1).replace(/…$/, ''))).toBe(true)
+  })
+})
+
+// ── Hébergements privés (« Ne publier que le nom et la ville ») ──────────────
+
+/**
+ * Lisbonne chez la tante de Marta, puis un hôtel à Porto. L'adresse de la
+ * tante revient partout où un voyageur l'écrirait : notes, conseils, trajet
+ * « depuis l'appart », lien Google Maps, carte statique, activité « Dîner ».
+ */
+function stayWithFamily(): DayItinerary[] {
+  const aunt = (id: string, overrides: Partial<Accommodation> = {}) =>
+    hotel({
+      id,
+      name: 'Chez tante Lurdes',
+      address: 'Rua dos Remédios 45, 2º esq., 1100-447 Lisboa',
+      bookingUrl: 'https://www.facebook.com/lurdes.alfama',
+      checkIn: '2026-05-01',
+      checkOut: '2026-05-03',
+      price: 0,
+      currency: 'EUR',
+      images: ['https://images.pexels.com/photos/9/rua.jpeg'],
+      status: 'checked-in',
+      ...overrides,
+    })
+  return [
+    day(1, {
+      city: 'Lisboa',
+      title: 'Arrivée à Lisbonne',
+      notes:
+        'Clés chez la voisine, Rua dos Remédios 45, 2º esq. Code 4521 en bas.',
+      tips: [
+        'Le 28 passe juste devant : arrêt à 2 min de Rua dos Remédios 45',
+        'RUA DOS REMÉDIOS 45, 2º ESQ., 1100-447 LISBOA',
+      ],
+      highlights: ['Alfama', 'Miradouro de Santa Luzia'],
+      images: [
+        {
+          url: 'https://maps.googleapis.com/maps/api/staticmap?center=Rua+dos+Rem%C3%A9dios+45,Lisboa',
+          caption: 'Le quartier',
+        },
+        {
+          url: 'https://images.pexels.com/photos/3/alfama.jpeg',
+          caption: 'Vue depuis rua dos remedios 45',
+        },
+      ],
+      accommodation: aunt('acc-tante-1'),
+      transport: transport({
+        id: 'tr-aller',
+        type: 'plane',
+        from: 'Paris Orly',
+        to: 'Lisbonne',
+        details: 'Taxi jusqu’à Rua dos Remédios, 45 (20 min)',
+      }),
+      activities: [
+        activity({
+          id: 'act-diner',
+          name: 'Dîner Rua dos Remédios 45',
+          type: 'food',
+          coordinates: [38.7118, -9.1285],
+          description: 'Bacalhau de tante Lurdes',
+        }),
+        activity({
+          id: 'act-tram',
+          name: 'Tram 28',
+          type: 'experience',
+          address: 'Praça Martim Moniz, 1100-341 Lisboa',
+          coordinates: [38.7158, -9.1366],
+          bookingUrl:
+            'https://www.google.com/maps/search/Rua+dos+Rem%C3%A9dios+45',
+          tips: 'Le prendre au terminus, Martim Moniz',
+        }),
+      ],
+    }),
+    day(2, {
+      city: 'Lisboa',
+      title: 'Belém',
+      accommodation: aunt('acc-tante-2', { name: 'chez  TANTE Lurdes' }),
+      activities: [
+        activity({
+          id: 'act-belem',
+          name: 'Tour de Belém',
+          address: 'Av. Brasília, 1400-038 Lisboa',
+          coordinates: [38.6916, -9.2159],
+        }),
+      ],
+    }),
+    day(3, {
+      city: 'Porto',
+      title: 'Porto',
+      transport: transport({
+        id: 'tr-porto',
+        from: 'Rua dos Remédios 45',
+        to: 'Porto Campanhã',
+        departureAddress: 'Rua dos Remédios 45, 2º esq., 1100-447 Lisboa',
+      }),
+      accommodation: hotel({
+        id: 'acc-porto',
+        name: 'Hotel Infante Sagres',
+        address: 'Praça Dona Filipa de Lencastre 62, 4050-259 Porto',
+        bookingUrl: 'https://www.infantesagres.com/',
+        checkIn: '2026-05-03',
+        checkOut: '2026-05-04',
+      }),
+    }),
+  ]
+}
+
+const AUNT = 'cheztantelurdes'
+
+/** Tous les textes d'une structure, ids exceptés. */
+function textsOf(value: unknown, key = ''): string[] {
+  if (typeof value === 'string') return key === 'id' ? [] : [value]
+  if (Array.isArray(value)) return value.flatMap((item) => textsOf(item))
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([name, item]) => textsOf(item, name))
+  }
+  return []
+}
+
+/** Sans accents ni casse, `+` et `%xx` décodés, séparateurs ramenés à une espace. */
+function plain(text: string): string {
+  let decoded = text.replace(/\+/g, ' ')
+  try {
+    decoded = decodeURIComponent(decoded)
+  } catch {
+    // Séquence `%` invalide : on garde le texte.
+  }
+  return decoded
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[\s,;]+/g, ' ')
+}
+
+describe('stayKey', () => {
+  it('ignore accents, casse et espaces, et garde les ids des hébergements sans nom', () => {
+    const key = stayKey({ id: 'a', name: 'Chez  Tante Lurdes' })
+    expect(key).toBe(AUNT)
+    expect(stayKey({ id: 'b', name: ' CHEZ TANTE LURDES ' })).toBe(key)
+    expect(stayKey({ id: 'c', name: 'Chéz Tante Lurdes' })).toBe(key)
+    expect(stayKey({ id: 'acc-9', name: '' })).toBe('#acc-9')
+    expect(stayKey({ id: 'acc-9', name: '   ' })).toBe('#acc-9')
+  })
+})
+
+describe('looksLikePrivateStay', () => {
+  it.each([
+    ['Chez tante Lurdes', ''],
+    ['Appartement Alfama (Airbnb)', 'Rua dos Remédios 45, Lisboa'],
+    ['Maison de famille', 'Le Bourg, Plouha'],
+    ['Flat in Shoreditch', ''],
+    ['Studio Montmartre', ''],
+    ['Logement de Kenji', ''],
+    ['Casa Sol', '12 rue des Lilas, 3e étage, 75011 Paris'],
+    ['Résidence Les Pins', 'Bât. B, porte 12, 06400 Cannes'],
+    ['Les Tilleuls', '5 rue Haute, digicode 4521'],
+    ['Gramercy', '201 E 24th St, Apt 4B, New York'],
+    ['Shoreditch', '14 Rivington St, 2nd floor, London'],
+    ['The Loft', '88 King St #12, Toronto'],
+    ['渋谷の民泊', '東京都渋谷区神南1-2-3 302号室'],
+  ])('suggère « %s » (%s)', (name, address) => {
+    expect(looksLikePrivateStay({ name, address })).toBe(true)
+  })
+
+  it.each([
+    ['Hotel Gracery Shinjuku', '1-19-1 Kabukicho, Shinjuku-ku, Tokyo'],
+    ['Hôtel Saint-Pierre', '3 rue de la Paix, 4e étage, Paris'],
+    ['Ryokan Yachiyo', '34 Nanzenji Fukuchi-cho, Kyoto'],
+    ['Auberge du Lac', ''],
+    ['Camping des Pins', ''],
+    ['Toyoko Inn Shinagawa', ''],
+    ['柃居 B&B', 'Lane 786, Julu Road, Shanghai'],
+    ['Zhangjiajie Local Vibe Downtown Guesthouse', 'Units 601 and 1203'],
+    ['Maison d’hôtes La Bastide', ''],
+    ["QingJin Xiaoqiao's Home Hotel Apartment", '6th Floor, Building 1'],
+    ['Palazzo Ravizza', 'Pian dei Mantellini 34, Siena'],
+    ['Hakone Ginyu', '100-1 Miyanoshita, Hakone'],
+    ['ホテルグレイスリー', ''],
+    ['', ''],
+  ])('ne suggère pas « %s » (%s)', (name, address) => {
+    expect(looksLikePrivateStay({ name, address })).toBe(false)
+  })
+})
+
+describe('looksLikePrivateStay — détails d’accès et Airbnb', () => {
+  it.each([
+    'porte 12',
+    'porte n°12',
+    'porte B',
+    'code 4521',
+    'Code porte : 2580',
+    'code A1234',
+    'app. 34',
+    'floor 12',
+    'Unit 12',
+    'room 302',
+    'flat 12',
+  ])('repère « %s » dans l’adresse, en plusieurs chiffres', (detail) => {
+    expect(
+      looksLikePrivateStay({
+        name: 'Les Tilleuls',
+        address: `10 rue X, ${detail}`,
+      }),
+    ).toBe(true)
+  })
+
+  it.each(['Air BnB Alfama', 'Appartement Air B&B', 'Air bnb', 'Air B & B'])(
+    'repère « %s », malgré le « bnb » des chambres d’hôtes',
+    (name) => {
+      expect(looksLikePrivateStay({ name, address: '' })).toBe(true)
+    },
+  )
+
+  it('ne prend ni une porte de Paris ni des chambres d’hôtes pour un logement privé', () => {
+    for (const address of [
+      'Avenue de la Porte d’Italie, Paris',
+      "Avenue de la Porte d'Italie, Paris",
+      'Porte Maillot, Paris',
+      'Porte de Clignancourt, Paris',
+    ]) {
+      expect(looksLikePrivateStay({ name: 'Les Tilleuls', address })).toBe(
+        false,
+      )
+    }
+    expect(
+      looksLikePrivateStay({
+        name: '柃居 B&B',
+        address: 'Lane 786, Julu Road, Shanghai',
+      }),
+    ).toBe(false)
+    expect(
+      looksLikePrivateStay({ name: 'Bed & Breakfast du Port', address: '' }),
+    ).toBe(false)
+  })
+})
+
+describe('templateStays', () => {
+  it('liste chaque hébergement une fois, dans l’ordre du voyage', () => {
+    expect(templateStays(stayWithFamily())).toEqual([
+      {
+        key: AUNT,
+        name: 'Chez tante Lurdes',
+        cities: ['Lisboa'],
+        address: 'Rua dos Remédios 45, 2º esq., 1100-447 Lisboa',
+        nights: 2,
+        suggestedPrivate: true,
+      },
+      {
+        key: 'hotelinfantesagres',
+        name: 'Hotel Infante Sagres',
+        cities: ['Porto'],
+        address: 'Praça Dona Filipa de Lencastre 62, 4050-259 Porto',
+        nights: 1,
+        suggestedPrivate: false,
+      },
+    ])
+  })
+
+  it('compte les nuits d’un hôtel porté par la seule journée d’arrivée', () => {
+    const stays = templateStays([
+      day(1, {
+        accommodation: hotel({
+          checkIn: '2026-04-01T15:00',
+          checkOut: '2026-04-04T11:00',
+        }),
+      }),
+      day(2),
+      day(3),
+    ])
+    expect(stays).toHaveLength(1)
+    expect(stays[0].nights).toBe(3)
+  })
+
+  it('compte une nuit par journée quand les dates ne se lisent pas', () => {
+    const undated = hotel({ checkIn: 'à confirmer', checkOut: '' })
+    const stays = templateStays([
+      day(1, { date: '', accommodation: undated }),
+      day(2, { date: 'à définir', accommodation: { ...undated, id: 'acc-2' } }),
+    ])
+    expect(stays[0].nights).toBe(2)
+  })
+
+  it('sépare les nuits d’un hébergement sans nom, et garde plusieurs villes', () => {
+    const stays = templateStays([
+      day(1, {
+        accommodation: hotel({
+          id: 'n-1',
+          name: '',
+          address: '',
+          checkIn: '',
+          checkOut: '',
+        }),
+      }),
+      day(2, { accommodation: hotel({ id: 'n-2', name: '' }) }),
+      day(3, { city: 'Yokohama', accommodation: hotel({ id: 'h-3' }) }),
+    ])
+    expect(stays.map((stay) => stay.key)).toEqual([
+      '#n-1',
+      '#n-2',
+      'hotelgraceryshinjuku',
+    ])
+    expect(stays[0]).toMatchObject({ name: '', address: '', nights: 1 })
+    expect(stays[2].cities).toEqual(['Yokohama'])
+  })
+})
+
+describe('cleanForTemplate — hébergements privés', () => {
+  const privateOptions = (
+    overrides: Partial<TemplateOptions> = {},
+  ): TemplateOptions => ({
+    ...DEFAULT_TEMPLATE_OPTIONS,
+    privateStays: [AUNT],
+    ...overrides,
+  })
+
+  it('ne publie que le nom de l’hébergement, ses dates, son prix et la ville', () => {
+    const [first, second, third] = cleanForTemplate(
+      stayWithFamily(),
+      privateOptions(),
+    )
+    expect(first.accommodation).toEqual({
+      id: 'acc-tante-1',
+      name: 'Chez tante Lurdes',
+      address: '',
+      bookingUrl: '',
+      checkIn: '2026-05-01',
+      checkOut: '2026-05-03',
+      price: 0,
+      currency: 'EUR',
+    })
+    expect(first.city).toBe('Lisboa')
+    // Toutes les nuits, quelle que soit l'écriture du nom.
+    expect(second.accommodation).toMatchObject({
+      name: 'chez  TANTE Lurdes',
+      address: '',
+      bookingUrl: '',
+    })
+    expect(second.accommodation).not.toHaveProperty('images')
+    // Les autres hébergements ne bougent pas.
+    expect(third.accommodation).toMatchObject({
+      address: 'Praça Dona Filipa de Lencastre 62, 4050-259 Porto',
+      bookingUrl: 'https://www.infantesagres.com/',
+    })
+  })
+
+  it('efface l’adresse de tous les textes, sans casse ni accents', () => {
+    const cleaned = cleanForTemplate(
+      stayWithFamily(),
+      privateOptions({ includeNotes: true }),
+    )
+    for (const text of textsOf(cleaned)) {
+      expect(plain(text)).not.toContain('remedios 45')
+      expect(plain(text)).not.toContain('esq')
+    }
+    const [first, , third] = cleanForTemplate(
+      stayWithFamily(),
+      privateOptions({ includeNotes: true }),
+    )
+    expect(first.notes).toBe('Clés chez la voisine. Code 4521 en bas.')
+    expect(first.tips).toEqual(['Le 28 passe juste devant : arrêt à 2 min de'])
+    expect(first.transport?.details).toBe('Taxi jusqu’à (20 min)')
+    expect(third.transport).not.toHaveProperty('departureAddress')
+    expect(third.transport).not.toHaveProperty('from')
+    expect(third.transport?.to).toBe('Porto Campanhã')
+  })
+
+  it('retire le lien, la carte et les coordonnées qui mènent à l’adresse', () => {
+    const [first] = cleanForTemplate(stayWithFamily(), privateOptions())
+    const [diner, tram] = first.activities
+    expect(diner.name).toBe('Dîner')
+    expect(diner).not.toHaveProperty('coordinates')
+    expect(diner.description).toBe('Bacalhau de tante Lurdes')
+    expect(tram).not.toHaveProperty('bookingUrl')
+    // Le tram n'est pas chez la tante : sa place reste sur la carte.
+    expect(tram.coordinates).toEqual([38.7158, -9.1366])
+    expect(tram.address).toBe('Praça Martim Moniz, 1100-341 Lisboa')
+    expect(first.images).toEqual([
+      {
+        url: 'https://images.pexels.com/photos/3/alfama.jpeg',
+        caption: 'Vue depuis',
+      },
+    ])
+  })
+
+  it('n’efface ni le code postal et la ville, ni un quartier sans numéro', () => {
+    const itinerary = [
+      day(1, {
+        city: 'Paris',
+        notes: 'Montmartre le soir, puis retour 75011 Paris en métro.',
+        accommodation: hotel({
+          name: 'Chez Marie',
+          address: '75011 Paris',
+        }),
+        activities: [
+          activity({ name: 'Montmartre', address: 'Montmartre, 75018 Paris' }),
+        ],
+      }),
+      day(2, {
+        city: 'Paris',
+        accommodation: hotel({
+          id: 'acc-2',
+          name: 'Chez Paul',
+          address: 'Montmartre',
+        }),
+      }),
+    ]
+    const options = {
+      ...privateOptions({ includeNotes: true }),
+      privateStays: ['chezmarie', 'chezpaul'],
+    }
+    const [first, second] = cleanForTemplate(itinerary, options)
+    expect(first.accommodation?.address).toBe('')
+    expect(second.accommodation?.address).toBe('')
+    expect(first.notes).toBe(itinerary[0].notes)
+    expect(first.activities[0]).toEqual(
+      cleanForTemplate(itinerary, DEFAULT_TEMPLATE_OPTIONS)[0].activities[0],
+    )
+  })
+
+  it('ne touche pas une adresse voisine (« 112 rue des Lilas »)', () => {
+    const itinerary = [
+      day(1, {
+        city: 'Paris',
+        tips: [
+          'La boulangerie du 112 rue des Lilas',
+          'Au 12 rue des Lilas, sonner',
+        ],
+        accommodation: hotel({
+          name: 'Chez Marie',
+          address: '12 rue des Lilas, 75011 Paris',
+        }),
+      }),
+    ]
+    const [cleaned] = cleanForTemplate(
+      itinerary,
+      privateOptions({ privateStays: ['chezmarie'] }),
+    )
+    expect(cleaned.tips).toEqual([
+      'La boulangerie du 112 rue des Lilas',
+      'Au, sonner',
+    ])
+  })
+
+  it('renomme « Logement privé » un hébergement qui ne portait que son adresse', () => {
+    const itinerary = [
+      day(1, {
+        city: 'Paris',
+        accommodation: hotel({
+          name: '12 rue des Lilas',
+          address: '12 rue des Lilas, 75011 Paris',
+        }),
+      }),
+    ]
+    const options = privateOptions({ privateStays: ['12ruedeslilas'] })
+    const [cleaned] = cleanForTemplate(itinerary, options)
+    expect(cleaned.accommodation?.name).toBe(PRIVATE_STAY_NAME)
+    expect(cleanForTemplate([cleaned], options)).toStrictEqual([cleaned])
+  })
+
+  it('masque aussi un hébergement dont le nom publié rejoint la liste (idempotence)', () => {
+    // « Chez Marie, 12 rue des Lilas » devient « Chez Marie » une fois
+    // l'adresse de Chez Marie effacée : il est masqué dès le premier passage.
+    const itinerary = [
+      day(1, {
+        city: 'Paris',
+        accommodation: hotel({
+          id: 'acc-marie',
+          name: 'Chez Marie',
+          address: '12 rue des Lilas, 75011 Paris',
+        }),
+      }),
+      day(2, {
+        city: 'Paris',
+        accommodation: hotel({
+          id: 'acc-marie-bis',
+          name: 'Chez Marie, 12 rue des Lilas',
+          address: '3 impasse Truillot, 75011 Paris',
+        }),
+      }),
+    ]
+    const options = privateOptions({ privateStays: ['chezmarie'] })
+    const once = cleanForTemplate(itinerary, options)
+    expect(once[1].accommodation).toMatchObject({
+      name: 'Chez Marie',
+      address: '',
+    })
+    expect(cleanForTemplate(once, options)).toStrictEqual(once)
+  })
+
+  it('est idempotente et ne touche à rien sans hébergement privé connu', () => {
+    const options = privateOptions({ includeNotes: true })
+    const once = cleanForTemplate(stayWithFamily(), options)
+    expect(cleanForTemplate(once, options)).toStrictEqual(once)
+    expect(
+      cleanForTemplate(stayWithFamily(), {
+        ...options,
+        privateStays: ['personne', '#absent'],
+      }),
+    ).toStrictEqual(
+      cleanForTemplate(stayWithFamily(), { ...options, privateStays: [] }),
+    )
+  })
+
+  it.each([
+    ['Quinta das Rosas, Sintra', 'Sintra'],
+    ['Le Mas des Oliviers, chemin de la Source', 'Gordes'],
+  ])(
+    'efface partout une adresse sans numéro en plusieurs morceaux (« %s »)',
+    (address, city) => {
+      const itinerary = [
+        day(1, {
+          city,
+          notes: `Arrivée à ${address} vers 18 h.`,
+          tips: [`On se retrouve à ${address}`, 'Partir tôt le matin'],
+          activities: [
+            activity({
+              id: 'act-diner',
+              name: `Dîner à ${address}`,
+              type: 'food',
+              coordinates: [38.79, -9.39],
+              description: `Barbecue à ${address.toUpperCase()}`,
+            }),
+            activity({
+              id: 'act-visite',
+              name: 'Visite du village',
+              coordinates: [38.8, -9.38],
+              description: 'Le marché du samedi',
+            }),
+          ],
+          transport: transport({
+            id: 'tr-depart',
+            type: 'car',
+            from: address,
+            to: 'Lisboa',
+            departureAddress: `${address.replace(', ', ',  ')} (portail vert)`,
+          }),
+          accommodation: hotel({
+            id: 'acc-maison',
+            name: 'Chez Marie',
+            address,
+          }),
+        }),
+        day(2, {
+          city: 'Lisboa',
+          notes: 'Rua Augusta, Lisboa : la grande rue',
+          accommodation: hotel({
+            id: 'acc-lisboa',
+            name: 'Casa Augusta',
+            address: 'Rua Augusta, Lisboa',
+          }),
+        }),
+      ]
+      const options = privateOptions({
+        includeNotes: true,
+        privateStays: ['chezmarie'],
+      })
+      const [first, second] = cleanForTemplate(itinerary, options)
+      for (const text of textsOf(first)) {
+        expect(plain(text)).not.toContain(plain(address))
+      }
+      expect(first.accommodation?.address).toBe('')
+      expect(first.notes).toBe('Arrivée à vers 18 h.')
+      expect(first.tips).toEqual(['On se retrouve à', 'Partir tôt le matin'])
+      const [diner, visite] = first.activities
+      expect(diner.name).toBe('Dîner à')
+      expect(diner.description).toBe('Barbecue à')
+      expect(diner).not.toHaveProperty('coordinates')
+      expect(visite.coordinates).toEqual([38.8, -9.38])
+      expect(first.transport).not.toHaveProperty('from')
+      expect(first.transport?.departureAddress).toBe('(portail vert)')
+      // L'hébergement qui n'est pas privé, adresse sans numéro comprise, ne bouge pas.
+      expect(second).toEqual(
+        cleanForTemplate(itinerary, { ...options, privateStays: [] })[1],
+      )
+      expect(cleanForTemplate([first, second], options)).toStrictEqual([
+        first,
+        second,
+      ])
+    },
+  )
+
+  it('efface une adresse dont le pli est plus long que le texte (syllabes coréennes)', () => {
+    // « 서울 » se décompose en cinq jamos : le texte plié dépasse l'original.
+    const address = 'Quinta das Rosas, 서울'
+    const itinerary = [
+      day(1, {
+        city: '서울',
+        tips: [address, address.normalize('NFD'), `${address}, au fond`],
+        accommodation: hotel({ name: 'Chez Minji', address }),
+      }),
+    ]
+    const [cleaned] = cleanForTemplate(
+      itinerary,
+      privateOptions({ privateStays: ['chezminji'] }),
+    )
+    expect(cleaned.tips).toEqual(['au fond'])
+  })
+
+  it('n’efface ni « Kyoto 600-8216 » ni une adresse trop courte', () => {
+    const itinerary = [
+      day(1, {
+        city: 'Kyoto',
+        notes: 'Kyoto 600-8216, puis Gion. Ap, B.',
+        accommodation: hotel({ name: 'Chez Kenji', address: 'Kyoto 600-8216' }),
+      }),
+      day(2, {
+        city: 'Kyoto',
+        accommodation: hotel({
+          id: 'acc-2',
+          name: 'Chez Aiko',
+          address: 'Ap, B',
+        }),
+      }),
+    ]
+    const [first] = cleanForTemplate(
+      itinerary,
+      privateOptions({
+        includeNotes: true,
+        privateStays: ['chezkenji', 'chezaiko'],
+      }),
+    )
+    expect(first.notes).toBe(itinerary[0].notes)
+  })
+
+  it('cherche en temps linéaire, même face à une adresse forgée (1 Mo)', () => {
+    // L'attaque d'origine : 64 morceaux « 1 ab 1 ab … zz<i>q », et des
+    // conseils et des noms d'hébergements remplis de « 1 ab ».
+    const pieces = Array.from(
+      { length: 64 },
+      (_, i) => `${'1 ab '.repeat(23)}zz${i}q`,
+    )
+    const filler = '1 ab '.repeat(6_000)
+    const itinerary = [
+      day(1, {
+        tips: [...Array(30).fill(filler), `Au ${pieces[0]}, sonner`],
+        accommodation: hotel({ name: 'Chez X', address: pieces.join(', ') }),
+      }),
+      ...Array.from({ length: 10 }, (_, i) =>
+        day(i + 2, {
+          accommodation: hotel({
+            id: `acc-${i}`,
+            name: filler.slice(0, 10_000),
+            address: `${i} rue des Lilas`,
+          }),
+        }),
+      ),
+    ]
+    const size = JSON.stringify(itinerary).length
+    expect(size).toBeGreaterThan(1_000_000)
+    const options = privateOptions({ privateStays: ['chezx'] })
+    const started = performance.now()
+    const [first] = cleanForTemplate(itinerary, options, {
+      maxAddressSearchWork: MAX_ADDRESS_SEARCH_WORK,
+    })
+    expect(performance.now() - started).toBeLessThan(1_000)
+    expect(first.tips?.slice(0, 30)).toEqual(Array(30).fill(filler))
+    expect(first.tips?.[30]).toBe('Au, sonner')
+  })
+
+  it('cherche en temps linéaire face à des morceaux emboîtés (« ab1ab1… »)', () => {
+    // Chaque morceau est le suffixe du suivant : à chaque position, tous
+    // finissent ensemble, et aucun n'est en mots entiers.
+    const stays = ['A', 'B', 'C', 'D'].map((letter, k) =>
+      hotel({
+        id: `acc-${letter}`,
+        name: `Chez ${letter}`,
+        address: Array.from({ length: 8 }, (_, i) =>
+          'ab1'.repeat(3 + k * 8 + i),
+        ).join(', '),
+      }),
+    )
+    const text = 'ab1'.repeat(10_000)
+    const itinerary = stays.map((stay, k) =>
+      day(k + 1, { accommodation: stay, tips: Array(8).fill(text) }),
+    )
+    const started = performance.now()
+    const cleaned = cleanForTemplate(
+      itinerary,
+      privateOptions({ privateStays: stays.map((stay) => stayKey(stay)) }),
+      { maxAddressSearchWork: MAX_ADDRESS_SEARCH_WORK },
+    )
+    expect(performance.now() - started).toBeLessThan(1_000)
+    expect(cleaned[0].tips).toEqual(Array(8).fill(text))
+  })
+
+  it('refuse plutôt que de publier sans chercher, au-delà du plafond', () => {
+    const options = privateOptions({ includeNotes: true })
+    expect(() =>
+      cleanForTemplate(stayWithFamily(), options, {
+        maxAddressSearchWork: 1_000,
+      }),
+    ).toThrow(AddressSearchTooCostlyError)
+    // Sous le plafond, le même résultat que sans plafond (le téléphone).
+    expect(
+      cleanForTemplate(stayWithFamily(), options, {
+        maxAddressSearchWork: MAX_ADDRESS_SEARCH_WORK,
+      }),
+    ).toStrictEqual(cleanForTemplate(stayWithFamily(), options))
+    // Sans hébergement privé, rien n'est cherché ni compté.
+    expect(() =>
+      cleanForTemplate(stayWithFamily(), DEFAULT_TEMPLATE_OPTIONS, {
+        maxAddressSearchWork: 0,
+      }),
+    ).not.toThrow()
+  })
+
+  it('efface les adresses imbriquées et garde les mots entiers', () => {
+    const itinerary = [
+      day(1, {
+        city: 'Paris',
+        tips: [
+          'Le 12 rue des 12 rue des Lilas Lilas, au fond',
+          'Le 112 rue des Lilas et le 12 rue des Lilasses restent',
+          'Rendez-vous au 12, RUE DES LILÁS',
+          'Au 12 rue des Lilas\u0301x, rien',
+        ],
+        accommodation: hotel({
+          name: 'Chez Marie',
+          address: '12 rue des Lilas, 75011 Paris',
+        }),
+      }),
+    ]
+    const options = privateOptions({ privateStays: ['chezmarie'] })
+    const [cleaned] = cleanForTemplate(itinerary, options)
+    expect(cleaned.tips).toEqual([
+      'Le, au fond',
+      'Le 112 rue des Lilas et le 12 rue des Lilasses restent',
+      'Rendez-vous au',
+      'Au 12 rue des Lilas\u0301x, rien',
+    ])
+    expect(cleanForTemplate([cleaned], options)).toStrictEqual([cleaned])
+  })
+
+  it('compte les hébergements privés et leurs liens dans ce qui reste (A2)', () => {
+    const summary = summarizeTemplateCleaning(
+      stayWithFamily(),
+      privateOptions(),
+    )
+    expect(summary.stays.privateStays).toBe(1)
+    // Le lien Facebook de la tante et celui de Google Maps vers sa rue.
+    expect(summary.stays.privateLinks).toBe(2)
+    // Le conseil qui n'était que l'adresse ne part pas.
+    expect(summary.goes.tips).toBe(
+      summarizeTemplateCleaning(stayWithFamily(), DEFAULT_TEMPLATE_OPTIONS).goes
+        .tips - 1,
+    )
+    expect(summary.goes.accommodations).toBe(2)
   })
 })

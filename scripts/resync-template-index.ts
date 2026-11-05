@@ -16,7 +16,11 @@
 
 import { fileURLToPath } from 'node:url'
 import { getTemplateStore } from '@/lib/template-bucket'
-import { resyncTemplateIndex, type TemplateBucket } from '@/lib/template-store'
+import {
+  resyncTemplateIndex,
+  type IndexResync,
+  type TemplateBucket,
+} from '@/lib/template-store'
 import { templateRefFromArg } from './retire-template'
 
 const USAGE = `Usage : bun --no-env-file scripts/resync-template-index.ts <id|slug|lien>…
@@ -33,6 +37,11 @@ export interface ResyncTemplateIndexDeps {
   bucketName: string | undefined
   log: (line: string) => void
   error: (line: string) => void
+}
+
+/** `<id> · <slug>`, ou l'id seul pour un modèle retiré : il n'a plus de slug lisible. */
+function label(result: IndexResync): string {
+  return result.slug ? `${result.id} · ${result.slug}` : `${result.id} (retiré)`
 }
 
 function message(error: unknown): string {
@@ -81,12 +90,12 @@ export async function resyncTemplateIndexCommand(
         failures += 1
       } else if (!result.synced) {
         deps.error(
-          `${result.id} · ${result.slug} : l’index n’a pas suivi (morceau encore plein ?). Relancez après avoir libéré de la place.`,
+          `${label(result)} : l’index n’a pas suivi (morceau encore plein ?). Relance après avoir libéré de la place.`,
         )
         failures += 1
       } else {
         deps.log(
-          `${result.id} · ${result.slug} : ${result.listed ? 'dans l’index public' : 'hors de l’index public (non listé ou retiré)'}`,
+          `${label(result)} : ${result.listed ? 'dans l’index public' : 'hors de l’index public (non listé ou retiré)'}`,
         )
       }
     } catch (error) {

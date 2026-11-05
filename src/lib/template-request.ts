@@ -22,12 +22,14 @@ import {
   MAX_TEMPLATE_DAY_ACTIVITIES,
   MAX_TEMPLATE_TITLE_LENGTH,
   isCountryCode,
+  parsePrivateStays,
   type CountryCode,
   type TemplateOptions,
 } from '@/lib/template-model'
 import { normalizeItineraryShape } from '@/lib/template-shape'
 import { truncateText } from '@/lib/text-limit'
 import {
+  INVALID_PRIVATE_STAYS,
   isTemplateStoreError,
   type TemplateBucket,
   type TemplateStoreErrorCode,
@@ -382,18 +384,56 @@ function readAuthorName(
   return accept(cleanAuthor(value))
 }
 
-/** Réglages : chaque interrupteur absent prend sa valeur par défaut. */
-function readOptions(value: unknown): ParsedTemplateRequest<TemplateOptions> {
-  if (value === undefined) return accept({ ...DEFAULT_TEMPLATE_OPTIONS })
-  if (!isRecord(value)) return reject(400, 'Réglages du modèle invalides.')
-  const {
-    includeNotes = DEFAULT_TEMPLATE_OPTIONS.includeNotes,
-    includePrices = DEFAULT_TEMPLATE_OPTIONS.includePrices,
-  } = value
-  if (typeof includeNotes !== 'boolean' || typeof includePrices !== 'boolean') {
-    return reject(400, 'Réglages du modèle invalides.')
+const INVALID_OPTIONS = 'Réglages du modèle invalides.'
+
+/**
+ * Réglages tels qu'envoyés : chaque champ absent reste absent, chaque champ
+ * présent est validé. `privateStays` (« Ne publier que le nom et la ville »)
+ * est une liste de clés `stayKey` : au plus `MAX_TEMPLATE_PRIVATE_STAYS`, de
+ * `MAX_STAY_KEY_LENGTH` unités chacune, dédoublonnées (`parsePrivateStays`).
+ * Tout autre envoi est refusé (400) : mieux vaut un échec qu'une adresse
+ * publiée parce qu'une liste aurait été ignorée.
+ */
+function readPartialOptions(
+  value: unknown,
+): ParsedTemplateRequest<Partial<TemplateOptions>> {
+  if (!isRecord(value)) return reject(400, INVALID_OPTIONS)
+  const { includeNotes, includePrices, privateStays } = value
+  const options: Partial<TemplateOptions> = {}
+  if (includeNotes !== undefined) {
+    if (typeof includeNotes !== 'boolean') return reject(400, INVALID_OPTIONS)
+    options.includeNotes = includeNotes
   }
-  return accept({ includeNotes, includePrices })
+  if (includePrices !== undefined) {
+    if (typeof includePrices !== 'boolean') return reject(400, INVALID_OPTIONS)
+    options.includePrices = includePrices
+  }
+  if (privateStays !== undefined) {
+    const keys = parsePrivateStays(privateStays)
+    if (!keys) return reject(400, INVALID_PRIVATE_STAYS)
+    options.privateStays = keys
+  }
+  return accept(options)
+}
+
+/**
+ * Réglages d'une publication : chaque réglage absent prend sa valeur par
+ * défaut, comme l'écran A3 (notes exclues, prix inclus, aucun hébergement
+ * privé).
+ */
+function readPublishOptions(
+  value: unknown,
+): ParsedTemplateRequest<TemplateOptions> {
+  const sent: ParsedTemplateRequest<Partial<TemplateOptions>> =
+    value === undefined ? accept({}) : readPartialOptions(value)
+  if (!sent.ok) return sent
+  return accept({
+    includeNotes:
+      sent.data.includeNotes ?? DEFAULT_TEMPLATE_OPTIONS.includeNotes,
+    includePrices:
+      sent.data.includePrices ?? DEFAULT_TEMPLATE_OPTIONS.includePrices,
+    privateStays: sent.data.privateStays ?? [],
+  })
 }
 
 function readIndexable(
@@ -417,8 +457,10 @@ export interface TemplatePublishRequest {
 
 /**
  * `POST /api/templates` :
- * `{ data, country, title?, authorName?, options?, indexable? }`.
- * Par défaut, comme l'écran A3 : notes exclues, prix inclus, modèle visible.
+ * `{ data, country, title?, authorName?, options?, indexable? }`, `options`
+ * valant `{ includeNotes?, includePrices?, privateStays? }`. Par défaut, comme
+ * l'écran A3 : notes exclues, prix inclus, aucun hébergement privé, modèle
+ * visible.
  */
 export function parseTemplatePublish(
   body: unknown,
@@ -432,7 +474,7 @@ export function parseTemplatePublish(
   if (!title.ok) return title
   const authorName = readAuthorName(body.authorName)
   if (!authorName.ok) return authorName
-  const options = readOptions(body.options)
+  const options = readPublishOptions(body.options)
   if (!options.ok) return options
   const indexable = readIndexable(body.indexable)
   if (!indexable.ok) return indexable
@@ -450,11 +492,18 @@ export interface TemplateUpdateRequest {
   itinerary: DayItinerary[]
   /** Absent : titre actuel gardé. `null` : tiré des étapes. */
   title?: string | null
-  /** Absent : réglages publiés gardés. */
-  options?: TemplateOptions
+  /**
+   * Seulement les réglages envoyés : chaque réglage absent garde sa valeur
+   * publiée (`updateTemplate`), hébergements privés compris.
+   */
+  options?: Partial<TemplateOptions>
 }
 
-/** `PUT /api/templates/<id>` : `{ data, title?, options? }`. */
+/**
+ * `PUT /api/templates/<id>` : `{ data, title?, options? }`. Un réglage absent
+ * d'`options` (ou `options` absent) garde sa valeur publiée : une mise à jour
+ * qui ne renvoie pas `privateStays` masque encore les mêmes hébergements.
+ */
 export function parseTemplateUpdate(
   body: unknown,
 ): ParsedTemplateRequest<TemplateUpdateRequest> {
@@ -466,7 +515,7 @@ export function parseTemplateUpdate(
   const update: TemplateUpdateRequest = { itinerary: itinerary.data }
   if (title.data !== undefined) update.title = title.data
   if (body.options !== undefined) {
-    const options = readOptions(body.options)
+    const options = readPartialOptions(body.options)
     if (!options.ok) return options
     update.options = options.data
   }
@@ -575,7 +624,7 @@ export function templateErrorReply(
         status: 409,
         body: {
           error:
-            'Ce modèle vient d’une version plus récente de TripBrain. Mettez l’application à jour.',
+            'Ce modèle vient d’une version plus récente de TripBrain. Mets l’application à jour.',
         },
       }
     }
@@ -606,7 +655,7 @@ export function templateRejection(status: number, error: string): Response {
 
 export function tooManyTemplateRequests(retryAfter: number): Response {
   return Response.json(
-    { error: 'Trop de tentatives. Réessayez dans un instant.' },
+    { error: 'Trop de tentatives. Réessaie dans un instant.' },
     {
       status: 429,
       headers: { 'Cache-Control': NO_STORE, 'Retry-After': String(retryAfter) },

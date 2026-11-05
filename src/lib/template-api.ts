@@ -18,6 +18,7 @@ import { compressItinerary } from '@/lib/share'
 import { cleanForTemplate } from '@/lib/template-clean'
 import {
   isTemplateId,
+  unmatchedPrivateStays,
   type PublicTemplate,
   type TemplateOptions,
 } from '@/lib/template-model'
@@ -91,10 +92,29 @@ export class TemplateInvalidError extends Error {
   }
 }
 
+/**
+ * Refusée avant l'envoi : une clé de `privateStays` ne désigne plus aucun
+ * hébergement du voyage. Un hébergement masqué a été renommé (sa clé suit
+ * son nom) ou retiré : envoyer l'ancienne liste publierait son adresse.
+ * L'écran rouvre le choix de A2 (`checkPrivateStays`), puis renvoie la
+ * liste confirmée. `unmatched` reste sur le téléphone.
+ */
+export class TemplatePrivateStaysChangedError extends TemplateInvalidError {
+  readonly unmatched: string[]
+
+  constructor(unmatched: string[]) {
+    super(
+      'Un hébergement masqué a changé de nom ou n’est plus dans le voyage : choisis de nouveau ceux à masquer.',
+    )
+    this.name = 'TemplatePrivateStaysChangedError'
+    this.unmatched = unmatched
+  }
+}
+
 // Pas de « code » ni d'« expir » : `analytics/metrics.ts` classe d'autres
 // échecs d'après ces sous-chaînes.
 const TOO_LARGE = 'Itinéraire trop volumineux pour être publié.'
-const UNAVAILABLE = 'Les modèles sont indisponibles pour le moment. Réessayez.'
+const UNAVAILABLE = 'Les modèles sont indisponibles pour le moment. Réessaie.'
 
 /** Statuts où rejouer la même demande plus tard aboutira. */
 const UNAVAILABLE_STATUSES: ReadonlySet<number> = new Set([429, 502, 503, 504])
@@ -353,7 +373,7 @@ export async function publishTemplate(
   if (!response.ok) {
     throw await failure(
       response,
-      'La publication du modèle a échoué. Réessayez.',
+      'La publication du modèle a échoué. Réessaie.',
     )
   }
   const body = await readBody(response)
@@ -378,7 +398,7 @@ export async function fetchTemplate(id: string): Promise<PublicTemplate> {
   if (!isTemplateId(id)) throw new TemplateNotFoundError()
   const response = await fetch(templateUrl(id), { cache: 'no-store' })
   if (!response.ok) {
-    throw await failure(response, 'Lecture du modèle impossible. Réessayez.')
+    throw await failure(response, 'Lecture du modèle impossible. Réessaie.')
   }
   return readTemplateBody(response)
 }
@@ -389,12 +409,15 @@ export interface TemplateUpdateInput {
   /**
    * Réglages du modèle : pour garder ceux qui sont publiés, ceux de
    * `StoredTrip.publishedTemplate` —
-   * `{ includeNotes: includesNotes, includePrices: includesPrices }`.
+   * `{ includeNotes: includesNotes, includePrices: includesPrices, privateStays }`.
    *
    * Obligatoires : le téléphone nettoie avec eux avant l'envoi. Sans eux, il
-   * faudrait soit tout envoyer (notes et prix que l'auteur a exclus quittent
-   * le téléphone), soit tout retirer (le serveur stockerait une version sans
-   * les notes ou les prix que l'auteur a choisi de publier).
+   * faudrait soit tout envoyer (notes, prix et adresses de logements privés
+   * que l'auteur a exclus quittent le téléphone), soit tout retirer (le
+   * serveur stockerait une version sans les notes ou les prix que l'auteur a
+   * choisi de publier). Le serveur réapplique de toute façon les hébergements
+   * privés qu'il a gardés si `privateStays` manque ; une liste envoyée, même
+   * vide, les remplace.
    */
   options: TemplateOptions
 }
@@ -403,6 +426,10 @@ export interface TemplateUpdateInput {
  * « Mettre le modèle à jour » : une nouvelle version, sans prévenir personne.
  * Les versions précédentes sont supprimées du serveur ; un repreneur garde la
  * sienne sur son téléphone (`StoredTrip.origin.base`).
+ *
+ * Une clé de `options.privateStays` qui ne désigne plus aucun hébergement
+ * (renommé depuis la publication) bloque l'envoi :
+ * `TemplatePrivateStaysChangedError`, sans aucune requête.
  */
 export async function updateTemplate(
   id: string,
@@ -411,6 +438,13 @@ export async function updateTemplate(
   input: TemplateUpdateInput,
 ): Promise<PublicTemplate> {
   if (!isTemplateId(id)) throw new TemplateNotFoundError()
+  const unmatched = unmatchedPrivateStays(
+    itinerary,
+    input.options.privateStays ?? [],
+  )
+  if (unmatched.length > 0) {
+    throw new TemplatePrivateStaysChangedError(unmatched)
+  }
   const response = await fetch(templateUrl(id), {
     method: 'PUT',
     headers: ownerHeaders(ownerToken),
@@ -424,7 +458,7 @@ export async function updateTemplate(
   if (!response.ok) {
     throw await failure(
       response,
-      'La mise à jour du modèle a échoué. Réessayez.',
+      'La mise à jour du modèle a échoué. Réessaie.',
     )
   }
   return readTemplateBody(response)
@@ -454,7 +488,7 @@ export async function patchTemplate(
   if (!response.ok) {
     throw await failure(
       response,
-      'La mise à jour du modèle a échoué. Réessayez.',
+      'La mise à jour du modèle a échoué. Réessaie.',
     )
   }
   return readTemplateBody(response)
@@ -472,6 +506,6 @@ export async function retireTemplate(
     cache: 'no-store',
   })
   if (!response.ok) {
-    throw await failure(response, 'Le retrait du modèle a échoué. Réessayez.')
+    throw await failure(response, 'Le retrait du modèle a échoué. Réessaie.')
   }
 }

@@ -4,7 +4,8 @@
 //
 // Chaque scénario enchaîne des assertions simples aux messages explicites.
 // En plus, toute réponse de l'API passe par `checkReply` :
-// - jamais `ownerTokenHash` ni `retiredAt` ; le jeton propriétaire n'apparaît
+// - jamais `ownerTokenHash`, `retiredAt` ni `privateStays` (les hébergements
+//   privés de l'auteur) ; le jeton propriétaire n'apparaît
 //   que dans les réponses à sa publication (201, ou 200 quand le téléphone
 //   rejoue la publication avec le jeton qu'il a tiré) ;
 // - le `Cache-Control` attendu pour la route et le statut (§5 de la
@@ -228,7 +229,6 @@ const TOMBSTONE_KEYS = [
   'ownerTokenHash',
   'publishedAt',
   'retiredAt',
-  'slug',
   'version',
   'wasListed',
 ]
@@ -302,6 +302,10 @@ function checkReply(reply: Reply): void {
   soft(
     !reply.text.includes('"retiredAt"'),
     `${where} : la réponse contient retiredAt`,
+  )
+  soft(
+    !reply.text.includes('"privateStays"'),
+    `${where} : la réponse contient privateStays`,
   )
   // 201, ou 200 : la même publication rejouée avec le jeton du téléphone.
   const isPublication =
@@ -639,6 +643,23 @@ function metaIds(): string[] {
   return storedKeys()
     .map((key) => /^templates\/([0-9a-z]{16})\/meta$/.exec(key)?.[1])
     .filter((id): id is string => id !== undefined)
+}
+
+/** `slugs/<empreinte>` : la réservation d'un slug, jamais écrit en clair (§4). */
+function slugKey(slug: string): string {
+  return `slugs/${sha256(slug)}`
+}
+
+/**
+ * Où ce slug se lit en clair dans le faux S3 : une clé qui l'a pour segment,
+ * ou un objet qui le porte comme valeur JSON entière (`"<slug>"`), pour ne
+ * pas confondre `…-sevilla` et `…-sevilla-2`.
+ */
+function plainSlugHits(slug: string): string[] {
+  return [
+    ...storedKeys().filter((key) => key.split('/').includes(slug)),
+    ...storedContains(`"${slug}"`),
+  ]
 }
 
 /** Un snapshot s3nd tel que `putSnapshot` l'écrit, pour corrompre ou restaurer. */
@@ -1015,7 +1036,7 @@ scenario(
       'le jeton lui-même n’est stocké nulle part',
     )
     deepEqual(stored(`${t1.id}/v/1`).itinerary, t1.itinerary, 'v/1 stockée')
-    deepEqual(stored(`slugs/${t1.slug}`), { id: t1.id }, 'slug réservé')
+    deepEqual(stored(slugKey(t1.slug)), { id: t1.id }, 'slug réservé')
 
     // Nouvelle version : 10 jours, notes incluses, prix retirés, titre gardé.
     const v2Days = days.slice(0, 10)
@@ -1068,9 +1089,9 @@ scenario(
     const oldSlug = await call('GET', `/api/templates/by-slug/${t1.slug}`)
     equal(oldSlug.status, 200, 'ancien slug : 200')
     deepEqual(oldSlug.body.template, t2, 'ancien slug : le modèle actuel')
-    deepEqual(stored(`slugs/${t2.slug}`), { id: t1.id }, 'nouveau slug réservé')
+    deepEqual(stored(slugKey(t2.slug)), { id: t1.id }, 'nouveau slug réservé')
     deepEqual(
-      stored(`slugs/${t1.slug}`),
+      stored(slugKey(t1.slug)),
       { id: t1.id },
       'ancien slug toujours réservé',
     )
@@ -1179,11 +1200,17 @@ scenario(
     )
     equal(tombstone.wasListed, true, 'pierre tombale : wasListed')
     equal(tombstone.version, 3, 'pierre tombale : dernière version')
+    check(!('slug' in tombstone), 'pierre tombale : aucun slug')
     for (const slug of [t1.slug, t2.slug]) {
       deepEqual(
-        stored(`slugs/${slug}`),
+        stored(slugKey(slug)),
         { id: t1.id },
-        `slug ${slug} toujours réservé`,
+        `slug ${slug} toujours réservé, sous son empreinte`,
+      )
+      deepEqual(
+        plainSlugHits(slug),
+        [],
+        `slug ${slug} : plus lisible nulle part dans le bucket`,
       )
     }
     deepEqual(
@@ -1217,8 +1244,8 @@ scenario('Nettoyage côté serveur : ce qui part et ce qui reste', async () => {
   const expectations: [TemplateOptions | undefined, TemplateOptions][] = [
     [undefined, DEFAULT_TEMPLATE_OPTIONS],
     [
-      { includeNotes: true, includePrices: false },
-      { includeNotes: true, includePrices: false },
+      { includeNotes: true, includePrices: false, privateStays: [] },
+      { includeNotes: true, includePrices: false, privateStays: [] },
     ],
   ]
   for (const [sent, options] of expectations) {
@@ -2101,7 +2128,11 @@ scenario(
     equal(belem.tags, undefined, 'tags mal typés retirés')
     equal(belem.reservationRequired, undefined, 'booléen mal typé retiré')
     equal(belem.price, 12, 'prix valide gardé')
-    equal(d1.transport, undefined, 'transport de type inconnu retiré')
+    deepEqual(
+      d1.transport,
+      { id: 't1', type: 'other', from: 'Paris' },
+      'transport de type inconnu gardé, en trajet non classé',
+    )
     deepEqual(
       d1.accommodation,
       {
@@ -2644,7 +2675,7 @@ async function parallelPublications(prefix: string, label: string) {
         slug === idSuffixedSlug(base, id, 16),
       `slug inattendu ${slug}`,
     )
-    deepEqual(stored(`slugs/${slug}`), { id }, `slugs/${slug} → ${id}`)
+    deepEqual(stored(slugKey(slug)), { id }, `slugs/${slug} → ${id}`)
   }
   return published
 }
@@ -2807,7 +2838,7 @@ scenario('Limiteur de débit : 429 et Retry-After', async () => {
   )
   equal(
     limited.body?.error,
-    'Trop de tentatives. Réessayez dans un instant.',
+    'Trop de tentatives. Réessaie dans un instant.',
     '429 : message',
   )
   const chained = await call('POST', '/api/templates', {
@@ -2875,7 +2906,7 @@ scenario(
       equal(hide.status, 503, 'masquer sans index : 503')
       equal(
         hide.body?.error,
-        'Le modèle n’a pas pu être retiré de la liste publique de tripbrain.fr. Réessayez.',
+        'Le modèle n’a pas pu être retiré de la liste publique de tripbrain.fr. Réessaie.',
         '503 index : message',
       )
       const now = (await getTemplate(template.id)).body.template
@@ -2965,7 +2996,7 @@ scenario(
         equal(retire.status, 503, `${label} : 503`)
         equal(
           retire.body?.error,
-          'Le modèle est retiré, mais son contenu n’a pas pu être effacé. Réessayez.',
+          'Le modèle est retiré, mais son contenu n’a pas pu être effacé. Réessaie.',
           `${label} : message`,
         )
         equal(
@@ -3215,7 +3246,7 @@ scenario(
     equal(tooNew.status, 409, 'format plus récent : 409')
     equal(
       tooNew.body?.error,
-      'Ce modèle vient d’une version plus récente de TripBrain. Mettez l’application à jour.',
+      'Ce modèle vient d’une version plus récente de TripBrain. Mets l’application à jour.',
       'format plus récent : message',
     )
     restoreMeta()
@@ -3293,7 +3324,7 @@ scenario('Stockage S3 hors service, puis rétabli', async () => {
         `S3 hors service : ${reply.kind} → ${reply.status} (5xx attendu)`,
       )
       check(
-        /Réessayez/.test(reply.body?.error ?? ''),
+        /Réessaie/.test(reply.body?.error ?? ''),
         `S3 hors service : ${reply.kind} invite à réessayer (« ${reply.body?.error} »)`,
       )
       check(
@@ -3427,6 +3458,16 @@ scenario(
       TOMBSTONE_KEYS,
       'pierre tombale réduite',
     )
+    deepEqual(
+      plainSlugHits(listed.template.slug),
+      [],
+      'retrait opérateur : le slug n’est plus lisible dans le bucket',
+    )
+    deepEqual(
+      stored(slugKey(listed.template.slug)),
+      { id: listed.template.id },
+      'retrait opérateur : le slug reste réservé sous son empreinte',
+    )
     equal(
       (
         await call('PUT', `/api/templates/${listed.template.id}`, {
@@ -3447,9 +3488,20 @@ scenario(
       'l’auteur peut encore « retirer » (idempotent)',
     )
 
-    const rerun = await runRetireScript([listed.template.slug])
-    equal(rerun.code, 0, 'relance : code 0')
+    // Retrouvé par l'empreinte de son slug, alors que plus rien ne le nomme.
+    const rerun = await runRetireScript([
+      `https://tripbrain.fr/itineraires/${listed.template.slug}`,
+    ])
+    equal(
+      rerun.code,
+      0,
+      `relance par le slug : code 0 (${rerun.stderr.trim()})`,
+    )
     check(rerun.stdout.includes('Déjà retiré'), 'relance : déjà retiré')
+    check(
+      !rerun.stdout.includes(listed.template.slug),
+      'relance : la pierre tombale ne montre aucun slug',
+    )
 
     // Par un ancien slug : le modèle a changé de durée depuis, et sa
     // publication rejouable a réservé owners/<empreinte>.
@@ -3495,6 +3547,11 @@ scenario(
         (await call('GET', `/api/templates/by-slug/${slug}`)).status,
         410,
         `retiré par l’opérateur : by-slug ${slug} 410`,
+      )
+      deepEqual(
+        plainSlugHits(slug),
+        [],
+        `retiré par l’opérateur : ${slug} plus lisible dans le bucket`,
       )
     }
     equal(
@@ -3601,7 +3658,11 @@ scenario(
     }) as typeof fetch
     try {
       const days = japanTrip('cl')
-      const options = { includeNotes: false, includePrices: true }
+      const options: TemplateOptions = {
+        includeNotes: false,
+        includePrices: true,
+        privateStays: [],
+      }
       const publication = await templateClient.publishTemplate(days, {
         title: '',
         authorName: 'Yanis',
@@ -3661,6 +3722,7 @@ scenario(
           options: {
             includeNotes: template.includesNotes,
             includePrices: template.includesPrices,
+            privateStays: [],
           },
         },
       )
@@ -4010,7 +4072,7 @@ scenario('Mise à jour : les versions précédentes sont effacées', async () =>
   equal(failed.status, 503, 'suppression en panne : 503')
   equal(
     failed.body?.error,
-    'Le modèle est à jour, mais ses versions précédentes n’ont pas pu être effacées. Réessayez.',
+    'Le modèle est à jour, mais ses versions précédentes n’ont pas pu être effacées. Réessaie.',
     'suppression en panne : message',
   )
   const online = (await getTemplate(template.id)).body.template
@@ -4186,7 +4248,7 @@ scenario(
     )
     deepEqual(
       ownSlugs(),
-      [`templates/slugs/${base4}`],
+      [`templates/${slugKey(base4)}`],
       'aucun slug réservé en plus',
     )
 
@@ -4194,7 +4256,7 @@ scenario(
     equal(longer.slug, base6, 'à 6 jours : nouveau slug')
     for (const slug of [base4, base6]) {
       deepEqual(
-        stored(`slugs/${slug}`),
+        stored(slugKey(slug)),
         { id: template.id },
         `${slug} pointe vers le modèle`,
       )
@@ -4209,7 +4271,7 @@ scenario(
     await expectInIndex(longer, 'l’index ne porte que le slug actuel')
     deepEqual(
       ownSlugs().sort(),
-      [`templates/slugs/${base4}`, `templates/slugs/${base6}`],
+      [`templates/${slugKey(base4)}`, `templates/${slugKey(base6)}`].sort(),
       'deux slugs réservés, tous deux à ce modèle',
     )
 
@@ -4235,7 +4297,17 @@ scenario(
         410,
         `retiré (était listé) : ${slug} → 410`,
       )
+      deepEqual(
+        plainSlugHits(slug),
+        [],
+        `retiré : ${slug} n’est plus lisible dans le bucket`,
+      )
     }
+    deepEqual(
+      ownSlugs().sort(),
+      [`templates/${slugKey(base4)}`, `templates/${slugKey(base6)}`].sort(),
+      'retiré : ses deux slugs restent réservés, sous leur empreinte',
+    )
     equal(
       (await call('GET', `/api/templates/by-slug/${newcomer.template.slug}`))
         .status,
@@ -4430,6 +4502,209 @@ scenario('Index par pages de 500', async () => {
 })
 
 // 31 ───────────────────────────────────────────────────────────────────────────
+scenario(
+  'Hébergements privés : le nom et la ville, jamais l’adresse',
+  async () => {
+    const KEY = 'cheztantelurdes'
+    /** Le marqueur de l'adresse : il ne doit sortir nulle part. */
+    const MARKER = 'travessa'
+    const stay: Accommodation = {
+      id: 'ps-tante',
+      name: 'Chez Tante Lurdes',
+      address: '17 travessa das Flores, 2.º esq.',
+      bookingUrl: 'https://maps.example/17-travessa-das-flores',
+      checkIn: '2026-04-01',
+      checkOut: '2026-04-03',
+      images: ['https://images.example.com/travessa-porta.jpg'],
+    }
+    const family = (): DayItinerary[] => {
+      const days = tripOf(LISBON_STOPS, 'ps')
+      days[0] = {
+        ...days[0],
+        accommodation: { ...stay },
+        tips: ['Le tram 28 passe devant le 17 travessa das Flores'],
+      }
+      days[1] = { ...days[1], accommodation: { ...stay } }
+      return days
+    }
+    const hits = (text: string) => storedContains(text)
+
+    const reply = await call('POST', '/api/templates', {
+      body: {
+        data: await payloadOf(family()),
+        country: 'PT',
+        options: { includeNotes: true, privateStays: [KEY, KEY] },
+      },
+    })
+    const { template, token } = rememberPublication(reply)
+    check(!reply.text.includes(MARKER), 'publication : adresse absente')
+    check(!reply.text.includes(KEY), 'publication : clé absente')
+    deepEqual(
+      template.itinerary[0].accommodation,
+      {
+        id: 'ps-tante',
+        name: 'Chez Tante Lurdes',
+        address: '',
+        bookingUrl: '',
+        checkIn: template.itinerary[0].accommodation?.checkIn,
+        checkOut: template.itinerary[0].accommodation?.checkOut,
+      },
+      'logement privé : le nom, ni adresse, ni lien, ni photo',
+    )
+    equal(template.itinerary[0].city, 'Lisbonne', 'logement privé : la ville')
+    deepEqual(
+      stored(`${template.id}/meta`).privateStays,
+      [KEY],
+      'méta : la clé gardée, dédoublonnée, pour les mises à jour',
+    )
+    deepEqual(
+      hits(MARKER),
+      [],
+      'publication : l’adresse n’est stockée nulle part',
+    )
+
+    const readAll = async (label: string) => {
+      const replies = [
+        await getTemplate(template.id),
+        await call('GET', `/api/templates/by-slug/${template.slug}`),
+      ]
+      for (const read of replies) {
+        equal(read.status, 200, `${label} : ${read.kind} 200`)
+        check(
+          !read.text.includes(MARKER),
+          `${label} : ${read.kind} sans adresse`,
+        )
+        check(!read.text.includes(KEY), `${label} : ${read.kind} sans clé`)
+      }
+      const index = JSON.stringify(await indexEntries())
+      check(index.includes(template.id), `${label} : dans l’index`)
+      check(!index.includes(MARKER), `${label} : index sans adresse`)
+      check(!index.includes(KEY), `${label} : index sans clé`)
+      deepEqual(hits(MARKER), [], `${label} : versions stockées sans adresse`)
+    }
+    await readAll('publié')
+
+    // Mises à jour qui ne renvoient pas la liste : la méta la réapplique.
+    for (const [label, options] of [
+      ['PUT sans réglages', undefined],
+      ['PUT avec d’autres réglages', { includeNotes: false }],
+    ] as const) {
+      const put = await call('PUT', `/api/templates/${template.id}`, {
+        token,
+        body: {
+          data: await payloadOf(family()),
+          ...(options ? { options } : {}),
+        },
+      })
+      equal(put.status, 200, `${label} (${put.text.slice(0, 120)})`)
+      check(!put.text.includes(MARKER), `${label} : adresse absente`)
+      await readAll(label)
+    }
+    deepEqual(
+      stored(`${template.id}/meta`).privateStays,
+      [KEY],
+      'méta : la clé gardée après les mises à jour',
+    )
+
+    const before = metaIds().length
+    for (const privateStays of ['cheztantelurdes', ['Chez Tante Lurdes']]) {
+      const refused = await call('POST', '/api/templates', {
+        body: {
+          data: await payloadOf(family()),
+          country: 'PT',
+          options: { privateStays },
+        },
+      })
+      equal(refused.status, 400, 'POST, liste mal formée : 400')
+      equal(
+        refused.body?.error,
+        'Hébergements privés invalides.',
+        'POST, liste mal formée : message',
+      )
+      const refusedPut = await call('PUT', `/api/templates/${template.id}`, {
+        token,
+        body: { data: await payloadOf(family()), options: { privateStays } },
+      })
+      equal(refusedPut.status, 400, 'PUT, liste mal formée : 400')
+    }
+    equal(metaIds().length, before, 'liste mal formée : aucun modèle créé')
+    equal(
+      stored(`${template.id}/meta`).version,
+      3,
+      'liste mal formée : aucune version',
+    )
+
+    // L'hébergement masqué renommé : sa clé ne le désigne plus (§2.3).
+    const renamed = (): DayItinerary[] =>
+      family().map((day) =>
+        day.accommodation
+          ? {
+              ...day,
+              accommodation: {
+                ...day.accommodation,
+                name: 'Chez Tante Lurdes & Rui',
+              },
+            }
+          : day,
+      )
+    const forgotten = await call('PUT', `/api/templates/${template.id}`, {
+      token,
+      body: { data: await payloadOf(renamed()) },
+    })
+    equal(forgotten.status, 409, 'PUT renommé, sans liste : 409')
+    check(
+      !forgotten.text.includes(MARKER) && !forgotten.text.includes(KEY),
+      'PUT renommé, sans liste : ni adresse ni clé',
+    )
+    equal(
+      stored(`${template.id}/meta`).version,
+      3,
+      'PUT renommé, sans liste : aucune version',
+    )
+    const corrected = await call('PUT', `/api/templates/${template.id}`, {
+      token,
+      body: {
+        data: await payloadOf(renamed()),
+        options: { privateStays: ['cheztantelurdes&rui'] },
+      },
+    })
+    equal(corrected.status, 200, 'PUT renommé, liste corrigée : 200')
+    check(
+      corrected.body?.privateStaysUnmatched === undefined,
+      'PUT renommé, liste corrigée : rien à signaler',
+    )
+    deepEqual(hits(MARKER), [], 'PUT renommé, liste corrigée : sans adresse')
+    // Un ancien téléphone renvoie l'ancienne clé : le serveur ne peut pas
+    // deviner la nouvelle, il écrit et le signale.
+    const stale = await call('PUT', `/api/templates/${template.id}`, {
+      token,
+      body: {
+        data: await payloadOf(renamed()),
+        options: { privateStays: [KEY] },
+      },
+    })
+    equal(stale.status, 200, 'PUT, clé orpheline envoyée : 200')
+    equal(
+      stale.body?.privateStaysUnmatched,
+      true,
+      'PUT, clé orpheline envoyée : signalée',
+    )
+    check(
+      !stale.text.includes('cheztantelurdes'),
+      'PUT, clé orpheline envoyée : la clé n’est pas renvoyée',
+    )
+
+    const retired = await call('DELETE', `/api/templates/${template.id}`, {
+      token,
+    })
+    equal(retired.status, 200, 'retrait')
+    deepEqual(hits(KEY), [], 'retiré : la clé n’est plus stockée')
+    deepEqual(hits(MARKER), [], 'retiré : l’adresse non plus')
+    deepEqual(plainSlugHits(template.slug), [], 'retiré : le slug non plus')
+  },
+)
+
+// 32 ───────────────────────────────────────────────────────────────────────────
 scenario('Faux S3 : la route de débogage GET /__keys', async () => {
   const response = await fetch(`${ctx.s3.url}/__keys?bucket=${ctx.bucket}`)
   equal(response.status, 200, 'GET /__keys')
@@ -4457,7 +4732,7 @@ scenario('Faux S3 : la route de débogage GET /__keys', async () => {
   )
 })
 
-// 32 ───────────────────────────────────────────────────────────────────────────
+// 33 ───────────────────────────────────────────────────────────────────────────
 scenario('Cache-Control : chaque route, chaque statut', async () => {
   const seen = new Map<string, Set<string>>()
   for (const record of replies) {
@@ -4484,6 +4759,7 @@ scenario('Cache-Control : chaque route, chaque statut', async () => {
     'PUT [id] 401',
     'PUT [id] 403',
     'PUT [id] 404',
+    'PUT [id] 409',
     'PUT [id] 410',
     'PUT [id] 413',
     'PUT [id] 503',
@@ -4529,7 +4805,7 @@ scenario('Cache-Control : chaque route, chaque statut', async () => {
   }
 })
 
-// 33 ───────────────────────────────────────────────────────────────────────────
+// 34 ───────────────────────────────────────────────────────────────────────────
 scenario('Cohérence finale : index public ↔ métas stockées', async () => {
   const entries = await indexEntries()
   const ids = new Set(entries.map((entry) => entry.id))
@@ -4607,10 +4883,24 @@ scenario('Cohérence finale : index public ↔ métas stockées', async () => {
   for (const entry of entries) {
     check(metaIds().includes(entry.id), `${entry.id} dans l’index sans méta`)
   }
+  // Aucun slug en clair : chaque réservation est une empreinte qui mène à
+  // un id, et le slug actuel de chaque modèle en ligne a la sienne.
   for (const key of storedKeys('slugs/')) {
-    const slug = key.slice('templates/slugs/'.length)
-    const pointer = stored(`slugs/${slug}`)
-    check(isTemplateId(pointer?.id), `slugs/${slug} pointe vers un id`)
+    check(
+      /^templates\/slugs\/[0-9a-f]{64}$/.test(key),
+      `${key} : réservation sous l’empreinte du slug`,
+    )
+    const pointer = stored(key.slice('templates/'.length))
+    check(isTemplateId(pointer?.id), `${key} pointe vers un id`)
+  }
+  for (const id of metaIds()) {
+    const meta = stored(`${id}/meta`)
+    if (meta.retiredAt !== null) continue
+    equal(
+      stored(slugKey(meta.slug))?.id,
+      id,
+      `${id} : son slug actuel est réservé à son nom`,
+    )
   }
   // Chaque réservation de publication rejouable mène à un modèle en ligne
   // qui porte l'empreinte de son jeton : le retrait les supprime.

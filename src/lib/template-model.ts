@@ -10,8 +10,9 @@
  * Conception : `docs/itineraire-modele-technique.md`.
  */
 
-import type { DayItinerary } from '@/lib/itinerary-data'
+import type { Accommodation, DayItinerary } from '@/lib/itinerary-data'
 import { isIsoDate } from '@/lib/iso-date'
+import { truncateText, wellFormedText } from '@/lib/text-limit'
 
 // ── Identifiants ──────────────────────────────────────────────────────────────
 
@@ -76,16 +77,213 @@ export interface TemplateOptions {
   includeNotes: boolean
   /** Prix payés, affichés « à titre indicatif » (activé par défaut). */
   includePrices: boolean
+  /**
+   * « Ne publier que le nom et la ville » : les hébergements privés (chez des
+   * proches, appartement loué), désignés par leur clé `stayKey` — celles que
+   * propose `templateStays` (écran A2). Leur adresse, leur lien et leurs
+   * photos ne partent pas, et leur adresse est effacée de tous les textes du
+   * voyage (`cleanForTemplate`). Vide par défaut.
+   *
+   * Une clé qui ne désigne aucun hébergement du voyage est sans effet ; un
+   * hébergement renommé change de clé. Valider une liste reçue avec
+   * `parsePrivateStays`.
+   */
+  privateStays: string[]
 }
 
+/** Réglages par défaut de l'écran A3. Copier `privateStays` avant d'y ajouter. */
 export const DEFAULT_TEMPLATE_OPTIONS: TemplateOptions = {
   includeNotes: false,
   includePrices: true,
+  privateStays: [],
+}
+
+// ── Hébergements privés ───────────────────────────────────────────────────────
+
+/** Au plus un hébergement privé par journée. */
+export const MAX_TEMPLATE_PRIVATE_STAYS = MAX_TEMPLATE_DAYS
+
+/** Longueur d'une clé `stayKey`, en unités UTF-16 (un nom démesuré est coupé). */
+export const MAX_STAY_KEY_LENGTH = 200
+
+/** Nombre maximal de passes de `foldStayName` : la forme est stable bien avant. */
+const STAY_NAME_PASSES = 4
+
+/**
+ * Nom d'hébergement comparable : sans accents, sans casse, sans espaces
+ * (`Chez  Marie` = `chez marie` = `CHEZ MARIE` = `Chéz Marie`). Repris
+ * jusqu'à ce que la forme ne bouge plus : une minuscule peut encore se
+ * décomposer (`İ` → `i̇`), une lettre de compatibilité redevenir majuscule
+ * (`ℌ` → `H`). Ainsi `foldStayName(foldStayName(x)) === foldStayName(x)`.
+ */
+function foldStayName(name: string): string {
+  let folded = name
+  for (let pass = 0; pass < STAY_NAME_PASSES; pass += 1) {
+    const next = folded
+      .normalize('NFKD')
+      .replace(/\p{M}/gu, '')
+      .toLowerCase()
+      .replace(/[\s\p{Cf}]+/gu, '')
+    if (next === folded) break
+    folded = next
+  }
+  return folded
+}
+
+/**
+ * Clé stable d'un hébergement, la même pour chacune de ses nuits : son nom
+ * sans accents, sans casse ni espaces (`chezmarie`), coupé à
+ * `MAX_STAY_KEY_LENGTH`. Sans nom, `#` suivi de son id : chaque nuit d'un
+ * hébergement anonyme est alors un hébergement à part.
+ *
+ * C'est sous cette forme que `TemplateOptions.privateStays` désigne les
+ * hébergements privés : le téléphone les choisit dans `templateStays`, le
+ * serveur les stocke et les réapplique tels quels, sans les recalculer.
+ */
+export function stayKey(
+  accommodation: Pick<Accommodation, 'id' | 'name'>,
+): string {
+  const name =
+    typeof accommodation.name === 'string'
+      ? foldStayName(accommodation.name)
+      : ''
+  const key = name || `#${String(accommodation.id ?? '')}`
+  return truncateText(key, MAX_STAY_KEY_LENGTH)
+}
+
+/**
+ * Une clé que `stayKey` a pu donner : non vide, bornée, en UTF-16 valide, et
+ * soit déjà sous sa forme comparable, soit de la forme `#<id>`. Un nom brut
+ * (`Chez Marie`) est refusé : il ne désignerait aucun hébergement.
+ */
+export function isStayKey(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_STAY_KEY_LENGTH &&
+    value === wellFormedText(value) &&
+    (value.startsWith('#') || foldStayName(value) === value)
+  )
+}
+
+/**
+ * `privateStays` reçu du téléphone ou relu d'une méta : un tableau d'au plus
+ * `MAX_TEMPLATE_PRIVATE_STAYS` clés valides (`isStayKey`), rendu sans
+ * doublon, dans l'ordre reçu. `null` pour toute autre valeur, `undefined`
+ * compris : l'appelant décide de ce que vaut un champ absent (`[]` à la
+ * publication et pour une méta écrite avant ce champ, les clés de la méta
+ * stockée à une mise à jour).
+ */
+export function parsePrivateStays(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length > MAX_TEMPLATE_PRIVATE_STAYS) {
+    return null
+  }
+  const keys: string[] = []
+  for (const item of value) {
+    if (!isStayKey(item)) return null
+    if (!keys.includes(item)) keys.push(item)
+  }
+  return keys
+}
+
+/** Les hébergements d'un itinéraire, nuit par nuit ; une valeur mal formée est ignorée. */
+function itineraryStays(itinerary: readonly DayItinerary[]): Accommodation[] {
+  return itinerary.flatMap((day) =>
+    day?.accommodation && typeof day.accommodation === 'object'
+      ? [day.accommodation]
+      : [],
+  )
+}
+
+/**
+ * Les clés de `privateStays` qui ne désignent plus aucun hébergement du
+ * voyage, dans l'ordre reçu. La clé suit le nom : un hébergement masqué puis
+ * renommé (« Chez Marie » → « Chez Marie & Paul ») n'est plus désigné, et
+ * son adresse partirait avec la mise à jour. Le téléphone s'en sert avant
+ * d'envoyer (`checkPrivateStays`), le serveur pour prévenir (§4).
+ */
+export function unmatchedPrivateStays(
+  itinerary: readonly DayItinerary[],
+  privateStays: readonly string[],
+): string[] {
+  const keys = new Set(itineraryStays(itinerary).map(stayKey))
+  return privateStays.filter((key) => !keys.has(key))
+}
+
+/**
+ * Les ids des hébergements que `privateStays` masque, sans doublon, dans
+ * l'ordre du voyage : à garder sur le téléphone avec le modèle publié
+ * (`PublishedTemplateInfo.privateStayIds`). Un id ne change pas quand
+ * l'hébergement est renommé.
+ */
+export function privateStayIds(
+  itinerary: readonly DayItinerary[],
+  privateStays: readonly string[],
+): string[] {
+  const wanted = new Set(privateStays)
+  const ids: string[] = []
+  for (const stay of itineraryStays(itinerary)) {
+    if (
+      typeof stay.id === 'string' &&
+      wanted.has(stayKey(stay)) &&
+      !ids.includes(stay.id)
+    ) {
+      ids.push(stay.id)
+    }
+  }
+  return ids
+}
+
+/** Ce que `checkPrivateStays` a retrouvé des hébergements privés publiés. */
+export interface PrivateStaysCheck {
+  /**
+   * Les clés à cocher d'office dans le choix de A2, puis à envoyer : celles
+   * qui désignent encore un hébergement, puis `carried`.
+   */
+  privateStays: string[]
+  /**
+   * Nouvelles clés d'hébergements masqués à la publication (retrouvés par
+   * leur id, `privateStayIds`) qui ont changé de nom depuis.
+   */
+  carried: string[]
+  /** Clés publiées qui ne désignent plus aucun hébergement (renommé ou retiré). */
+  unmatched: string[]
+}
+
+/**
+ * Avant une mise à jour (A4) : les hébergements privés de la version
+ * publiée, retrouvés dans le voyage d'aujourd'hui. Si `carried` et
+ * `unmatched` sont vides, rien n'a bougé : envoyer `privateStays`. Sinon,
+ * un hébergement masqué a été renommé (ou retiré) : rouvrir le choix de A2,
+ * `privateStays` cochés, le faire confirmer, puis envoyer la liste
+ * confirmée — jamais l'ancienne, que `updateTemplate` (`template-api.ts`)
+ * refuse d'ailleurs d'envoyer.
+ */
+export function checkPrivateStays(
+  itinerary: readonly DayItinerary[],
+  published: Pick<PublishedTemplateInfo, 'privateStays' | 'privateStayIds'>,
+): PrivateStaysCheck {
+  const stays = itineraryStays(itinerary)
+  const keys = new Set(stays.map(stayKey))
+  const kept = published.privateStays.filter((key) => keys.has(key))
+  const ids = new Set(published.privateStayIds ?? [])
+  const carried: string[] = []
+  for (const stay of stays) {
+    const key = stayKey(stay)
+    if (ids.has(stay.id) && !kept.includes(key) && !carried.includes(key)) {
+      carried.push(key)
+    }
+  }
+  return {
+    privateStays: [...kept, ...carried],
+    carried,
+    unmatched: published.privateStays.filter((key) => !keys.has(key)),
+  }
 }
 
 /**
  * Métadonnées stockées d'un modèle en ligne — jamais renvoyées telles quelles.
- * Retiré, il n'en reste qu'une `RetiredTemplateMeta`.
+ * Retiré, il n'en reste qu'une `TemplateTombstone`.
  */
 export interface TemplateMeta {
   id: string
@@ -104,6 +302,12 @@ export interface TemplateMeta {
   indexable: boolean
   includesNotes: boolean
   includesPrices: boolean
+  /**
+   * Hébergements publiés sans adresse (`TemplateOptions.privateStays`),
+   * gardés pour qu'une mise à jour les masque encore. Jamais renvoyés
+   * (`PublicTemplate`) : la liste dirait lesquels sont des logements privés.
+   */
+  privateStays: string[]
   dayCount: number
   cities: string[]
   /** Année du voyage de l'auteur, pour situer les prix (« 2026 »). */
@@ -112,7 +316,7 @@ export interface TemplateMeta {
   publishedAt: string
   /** ISO 8601 — dernière écriture (contenu ou réglages). */
   updatedAt: string
-  /** Toujours `null` : c'est ce qui le distingue d'une `RetiredTemplateMeta`. */
+  /** Toujours `null` : c'est ce qui le distingue d'une `TemplateTombstone`. */
   retiredAt: null
   /** SHA-256 (hex) du jeton propriétaire ; le jeton lui-même n'est jamais stocké. */
   ownerTokenHash: string
@@ -120,18 +324,19 @@ export interface TemplateMeta {
 
 /**
  * Pierre tombale d'un modèle retiré, par son auteur ou par l'opérateur. Elle
- * reste pour que les lectures répondent 410, que le slug ne serve jamais à un
- * autre modèle et qu'un second retrait soit encore autorisé. Ni titre, ni
- * prénom, ni année, ni réglages, ni les champs pays et villes n'y restent.
+ * reste pour que les lectures répondent 410 (ou 404), qu'un slug ne serve
+ * jamais à un autre modèle et qu'un second retrait soit encore autorisé. Ni
+ * titre, ni prénom, ni année, ni réglages (hébergements privés compris), ni
+ * pays, ni villes, ni slug n'y restent.
  *
- * Le slug, en revanche, reste pour toujours, ici et dans `slugs/<slug>` : il
- * porte le pays (son nom français), le nombre de jours et jusqu'à 3 villes
- * saisies par l'auteur, mises en forme de slug (`japon-3-jours-tokyo-kyoto`).
+ * Les slugs du modèle, l'actuel comme les anciens, restent réservés pour
+ * toujours, mais seulement sous leur empreinte SHA-256, dans
+ * `slugs/<empreinte>` (`templateSlugKey`, `template-store.ts`) : rien, ni
+ * dans la pierre tombale ni dans les clés du bucket, ne se relit en pays,
+ * durée ou villes (`japon-3-jours-tokyo-kyoto`).
  */
-export interface RetiredTemplateMeta {
+export interface TemplateTombstone {
   id: string
-  /** Reste réservé : il ne désignera jamais un autre modèle. */
-  slug: string
   /** Dernière version publiée : un second retrait sait quelles versions supprimer. */
   version: number
   /** ISO 8601. */
@@ -149,18 +354,18 @@ export interface RetiredTemplateMeta {
 }
 
 /** Ce que contient `templates/<id>/meta` : un modèle en ligne, ou sa pierre tombale. */
-export type StoredTemplateMeta = TemplateMeta | RetiredTemplateMeta
+export type StoredTemplateRecord = TemplateMeta | TemplateTombstone
 
-export function isRetiredTemplateMeta(
-  meta: StoredTemplateMeta,
-): meta is RetiredTemplateMeta {
+export function isTombstone(
+  meta: StoredTemplateRecord,
+): meta is TemplateTombstone {
   return meta.retiredAt !== null
 }
 
 /** Ce que l'API publique renvoie d'un modèle en ligne. */
 export interface PublicTemplate extends Omit<
   TemplateMeta,
-  'ownerTokenHash' | 'retiredAt'
+  'ownerTokenHash' | 'retiredAt' | 'privateStays'
 > {
   /** Visible sur tripbrain.fr et dans le sitemap. */
   listed: boolean
@@ -191,6 +396,21 @@ export interface PublishedTemplateInfo {
   indexable: boolean
   includesNotes: boolean
   includesPrices: boolean
+  /**
+   * Les clés `privateStays` envoyées avec la dernière version : à renvoyer
+   * dans `TemplateOptions` à chaque mise à jour (A4), sans quoi l'adresse
+   * d'un logement privé repartirait. Absentes de la réponse de l'API, qui ne
+   * les publie pas. Vérifiées avant chaque mise à jour (`checkPrivateStays`) :
+   * un hébergement renommé change de clé.
+   */
+  privateStays: string[]
+  /**
+   * Ids des hébergements masqués par `privateStays` à la dernière version
+   * (`privateStayIds`), pour retrouver un hébergement renommé depuis. Restent
+   * sur le téléphone, jamais envoyés. Absents d'un voyage publié avant ce
+   * champ.
+   */
+  privateStayIds?: string[]
   authorName: string | null
   country: string
   /** ISO 8601. */
@@ -244,7 +464,12 @@ export function toPublicTemplate(
   meta: TemplateMeta,
   itinerary: DayItinerary[],
 ): PublicTemplate {
-  const { ownerTokenHash: _hash, retiredAt: _retired, ...rest } = meta
+  const {
+    ownerTokenHash: _hash,
+    retiredAt: _retired,
+    privateStays: _private,
+    ...rest
+  } = meta
   return { ...rest, listed: isListed(meta), itinerary }
 }
 

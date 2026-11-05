@@ -12,6 +12,7 @@ import {
   PlayCircle,
   Plane,
   Route,
+  Ship,
   TrainFront,
 } from 'lucide-react'
 import { MobileScreen } from '@/components/mobile/mobile-screen'
@@ -54,6 +55,8 @@ const TRANSPORT_ICONS: Record<Transport['type'], typeof Plane> = {
   train: TrainFront,
   bus: Bus,
   car: Car,
+  boat: Ship,
+  other: Route,
 }
 
 /**

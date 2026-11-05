@@ -67,11 +67,15 @@ function publishInput(
     title: 'Deux semaines au Japon',
     authorName: 'Yanis',
     country: 'JP',
-    options: { includeNotes: false, includePrices: true },
+    options: { includeNotes: false, includePrices: true, privateStays: [] },
     indexable: true,
     now: PUBLISHED_AT,
     ...overrides,
   }
+}
+
+function sha256(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex')
 }
 
 function storedMeta(id: string): TemplateMeta {
@@ -92,25 +96,24 @@ async function storeError(
 
 /**
  * La méta stockée n'est plus qu'une pierre tombale : de quoi répondre 410 et
- * garder le slug, rien d'autre. Le slug, lui, reste pour toujours (ici et
- * dans `slugs/<slug>`) avec ce qu'il contient : le pays en toutes lettres, le
- * nombre de jours et jusqu'à 3 villes (`japon-3-jours-tokyo-kyoto`). Les
- * recherches ci-dessous portent donc sur tout le reste, en minuscules aussi.
+ * autoriser un second retrait, rien d'autre — pas même le slug, qui porte le
+ * pays, le nombre de jours et jusqu'à 3 villes (`japon-3-jours-tokyo-kyoto`).
+ * Les recherches portent sur tout ce que l'auteur a écrit ou choisi, en
+ * minuscules aussi.
  */
 function expectErased(meta: TemplateMeta, wasListed = true): void {
   const raw = bucket.peek(templateMetaKey(meta.id))
   expect(raw).toEqual({
     id: meta.id,
-    slug: meta.slug,
     version: expect.any(Number),
     publishedAt: meta.publishedAt,
     retiredAt: '2026-11-04T08:30:00.000Z',
     ownerTokenHash: meta.ownerTokenHash,
     wasListed,
   })
-  const { slug: _slug, ...withoutSlug } = raw as Record<string, unknown>
-  const json = JSON.stringify(withoutSlug).toLowerCase()
+  const json = JSON.stringify(raw).toLowerCase()
   for (const value of [
+    meta.slug,
     meta.title,
     'Yanis',
     'Tokyo',
@@ -119,6 +122,23 @@ function expectErased(meta: TemplateMeta, wasListed = true): void {
     `"${meta.country}"`,
   ]) {
     expect(json).not.toContain(value.toLowerCase())
+  }
+}
+
+/**
+ * Aucun de ces slugs n'est lisible dans le bucket, ni dans une clé ni dans
+ * une valeur : chacun n'y reste que sous son empreinte (`slugs/<64 hex>`).
+ */
+function expectNoPlainSlug(...slugs: string[]): void {
+  for (const key of bucket.keys()) {
+    const json = JSON.stringify(bucket.peek(key))
+    for (const slug of slugs) {
+      expect(key).not.toContain(slug)
+      expect(json).not.toContain(slug)
+    }
+  }
+  for (const key of bucket.keys().filter((key) => key.startsWith('slugs/'))) {
+    expect(key).toMatch(/^slugs\/[0-9a-f]{64}$/)
   }
 }
 
@@ -227,7 +247,7 @@ describe('publishTemplate', () => {
         `${meta.id}/meta`,
         `${meta.id}/v/1`,
         templateIndexKey(meta.id),
-        'slugs/japon-3-jours-tokyo-kyoto',
+        `slugs/${sha256('japon-3-jours-tokyo-kyoto')}`,
       ].sort(),
     )
     expect(bucket.peek(templateSlugKey(meta.slug))).toEqual({ id: meta.id })
@@ -294,7 +314,9 @@ describe('publishTemplate', () => {
   it('retire les prix et garde les notes quand l’auteur le demande', async () => {
     const { meta, template } = await publishTemplate(
       bucket,
-      publishInput({ options: { includeNotes: true, includePrices: false } }),
+      publishInput({
+        options: { includeNotes: true, includePrices: false, privateStays: [] },
+      }),
     )
     expect(meta.includesNotes).toBe(true)
     expect(meta.includesPrices).toBe(false)
@@ -550,7 +572,13 @@ describe('updateTemplate', () => {
   it('garde les réglages publiés quand la mise à jour n’en donne pas', async () => {
     const { meta, ownerToken } = await publishTemplate(
       bucket,
-      publishInput({ options: { includeNotes: false, includePrices: false } }),
+      publishInput({
+        options: {
+          includeNotes: false,
+          includePrices: false,
+          privateStays: [],
+        },
+      }),
     )
     const { template } = await updateTemplate(bucket, meta.id, ownerToken, {
       itinerary: japanTrip(),
@@ -748,10 +776,19 @@ describe('retireTemplate', () => {
       [
         `${meta.id}/meta`,
         templateIndexKey(meta.id),
-        // Le slug reste réservé : il ne servira jamais à un autre modèle.
+        // Le slug reste réservé, sous sa seule empreinte : il ne servira
+        // jamais à un autre modèle, et ne dit plus rien du voyage.
         templateSlugKey(meta.slug),
       ].sort(),
     )
+    expectNoPlainSlug(meta.slug)
+    // Rien de ce que l'auteur a écrit ne reste lisible, nulle part.
+    const everything = JSON.stringify(
+      bucket.keys().map((key) => [key, bucket.peek(key)]),
+    ).toLowerCase()
+    for (const word of ['tokyo', 'kyoto', 'japon', 'yanis', 'deux semaines']) {
+      expect(everything).not.toContain(word)
+    }
     expect(await readIndex(bucket)).toEqual([])
   })
 
@@ -1466,46 +1503,31 @@ describe('pierre tombale', () => {
       status: 'missing',
     })
     expectErased(hidden.meta, false)
+    // Trois modèles retirés : plus aucun de leurs slugs n'est lisible.
+    expectNoPlainSlug(listed.meta.slug, hidden.meta.slug, short.meta.slug)
   })
 
-  it('lit encore une pierre tombale écrite avant `wasListed`, méta entière vidée', async () => {
-    const listed = await publishTemplate(bucket, publishInput())
-    const hidden = await publishTemplate(
-      bucket,
-      publishInput({ indexable: false }),
-    )
-    // L'ancienne forme : toute la méta, titre, prénom et villes vidés.
-    for (const { meta } of [listed, hidden]) {
-      bucket.poke(templateMetaKey(meta.id), {
-        ...meta,
-        title: '',
-        authorName: null,
-        cities: [],
-        updatedAt: '2026-11-04T08:30:00.000Z',
-        retiredAt: '2026-11-04T08:30:00.000Z',
-      })
-    }
-
-    expect(await readTemplate(bucket, listed.meta.id)).toEqual({
+  it('ne relit jamais d’une pierre tombale autre chose que ses champs', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    await retireTemplate(bucket, meta.id, ownerToken, LATER)
+    // Un slug, un titre glissés dans l'objet stocké ne ressortent pas.
+    bucket.poke(templateMetaKey(meta.id), {
+      ...(bucket.peek(templateMetaKey(meta.id)) as object),
+      slug: meta.slug,
+      title: meta.title,
+    })
+    const state = await readTemplateForOperator(bucket, meta.id)
+    expect(state.status === 'retired' && state.meta).toEqual({
+      id: meta.id,
+      version: 1,
+      publishedAt: meta.publishedAt,
+      retiredAt: '2026-11-04T08:30:00.000Z',
+      ownerTokenHash: meta.ownerTokenHash,
+      wasListed: true,
+    })
+    expect(await readTemplateBySlug(bucket, meta.slug)).toEqual({
       status: 'retired',
     })
-    expect(await readTemplateBySlug(bucket, listed.meta.slug)).toEqual({
-      status: 'retired',
-    })
-    expect(await readTemplateBySlug(bucket, hidden.meta.slug)).toEqual({
-      status: 'missing',
-    })
-    // L'auteur peut encore retirer : l'empreinte du jeton est lue.
-    await expect(
-      retireTemplate(bucket, listed.meta.id, listed.ownerToken),
-    ).resolves.toBeUndefined()
-    expect(
-      await storeError(
-        updateTemplate(bucket, listed.meta.id, listed.ownerToken, {
-          itinerary: japanTrip(),
-        }),
-      ),
-    ).toBe('retired')
   })
 
   it('ne fait pas passer une pierre tombale illisible pour un modèle absent', async () => {
@@ -1535,6 +1557,7 @@ describe('retireTemplateAsOperator', () => {
 
     const result = await retireTemplateAsOperator(bucket, meta.id, LATER)
 
+    // Le slug vient de la méta en ligne, lue juste avant le retrait.
     expect(result).toEqual({
       id: meta.id,
       slug: meta.slug,
@@ -1543,6 +1566,7 @@ describe('retireTemplateAsOperator', () => {
       alreadyRetired: false,
     })
     expectErased(meta)
+    expectNoPlainSlug(meta.slug)
     expect(bucket.keys()).toEqual(
       [
         `${meta.id}/meta`,
@@ -1590,9 +1614,14 @@ describe('retireTemplateAsOperator', () => {
 
     const again = await retireTemplateAsOperator(bucket, meta.slug, EVEN_LATER)
 
-    expect(again).toMatchObject({
+    // Retrouvé par l'empreinte de son slug ; la pierre tombale ne le connaît
+    // plus.
+    expect(again).toEqual({
+      id: meta.id,
+      slug: null,
       alreadyRetired: true,
       retiredAt: '2026-11-04T08:30:00.000Z',
+      wasListed: true,
     })
     expect(bucket.peek(templateVersionKey(meta.id, 2))).toBeUndefined()
     expectErased(meta)
@@ -1629,7 +1658,13 @@ describe('retireTemplateAsOperator', () => {
         status: 'retired',
       })
       expect(bucket.peek(templateSlugKey(slug))).toEqual({ id: meta.id })
+      // L'opérateur le retrouve encore par chacun, retiré.
+      expect(await readTemplateForOperator(bucket, slug)).toMatchObject({
+        status: 'retired',
+        meta: { id: meta.id },
+      })
     }
+    expectNoPlainSlug(meta.slug, longer.slug)
   })
 
   it('échoue si l’index ne suit pas, pierre tombale en place, et la commande rejouée le rattrape', async () => {
@@ -1679,13 +1714,18 @@ describe('readTemplateForOperator', () => {
     })
 
     await retireTemplateAsOperator(bucket, meta.id, LATER)
-    const after = await readTemplateForOperator(bucket, meta.id)
-    expect(after).toMatchObject({
-      status: 'retired',
-      meta: { id: meta.id, wasListed: true },
-      inIndex: false,
-      versionsLeft: 0,
-    })
+    for (const ref of [meta.id, meta.slug]) {
+      const after = await readTemplateForOperator(bucket, ref)
+      expect(after).toMatchObject({
+        status: 'retired',
+        meta: { id: meta.id, wasListed: true },
+        inIndex: false,
+        versionsLeft: 0,
+      })
+      expect(after.status === 'retired' && after.meta).not.toHaveProperty(
+        'slug',
+      )
+    }
   })
 
   it('compte les versions stockées, orphelines comprises, et `null` si l’une est illisible', async () => {
@@ -1930,6 +1970,7 @@ function storedMetaLike(id: string): TemplateMeta {
     indexable: false,
     includesNotes: false,
     includesPrices: false,
+    privateStays: [],
     dayCount: 3,
     cities: ['Tokyo'],
     tripYear: 2026,
@@ -2187,6 +2228,20 @@ describe('index en morceaux', () => {
     expect(await resyncTemplateIndex(bucket, 'pas-un-slug-7-jours')).toBeNull()
   })
 
+  it('le rattrapage d’un modèle retiré le laisse hors de l’index, sans slug à montrer', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    await retireTemplate(bucket, meta.id, ownerToken)
+    for (const ref of [meta.id, meta.slug]) {
+      expect(await resyncTemplateIndex(bucket, ref)).toEqual({
+        id: meta.id,
+        slug: null,
+        listed: false,
+        synced: true,
+      })
+    }
+    expect(await indexIds()).toEqual([])
+  })
+
   it('ignore une ligne rangée dans un autre morceau que le sien', async () => {
     const { meta } = await publishTemplate(bucket, publishInput())
     const entry = (await readIndex(bucket))[0]
@@ -2242,7 +2297,7 @@ describe('mise à jour : versions précédentes supprimées', () => {
       bucket,
       publishInput({
         itinerary: withNote(),
-        options: { includeNotes: true, includePrices: true },
+        options: { includeNotes: true, includePrices: true, privateStays: [] },
       }),
     )
     expect(JSON.stringify(bucket.peek(templateVersionKey(meta.id, 1)))).toMatch(
@@ -2270,7 +2325,7 @@ describe('mise à jour : versions précédentes supprimées', () => {
 
     expect(isTemplateStoreError(error) && error.code).toBe('versions')
     expect(error instanceof Error && error.message).toBe(
-      'Le modèle est à jour, mais ses versions précédentes n’ont pas pu être effacées. Réessayez.',
+      'Le modèle est à jour, mais ses versions précédentes n’ont pas pu être effacées. Réessaie.',
     )
     const current = await readTemplate(bucket, meta.id)
     expect(current.status === 'active' && current.template.version).toBe(2)
@@ -2924,6 +2979,256 @@ describe('index par pages', () => {
   it('refuse une page négative ou non entière', async () => {
     for (const page of [-1, 1.5, Number.NaN]) {
       await expect(readIndexPage(bucket, page)).rejects.toThrow(RangeError)
+    }
+  })
+})
+
+describe('hébergements privés : gardés dans la méta, jamais publiés', () => {
+  const ADDRESS = '12 rue des Lilas, 3e étage'
+  const KEY = 'cheztantelurdes'
+
+  /** Le Japon, avec les deux premières nuits chez une tante : un logement privé. */
+  function tripWithPrivateStay(): DayItinerary[] {
+    const trip = japanTrip()
+    const stay = {
+      id: 'acc-tante',
+      name: 'Chez Tante Lurdes',
+      address: ADDRESS,
+      bookingUrl: 'https://www.google.com/maps/place/12+rue+des+Lilas',
+      checkIn: '2026-04-01',
+      checkOut: '2026-04-03',
+      images: ['https://img.example/porte-lilas.jpg'],
+    }
+    trip[0] = {
+      ...trip[0],
+      accommodation: stay,
+      tips: ['Le bus 42 s’arrête devant le 12 rue des Lilas'],
+    }
+    trip[1] = { ...trip[1], accommodation: { ...stay } }
+    return trip
+  }
+
+  function privateInput(
+    overrides: Partial<PublishTemplateInput> = {},
+  ): PublishTemplateInput {
+    return publishInput({
+      itinerary: tripWithPrivateStay(),
+      options: { includeNotes: true, includePrices: true, privateStays: [KEY] },
+      ...overrides,
+    })
+  }
+
+  /** Ni l'adresse, ni le lien, ni la photo du logement privé. */
+  function expectNoAddress(value: unknown): void {
+    expect(JSON.stringify(value).toLowerCase()).not.toContain('lilas')
+  }
+
+  it('publie le nom et la ville, jamais l’adresse, et ne renvoie jamais la liste', async () => {
+    const { meta, template } = await publishTemplate(bucket, privateInput())
+
+    expect(meta.privateStays).toEqual([KEY])
+    expect(storedMeta(meta.id).privateStays).toEqual([KEY])
+    expect(template).not.toHaveProperty('privateStays')
+    expect(template.itinerary[0].accommodation).toMatchObject({
+      name: 'Chez Tante Lurdes',
+      address: '',
+      bookingUrl: '',
+    })
+    expect(template.itinerary[0].accommodation).not.toHaveProperty('images')
+    expect(template.itinerary[0].city).toBe('Tokyo')
+    expectNoAddress(template)
+    expectNoAddress(bucket.peek(templateVersionKey(meta.id, 1)))
+
+    const byId = await readTemplate(bucket, meta.id)
+    const bySlug = await readTemplateBySlug(bucket, meta.slug)
+    for (const read of [byId, bySlug]) {
+      expect(read.status).toBe('active')
+      expectNoAddress(read)
+      expect(JSON.stringify(read)).not.toContain('privateStays')
+      expect(JSON.stringify(read)).not.toContain(KEY)
+    }
+    const index = await readIndex(bucket)
+    expect(index.map((entry) => entry.id)).toEqual([meta.id])
+    expectNoAddress(index)
+    expect(JSON.stringify(index)).not.toContain(KEY)
+  })
+
+  it('les réapplique à chaque mise à jour qui ne les renvoie pas', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, privateInput())
+
+    // Sans réglages, puis avec d'autres réglages seulement : la méta décide.
+    const plain = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: tripWithPrivateStay(),
+    })
+    expect(plain.meta.privateStays).toEqual([KEY])
+    expectNoAddress(plain.template)
+    expectNoAddress(bucket.peek(templateVersionKey(meta.id, 2)))
+
+    const partial = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: tripWithPrivateStay(),
+      options: { includeNotes: false },
+    })
+    expect(partial.meta).toMatchObject({
+      includesNotes: false,
+      privateStays: [KEY],
+    })
+    expectNoAddress(partial.template)
+    expectNoAddress(bucket.peek(templateVersionKey(meta.id, 3)))
+
+    // Une liste envoyée remplace celle de la méta : l'auteur a décoché.
+    const cleared = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: tripWithPrivateStay(),
+      options: { privateStays: [] },
+    })
+    expect(cleared.meta.privateStays).toEqual([])
+    expect(storedMeta(meta.id).privateStays).toEqual([])
+    expect(cleared.template.itinerary[0].accommodation?.address).toBe(ADDRESS)
+  })
+
+  it('garde un à un les réglages publiés qu’une mise à jour n’envoie pas', async () => {
+    const { meta, ownerToken } = await publishTemplate(
+      bucket,
+      publishInput({
+        options: { includeNotes: true, includePrices: false, privateStays: [] },
+      }),
+    )
+    const { meta: next } = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: japanTrip(),
+      options: { includeNotes: false },
+    })
+    expect(next).toMatchObject({ includesNotes: false, includesPrices: false })
+  })
+
+  it('refuse une liste mal formée, sans rien écrire', async () => {
+    for (const privateStays of [['Chez Marie'], [''], 'chezmarie']) {
+      expect(
+        await storeError(
+          publishTemplate(
+            bucket,
+            privateInput({
+              options: {
+                includeNotes: false,
+                includePrices: true,
+                privateStays: privateStays as string[],
+              },
+            }),
+          ),
+        ),
+      ).toBe('invalid')
+    }
+    expect(bucket.keys()).toEqual([])
+
+    const { meta, ownerToken } = await publishTemplate(bucket, privateInput())
+    expect(
+      await storeError(
+        updateTemplate(bucket, meta.id, ownerToken, {
+          itinerary: tripWithPrivateStay(),
+          options: { privateStays: ['Chez Marie'] },
+        }),
+      ),
+    ).toBe('invalid')
+    expect(storedMeta(meta.id)).toMatchObject({
+      version: 1,
+      privateStays: [KEY],
+    })
+    expect(versionKeys(meta.id)).toEqual([templateVersionKey(meta.id, 1)])
+  })
+
+  it('refuse une mise à jour sans liste quand l’hébergement masqué a été renommé', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, privateInput())
+    const renamed = (): DayItinerary[] =>
+      tripWithPrivateStay().map((day) =>
+        day.accommodation?.id === 'acc-tante'
+          ? {
+              ...day,
+              accommodation: {
+                ...day.accommodation,
+                name: 'Chez Tante Lurdes & Rui',
+              },
+            }
+          : day,
+      )
+
+    // Le téléphone a « oublié » la liste : 409, rien n'est écrit.
+    for (const options of [undefined, { includeNotes: false }]) {
+      const refused = await updateTemplate(bucket, meta.id, ownerToken, {
+        itinerary: renamed(),
+        options,
+      }).catch((error: unknown) => error)
+      expect(isTemplateStoreError(refused) && refused.code).toBe('conflict')
+      expect((refused as Error).message).toMatch(/choisis de nouveau/)
+    }
+    expect(storedMeta(meta.id).version).toBe(1)
+    expect(versionKeys(meta.id)).toEqual([templateVersionKey(meta.id, 1)])
+
+    // L'ancienne liste renvoyée telle quelle : écrite, mais signalée — sans
+    // dire quelle clé.
+    const stale = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: renamed(),
+      options: { privateStays: [KEY] },
+    })
+    expect(stale.privateStaysUnmatched).toBe(true)
+    expect(JSON.stringify(stale.template)).not.toContain(KEY)
+
+    // La liste corrigée : rien à signaler, et l'adresse ne part pas.
+    const fixed = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: renamed(),
+      options: { privateStays: ['cheztantelurdes&rui'] },
+    })
+    expect(fixed.privateStaysUnmatched).toBeUndefined()
+    expectNoAddress(fixed.template)
+    expect(fixed.meta.privateStays).toEqual(['cheztantelurdes&rui'])
+
+    // Sans renommage, une mise à jour sans liste passe comme avant.
+    const plain = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: renamed(),
+    })
+    expect(plain.privateStaysUnmatched).toBeUndefined()
+    expectNoAddress(plain.template)
+  })
+
+  it('refuse (400) un envoi dont la recherche d’adresses dépasserait le plafond, sans rien écrire', async () => {
+    const trip = tripWithPrivateStay()
+    // 12 millions de caractères face à 3 morceaux (l'adresse, « 12 rue des
+    // Lilas », « 3e étage ») : au-delà de `MAX_ADDRESS_SEARCH_WORK`.
+    trip[2] = { ...trip[2], tips: Array(12).fill('12 rue '.repeat(150_000)) }
+    const refused = await publishTemplate(
+      bucket,
+      privateInput({ itinerary: trip }),
+    ).catch((error: unknown) => error)
+    expect(isTemplateStoreError(refused) && refused.code).toBe('invalid')
+    expect((refused as Error).message).toMatch(/trop long à vérifier/)
+    expect(bucket.keys()).toEqual([])
+  })
+
+  it('n’en laisse rien dans la pierre tombale', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, privateInput())
+    await retireTemplate(bucket, meta.id, ownerToken, LATER)
+    expectErased(meta)
+    const everything = JSON.stringify(
+      bucket.keys().map((key) => [key, bucket.peek(key)]),
+    ).toLowerCase()
+    expect(everything).not.toContain(KEY)
+    expect(everything).not.toContain('lilas')
+  })
+
+  it('lit une méta écrite avant ce champ, mais pas une liste illisible', async () => {
+    const { meta, ownerToken } = await publishTemplate(bucket, publishInput())
+    const { privateStays: _keys, ...before } = storedMeta(meta.id)
+    bucket.poke(templateMetaKey(meta.id), before)
+    expect((await readTemplate(bucket, meta.id)).status).toBe('active')
+    const { meta: next } = await updateTemplate(bucket, meta.id, ownerToken, {
+      itinerary: japanTrip(),
+    })
+    expect(next.privateStays).toEqual([])
+    expect(storedMeta(meta.id).privateStays).toEqual([])
+
+    for (const privateStays of ['chezmarie', ['Chez Marie'], [1]]) {
+      bucket.poke(templateMetaKey(meta.id), {
+        ...storedMeta(meta.id),
+        privateStays,
+      })
+      await expect(readTemplate(bucket, meta.id)).rejects.toThrow(/illisibles/)
     }
   })
 })

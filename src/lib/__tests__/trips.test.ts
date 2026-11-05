@@ -12,8 +12,10 @@ import {
   pickDefaultTrip,
   sortTripSummaries,
   summarizeTrip,
+  templatePublishBlocker,
   tripCities,
   msUntilNextMidnight,
+  normalizeStoredTrip,
   tripDateRange,
   tripCopyOf,
   tripStatus,
@@ -55,6 +57,7 @@ function publishedTemplate(
     indexable: true,
     includesNotes: false,
     includesPrices: true,
+    privateStays: [],
     authorName: 'Yanis',
     country: 'JP',
     publishedAt: '2026-10-02T09:15:00.000Z',
@@ -333,7 +336,7 @@ describe('tripCopyOf', () => {
 describe('canPublishTemplate', () => {
   const japan = [day('2026-06-01', 'Tokyo'), day('2026-06-02', 'Kyoto')]
 
-  it('laisse publier un vrai voyage, même repris ou déjà publié', () => {
+  it('laisse publier un vrai voyage, même déjà publié', () => {
     expect(canPublishTemplate(trip('ordinaire', japan))).toBe(true)
     expect(
       canPublishTemplate({
@@ -362,6 +365,277 @@ describe('canPublishTemplate', () => {
   it('refuse un voyage sans journée', () => {
     expect(canPublishTemplate(trip('vide', []))).toBe(false)
   })
+
+  it('suit templatePublishBlocker', () => {
+    const base = takenJapan()
+    const taken = takenTrip(base)
+    expect(canPublishTemplate(taken)).toBe(false)
+    const edited = structuredClone(base)
+    edited[0].activities.push({ id: 'a-new', name: 'Ramen', type: 'food' })
+    expect(canPublishTemplate(takenTrip(base, edited))).toBe(true)
+  })
+})
+
+/** Le modèle « Japon » tel qu'un repreneur l'a recalé à ses dates. */
+function takenJapan(): DayItinerary[] {
+  return [
+    {
+      ...day('2027-03-10', 'Tokyo'),
+      id: 'jp-d1',
+      dayNumber: 1,
+      tips: ['Prendre la Suica à l’aéroport'],
+      activities: [
+        { id: 'jp-a1', name: 'Sensō-ji', type: 'visit', status: 'planned' },
+        {
+          id: 'jp-a2',
+          name: 'Dîner à Omoide Yokocho',
+          type: 'food',
+          price: 30,
+          currency: 'EUR',
+        },
+      ],
+      accommodation: {
+        id: 'jp-acc',
+        name: 'Hotel Gracery Shinjuku',
+        address: '1-19-1 Kabukicho, Shinjuku-ku, Tokyo',
+        bookingUrl: 'https://gracery.com/shinjuku/',
+        checkIn: '2027-03-10T15:00',
+        checkOut: '2027-03-12T11:00',
+      },
+    },
+    {
+      ...day('2027-03-11', 'Tokyo'),
+      id: 'jp-d2',
+      dayNumber: 2,
+      activities: [{ id: 'jp-a3', name: 'teamLab Planets', type: 'visit' }],
+    },
+    {
+      ...day('2027-03-12', 'Kyoto'),
+      id: 'jp-d3',
+      dayNumber: 3,
+      transport: {
+        id: 'jp-tr',
+        type: 'train',
+        from: 'Tokyo',
+        to: 'Kyoto',
+        departureTime: '2027-03-12T09:00',
+        details: 'Shinkansen Nozomi',
+      },
+      activities: [{ id: 'jp-a4', name: 'Fushimi Inari', type: 'visit' }],
+    },
+  ]
+}
+
+/** Le voyage du repreneur : `itinerary` (le modèle repris s'il est absent). */
+function takenTrip(
+  base: DayItinerary[],
+  itinerary: DayItinerary[] = structuredClone(base),
+): StoredTrip {
+  return {
+    ...trip('repris', itinerary),
+    source: 'template',
+    origin: templateOrigin(structuredClone(base)),
+  }
+}
+
+describe('templatePublishBlocker', () => {
+  const japan = [day('2026-06-01', 'Tokyo'), day('2026-06-02', 'Kyoto')]
+
+  it('laisse publier un voyage ordinaire ou de groupe', () => {
+    expect(templatePublishBlocker(trip('ordinaire', japan))).toBeNull()
+    // L'écran A3 prévient que les retouches des autres deviennent publiques.
+    expect(
+      templatePublishBlocker({
+        ...trip('groupe', japan),
+        group: {
+          id: 'grp',
+          etag: '"1"',
+          base: { title: 'Japon', itinerary: japan },
+          dirty: false,
+          syncedAt: 0,
+          lastAuthor: null,
+          remoteUpdatedAt: 0,
+        },
+      }),
+    ).toBeNull()
+  })
+
+  it('dit pourquoi la démo, sa copie ou un voyage vide ne se publient pas', () => {
+    expect(
+      templatePublishBlocker({ ...trip('demo', japan), isDemo: true }),
+    ).toBe('demo')
+    expect(
+      templatePublishBlocker({ ...trip('copie', japan), copiedFromDemo: true }),
+    ).toBe('demo-copy')
+    expect(templatePublishBlocker(trip('vide', []))).toBe('empty')
+    // La démo l'emporte sur tout le reste.
+    expect(
+      templatePublishBlocker({
+        ...trip('demo vide', []),
+        isDemo: true,
+        copiedFromDemo: true,
+      }),
+    ).toBe('demo')
+  })
+
+  it('refuse un voyage repris tel quel', () => {
+    const base = takenJapan()
+    expect(templatePublishBlocker(takenTrip(base))).toBe('unmodified-take')
+    // Renommé, il reste le modèle d'un autre.
+    expect(
+      templatePublishBlocker({ ...takenTrip(base), title: 'Mon Japon' }),
+    ).toBe('unmodified-take')
+  })
+
+  it('laisse republier un voyage repris puis retouché', () => {
+    const base = takenJapan()
+    const edits: [string, (days: DayItinerary[]) => void][] = [
+      [
+        'une activité ajoutée',
+        (days) =>
+          days[1].activities.push({
+            id: 'jp-a5',
+            name: 'Shibuya Sky',
+            type: 'visit',
+          }),
+      ],
+      [
+        'un conseil réécrit',
+        (days) => {
+          days[0].tips = ['Prendre la Suica dans l’app Wallet']
+        },
+      ],
+      ['une journée retirée', (days) => days.splice(1, 1)],
+      ['deux journées échangées', (days) => days.reverse()],
+      [
+        'un hôtel changé',
+        (days) => {
+          days[0].accommodation = {
+            ...days[0].accommodation!,
+            name: 'Hotel Century Southern Tower',
+          }
+        },
+      ],
+      [
+        'un trajet retouché',
+        (days) => {
+          days[2].transport = { ...days[2].transport!, type: 'bus' }
+        },
+      ],
+      [
+        'un prix corrigé',
+        (days) => {
+          days[0].activities[1].price = 35
+        },
+      ],
+      [
+        'une note ajoutée',
+        (days) => {
+          days[1].notes = 'Réserver teamLab une semaine avant.'
+        },
+      ],
+    ]
+    for (const [label, edit] of edits) {
+      const itinerary = structuredClone(base)
+      edit(itinerary)
+      expect(
+        templatePublishBlocker(takenTrip(base, itinerary)),
+        label,
+      ).toBeNull()
+    }
+  })
+
+  it('ne compte pas ce qui ne part jamais comme une retouche', () => {
+    const base = takenJapan()
+    const edits: [string, (days: DayItinerary[]) => void][] = [
+      [
+        'une activité faite',
+        (days) => {
+          days[0].activities[0].status = 'done'
+        },
+      ],
+      [
+        'un hôtel réservé, avec sa référence',
+        (days) => {
+          days[0].accommodation = {
+            ...days[0].accommodation!,
+            status: 'booked',
+            bookingReference: 'HMQ4ZK8ABC',
+          }
+        },
+      ],
+      [
+        'un billet de train et son siège',
+        (days) => {
+          days[2].transport = {
+            ...days[2].transport!,
+            bookingReference: 'TP8XQ2',
+            seat: 'Voiture 7, place 45',
+            status: 'booked',
+          }
+        },
+      ],
+      [
+        'un lien de confirmation',
+        (days) => {
+          days[1].activities[0].bookingUrl =
+            'https://secure.booking.com/confirmation.fr.html?aid=1'
+        },
+      ],
+      [
+        'une photo restée sur le téléphone',
+        (days) => {
+          days[1].activities[0].images = ['blob:https://app.tripbrain.fr/6f1c']
+        },
+      ],
+      [
+        'tout le voyage décalé d’une semaine',
+        (days) => {
+          const shifted = days.map((item, index) => ({
+            ...item,
+            date: `2027-03-${17 + index}`,
+          }))
+          shifted[0].accommodation = {
+            ...shifted[0].accommodation!,
+            checkIn: '2027-03-17T15:00',
+            checkOut: '2027-03-19T11:00',
+          }
+          shifted[2].transport = {
+            ...shifted[2].transport!,
+            departureTime: '2027-03-19T09:00',
+          }
+          days.splice(0, days.length, ...shifted)
+        },
+      ],
+    ]
+    for (const [label, edit] of edits) {
+      const itinerary = structuredClone(base)
+      edit(itinerary)
+      expect(templatePublishBlocker(takenTrip(base, itinerary)), label).toBe(
+        'unmodified-take',
+      )
+    }
+  })
+
+  it('compte une seule journée décalée comme une retouche', () => {
+    const base = takenJapan()
+    const itinerary = structuredClone(base)
+    itinerary[1].date = '2027-03-15'
+    expect(templatePublishBlocker(takenTrip(base, itinerary))).toBeNull()
+  })
+
+  it('ne bloque pas un voyage dont la base reprise est illisible', () => {
+    const taken = takenTrip(takenJapan())
+    expect(
+      templatePublishBlocker({
+        ...taken,
+        origin: {
+          ...taken.origin!,
+          base: null as unknown as DayItinerary[],
+        },
+      }),
+    ).toBeNull()
+  })
 })
 
 describe('hasTripFromTemplate', () => {
@@ -384,5 +658,47 @@ describe('hasTripFromTemplate', () => {
         { ...trip('publie', japan), publishedTemplate: publishedTemplate() },
       ]),
     ).toBe(false)
+  })
+})
+
+describe('normalizeStoredTrip', () => {
+  /** Un ferry saisi dans un tableur, enregistré avant la normalisation des types. */
+  function withFerry(days: DayItinerary[]): DayItinerary[] {
+    return days.map((item, index) =>
+      index === 1
+        ? {
+            ...item,
+            transport: {
+              id: 'jp-ferry',
+              type: 'Ferry' as never,
+              from: 'Tokyo',
+              to: 'Ōshima',
+            },
+          }
+        : item,
+    )
+  }
+
+  it('ramène un type de trajet inconnu à un type de l’app, voyage et base compris', () => {
+    const stored = takenTrip(withFerry(takenJapan()))
+    const normalized = normalizeStoredTrip(stored)
+    expect(normalized.itinerary[1].transport?.type).toBe('boat')
+    expect(normalized.origin?.base[1].transport?.type).toBe('boat')
+    // Le reste ne bouge pas, l'original non plus.
+    expect(normalized.itinerary[0]).toBe(stored.itinerary[0])
+    expect(stored.itinerary[1].transport?.type).toBe('Ferry')
+  })
+
+  it('rend le même objet quand rien ne change', () => {
+    const stored = takenTrip(takenJapan())
+    expect(normalizeStoredTrip(stored)).toBe(stored)
+    const plain = trip('simple', [day('2026-06-01', 'Tokyo')])
+    expect(normalizeStoredTrip(plain)).toBe(plain)
+  })
+
+  it('laisse un voyage repris et non retouché non publiable', () => {
+    const base = withFerry(takenJapan())
+    const normalized = normalizeStoredTrip(takenTrip(base))
+    expect(templatePublishBlocker(normalized)).toBe('unmodified-take')
   })
 })

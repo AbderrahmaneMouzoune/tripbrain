@@ -42,7 +42,7 @@ export async function GET(
   } catch (error) {
     return templateErrorResponse(
       error,
-      'Lecture du modèle impossible. Réessayez.',
+      'Lecture du modèle impossible. Réessaie.',
     )
   }
 }

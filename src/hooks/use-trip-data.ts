@@ -26,6 +26,7 @@ import {
   currentDayIndex,
   deriveTripTitle,
   msUntilNextMidnight,
+  normalizeStoredTrip,
   pickDefaultTrip,
   sortTripSummaries,
   summarizeTrip,
@@ -189,8 +190,19 @@ export function useTripData() {
   useEffect(() => {
     let cancelled = false
     readAllTrips()
-      .then((stored) => {
+      .then((raw) => {
         if (cancelled) return
+        // Un trajet enregistré avant la normalisation des types (« Ferry »
+        // d'un tableur, texte libre d'un JSON) n'a pas d'icône : l'écran de
+        // la journée plantait. Corrigé à la lecture, puis réécrit au mieux
+        // pour que la synchronisation de groupe parte propre.
+        const stored = raw.map(normalizeStoredTrip)
+        stored.forEach((trip, index) => {
+          if (trip === raw[index]) return
+          writeTrip(trip).catch((error) => {
+            console.error('Réécriture d’un voyage normalisé impossible', error)
+          })
+        })
         commitTrips(() => stored)
         const remembered = readActiveTripId()
         const id =
@@ -302,31 +314,6 @@ export function useTripData() {
       ...itineraryVolume(demo),
     })
   }, [activate, addTrip])
-
-  const importData = useCallback(
-    async (file: File) => {
-      try {
-        const text = await file.text()
-        const parsed = JSON.parse(text) as TripData & { title?: string }
-        if (!parsed.itinerary || !Array.isArray(parsed.itinerary)) {
-          throw new Error('Format invalide : tableau itinerary manquant')
-        }
-        await addTrip(parsed.itinerary, { source: 'json', title: parsed.title })
-        trackEvent('trip_imported', {
-          source: 'json',
-          ...itineraryVolume(parsed.itinerary),
-        })
-      } catch (error) {
-        // Seule la nature de l'échec est remontée : ni le fichier, ni son nom.
-        trackEvent('trip_import_failed', {
-          source: 'json',
-          reason: importFailureReason(error),
-        })
-        throw error
-      }
-    },
-    [addTrip],
-  )
 
   const importXlsxData = useCallback(
     async (file: File) => {
@@ -672,7 +659,6 @@ export function useTripData() {
     activeTrip,
     activeTripId,
     loadMockData,
-    importData,
     importXlsxData,
     importCsvData,
     importSharedItinerary,

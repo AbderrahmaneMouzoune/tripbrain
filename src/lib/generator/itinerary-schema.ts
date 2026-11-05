@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Activity, DayItinerary, Transport } from '@/lib/itinerary-data'
+import { normalizeTransportType } from '@/lib/transport-type'
 
 /**
  * Schémas de l'itinéraire produit par le modèle à partir du prompt du
@@ -62,8 +63,28 @@ const generatedActivitySchema = z.object({
     .describe('Conseil pratique pour profiter au mieux de cette activité'),
 })
 
+/**
+ * Les types que la génération propose : tous ceux de l'app sauf `other`,
+ * réservé à ce qu'un import ne sait pas classer.
+ */
+export const GENERATED_TRANSPORT_TYPES = [
+  'train',
+  'car',
+  'plane',
+  'bus',
+  'boat',
+] as const satisfies readonly Exclude<Transport['type'], 'other'>[]
+
 const generatedTransportSchema = z.object({
-  type: z.enum(['train', 'car', 'plane', 'bus']).describe('Moyen de transport'),
+  // Un modèle écrit volontiers « ferry » ou « flight » malgré l'énumération :
+  // un synonyme reconnu est ramené au type de l'app plutôt que de faire
+  // écarter la journée. Ce qui reste `other` est laissé tel quel et refusé.
+  type: z
+    .preprocess((value) => {
+      const type = normalizeTransportType(value)
+      return type === 'other' ? value : type
+    }, z.enum(GENERATED_TRANSPORT_TYPES))
+    .describe('Moyen de transport'),
   from: z.string().describe('Ville ou lieu de départ'),
   to: z.string().describe("Ville ou lieu d'arrivée"),
   details: z

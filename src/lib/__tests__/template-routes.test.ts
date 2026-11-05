@@ -305,6 +305,75 @@ describe('cache des lectures', () => {
       expect(gone.status).toBe(410)
       expect(gone.headers.get('Cache-Control')).toBe(LISTING_CACHE)
     }
+    // Les deux slugs ne restent dans le bucket que sous leur empreinte.
+    const everything = JSON.stringify(
+      bucket.keys().map((key) => [key, bucket.peek(key)]),
+    )
+    for (const slug of [template.slug, current]) {
+      expect(everything).not.toContain(slug)
+    }
+  })
+})
+
+describe('hébergements privés', () => {
+  const KEY = 'cheztantelurdes'
+  const ADDRESS = '12 rue des Lilas, 3e étage'
+
+  function familyTrip(): DayItinerary[] {
+    const stay = {
+      id: 'acc-tante',
+      name: 'Chez Tante Lurdes',
+      address: ADDRESS,
+      bookingUrl: '',
+      checkIn: '2026-04-01',
+      checkOut: '2026-04-03',
+    }
+    const trip = japanTrip()
+    trip[0] = { ...trip[0], accommodation: stay }
+    trip[1] = { ...trip[1], accommodation: { ...stay } }
+    return trip
+  }
+
+  function put(id: string, body: unknown, token: string) {
+    return PUT(
+      jsonRequest(`/api/templates/${id}`, 'PUT', body, bearer(token)),
+      idContext(id),
+    )
+  }
+
+  it('une mise à jour sans la liste masque encore les mêmes ; une liste mal formée répond 400', async () => {
+    const { template, ownerToken } = await publish(familyTrip(), {
+      options: { privateStays: [KEY] },
+    })
+    expect(template).not.toHaveProperty('privateStays')
+    expect(template.itinerary[0].accommodation.address).toBe('')
+
+    const updated = await put(
+      template.id,
+      {
+        data: await compressItinerary(familyTrip()),
+        options: { includeNotes: true },
+      },
+      ownerToken,
+    )
+    const text = await updated.text()
+    expect(updated.status, text).toBe(200)
+    expect(text).not.toContain('Lilas')
+    expect(text).not.toContain('privateStays')
+
+    const refused = await put(
+      template.id,
+      {
+        data: await compressItinerary(familyTrip()),
+        options: { privateStays: 'cheztantelurdes' },
+      },
+      ownerToken,
+    )
+    expect(refused.status).toBe(400)
+    expect(await refused.json()).toEqual({
+      error: 'Hébergements privés invalides.',
+    })
+    expect(versionKeysOf(template.id)).toEqual([`${template.id}/v/2`])
   })
 })
 
@@ -645,7 +714,7 @@ describe('lectures publiques', () => {
     expect(response.status).toBe(500)
     expect(response.headers.get('Cache-Control')).toBe('no-store')
     expect(await response.json()).toEqual({
-      error: 'Lecture des modèles impossible. Réessayez.',
+      error: 'Lecture des modèles impossible. Réessaie.',
     })
     logged.mockRestore()
   })
@@ -693,7 +762,7 @@ describe('retrait et index public', () => {
     const failed = await retire(template.id, ownerToken)
     expect(failed.status).toBe(503)
     expect(failed.headers.get('Cache-Control')).toBe('no-store')
-    expect((await failed.json()).error).toMatch(/Réessayez/)
+    expect((await failed.json()).error).toMatch(/Réessaie/)
     expect(await indexIds()).toEqual([template.id])
 
     bucket.beforePut = null
@@ -717,7 +786,7 @@ describe('retrait et index public', () => {
     expect(failed.headers.get('Cache-Control')).toBe('no-store')
     expect(await failed.json()).toEqual({
       error:
-        'Le modèle est retiré, mais son contenu n’a pas pu être effacé. Réessayez.',
+        'Le modèle est retiré, mais son contenu n’a pas pu être effacé. Réessaie.',
     })
     expect((await read(template.id)).status).toBe(410)
     expect(await indexIds()).toEqual([])
@@ -898,7 +967,7 @@ describe('mise à jour : versions précédentes', () => {
     expect(failed.headers.get('Cache-Control')).toBe('no-store')
     expect(await failed.json()).toEqual({
       error:
-        'Le modèle est à jour, mais ses versions précédentes n’ont pas pu être effacées. Réessayez.',
+        'Le modèle est à jour, mais ses versions précédentes n’ont pas pu être effacées. Réessaie.',
     })
     expect((await (await read(template.id)).json()).template.version).toBe(2)
 

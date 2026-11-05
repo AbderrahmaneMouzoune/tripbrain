@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
+  buildEventDescription,
   generateICSContent,
   getGoogleCalendarUrl,
   downloadICS,
@@ -487,6 +488,16 @@ describe('includeTransports', () => {
   it('met en forme l’intitulé et la plage horaire', () => {
     expect(transportSummary(flightDay.transport!)).toBe('Vol PKX → XIY')
     expect(transportSummary(nightTrainDay.transport!)).toBe('Train')
+    expect(
+      transportSummary({ id: 't', type: 'boat', from: 'Nice', to: 'Bastia' }),
+    ).toBe('Bateau Nice → Bastia')
+    expect(transportSummary({ id: 't', type: 'other' })).toBe('Trajet')
+    expect(
+      buildEventDescription({
+        ...minimalDay,
+        transport: { id: 't', type: 'boat', from: 'Nice', to: 'Bastia' },
+      }),
+    ).toContain('Transport : Bateau Nice → Bastia')
     expect(transportTimeRange(flightDay.transport!)).toBe('13:00–15:10')
     expect(
       transportTimeRange({ id: 't', type: 'bus', departureTime: '9:05' }),

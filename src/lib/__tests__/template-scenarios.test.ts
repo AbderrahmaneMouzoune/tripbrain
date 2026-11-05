@@ -28,6 +28,7 @@ import {
   sensitiveSpans,
   summarizeTemplateCleaning,
   templateKnownPlaces,
+  templateStays,
   type SensitiveSpan,
 } from '@/lib/template-clean'
 import {
@@ -1174,7 +1175,22 @@ describe('scénario réel : la démo Chine (20 jours)', () => {
         prices: 0,
         privateLinks: 7,
         deviceImages: 0,
+        privateStays: 0,
       },
+    })
+  })
+
+  it('A2 : ne propose de masquer que l’appartement, jamais un hôtel ni une guesthouse', () => {
+    const stays = templateStays(demoItinerary)
+    expect(stays).toHaveLength(9)
+    // Un appart-hôtel nommé « Apartment » est proposé : l'auteur décoche.
+    expect(
+      stays.filter((stay) => stay.suggestedPrivate).map((stay) => stay.name),
+    ).toEqual(['Lan Beike Apartment (Qingdao May Fourth Square)'])
+    expect(stays[0]).toMatchObject({
+      name: "柃居 B&B - Jing'an Temple Branch",
+      cities: ['Shanghai'],
+      nights: 2,
     })
   })
 
@@ -1274,6 +1290,7 @@ describe('scénario réel : Japon 14 jours écrit à la main', () => {
         prices: 0,
         privateLinks: 2,
         deviceImages: 0,
+        privateStays: 0,
       },
     })
   })
@@ -1502,6 +1519,7 @@ describe('scénario réel : Italie en voiture (9 jours, 5 villes)', () => {
     const summary = summarizeTemplateCleaning(italyRoadTrip(), {
       includeNotes: true,
       includePrices: false,
+      privateStays: [],
     })
     expect(summary.goes).toEqual({
       days: 9,
@@ -1636,9 +1654,49 @@ describe('scénario réel : week-end à Lisbonne (2 jours)', () => {
     const template = await publishAndRead(lisbonWeekend(), 'PT', {
       includeNotes: true,
       includePrices: true,
+      privateStays: [],
     })
     expect(template.includesNotes).toBe(true)
     expect(template.itinerary[0].notes).toContain('+351 912 345 678')
+  })
+
+  it('A2 : l’Airbnb ne publie que son nom et la ville, nulle part son adresse', async () => {
+    const trip = lisbonWeekend()
+    // Le repreneur retrouve l'adresse dans la note : l'auteur l'y a recopiée.
+    trip[1].notes = 'Retour à pied jusqu’à Rua dos Remédios 45 après Belém.'
+    const [stay] = templateStays(trip)
+    expect(stay).toEqual({
+      key: 'appartementalfama(airbnb)',
+      name: 'Appartement Alfama (Airbnb)',
+      cities: ['Lisbonne'],
+      address: 'Rua dos Remédios 45, Lisboa',
+      nights: 2,
+      suggestedPrivate: true,
+    })
+
+    const options = {
+      includeNotes: true,
+      includePrices: true,
+      privateStays: [stay.key],
+    }
+    expect(summarizeTemplateCleaning(trip, options).stays).toMatchObject({
+      privateStays: 1,
+    })
+    const template = await publishAndRead(trip, 'PT', options)
+    expect(template.itinerary[0].city).toBe('Lisbonne')
+    expect(template.itinerary[0].accommodation).toMatchObject({
+      id: 'lx-acc',
+      name: 'Appartement Alfama (Airbnb)',
+      address: '',
+      bookingUrl: '',
+      price: 238,
+    })
+    expect(template.itinerary[1].notes).toBe(
+      'Retour à pied jusqu’à après Belém.',
+    )
+    expect(JSON.stringify(template)).not.toMatch(/rem[eé]dios/i)
+    // Le modèle public ne dit pas quel hébergement était privé.
+    expect(template).not.toHaveProperty('privateStays')
   })
 
   it('reprise d’un seul jour : l’appartement ne compte plus qu’une nuit', async () => {

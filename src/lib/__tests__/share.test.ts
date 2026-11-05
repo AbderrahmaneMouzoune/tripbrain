@@ -192,6 +192,20 @@ describe('decompressItinerary', () => {
     expect(restored.transport?.provider).toBe(oneDay.transport?.provider)
   })
 
+  it('ramène un type de trajet inconnu à un type de l’app', async () => {
+    const legacy = {
+      ...oneDay,
+      transport: { id: 'tr-ferry', type: 'ferry', from: 'Nice', to: 'Bastia' },
+    } as unknown as DayItinerary
+    const [restored] = decompressItinerary(await compressItinerary([legacy]))
+    expect(restored.transport).toEqual({
+      id: 'tr-ferry',
+      type: 'boat',
+      from: 'Nice',
+      to: 'Bastia',
+    })
+  })
+
   it('rejette un payload qui n’est pas décodable', () => {
     expect(() => decompressItinerary('pas-un-payload')).toThrow(
       /illisibles ou incomplètes/,

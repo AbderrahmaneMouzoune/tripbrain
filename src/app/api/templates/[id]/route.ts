@@ -4,7 +4,8 @@
 // l'aperçu et la reprise, et un modèle retiré ne doit pas rester repris
 // pendant des minutes. Le site vitrine ne lit que l'index et les modèles par
 // slug, eux en cache.
-// PUT (nouvelle version, les précédentes supprimées), PATCH (visibilité,
+// PUT (nouvelle version, les précédentes supprimées ; `privateStaysUnmatched:
+// true` si un hébergement privé envoyé ne désigne plus rien), PATCH (visibilité,
 // prénom, titre) et DELETE (retrait) exigent le jeton propriétaire dans
 // `Authorization: Bearer`.
 
@@ -45,7 +46,7 @@ const MISSING = 'Ce modèle n’existe pas.'
 // Même message sans jeton (401) et avec un mauvais jeton (403) : la réponse
 // ne dit pas ce qui manquait.
 const NOT_ALLOWED = 'Cet appareil n’est pas autorisé à modifier ce modèle.'
-const WRITE_FAILED = 'La mise à jour du modèle a échoué. Réessayez.'
+const WRITE_FAILED = 'La mise à jour du modèle a échoué. Réessaie.'
 
 type Context = { params: Promise<{ id: string }> }
 
@@ -80,7 +81,7 @@ export async function GET(_request: Request, { params }: Context) {
   } catch (error) {
     return templateErrorResponse(
       error,
-      'Lecture du modèle impossible. Réessayez.',
+      'Lecture du modèle impossible. Réessaie.',
     )
   }
 }
@@ -104,14 +105,17 @@ export async function PUT(request: Request, { params }: Context) {
   if (!parsed.ok) return templateRejection(parsed.status, parsed.error)
 
   try {
-    const { template } = await updateTemplate(
+    const { template, privateStaysUnmatched } = await updateTemplate(
       store,
       access.id,
       access.token,
       parsed.data,
     )
+    // Un hébergement privé renommé depuis la publication : sa clé envoyée ne
+    // désigne plus rien. Le téléphone peut prévenir ; la clé n'est jamais
+    // renvoyée.
     return Response.json(
-      { template },
+      { template, ...(privateStaysUnmatched ? { privateStaysUnmatched } : {}) },
       { headers: { 'Cache-Control': NO_STORE } },
     )
   } catch (error) {
@@ -160,7 +164,7 @@ export async function DELETE(request: Request, { params }: Context) {
   } catch (error) {
     return templateErrorResponse(
       error,
-      'Le retrait du modèle a échoué. Réessayez.',
+      'Le retrait du modèle a échoué. Réessaie.',
     )
   }
 }

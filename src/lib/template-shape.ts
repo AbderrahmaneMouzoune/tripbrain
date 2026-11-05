@@ -16,8 +16,10 @@
  *   les textes restent ; une image n'est gardée qu'en http(s) ;
  * - une activité sans id ou sans nom en texte est retirée ; un type inconnu
  *   devient `visit` ;
- * - un transport qui n'est pas un objet, sans id ou d'un type inconnu, est
- *   retiré (l'app choisit son icône d'après le type) ;
+ * - un transport qui n'est pas un objet ou sans id est retiré ; son type
+ *   passe par `normalizeTransportType` (« Ferry » devient `boat`, un type
+ *   inconnu ou absent `other`) : l'app choisit son icône d'après le type, et
+ *   un ferry importé d'un tableur ne disparaît plus du modèle publié ;
  * - un hébergement qui n'est pas un objet, sans id ou sans nom, est retiré ;
  *   nommé, il garde sa place : adresse, lien et horaires manquants deviennent
  *   `''`, comme à l'import d'un tableur.
@@ -38,6 +40,7 @@ import type {
   EntityMetadata,
   Transport,
 } from '@/lib/itinerary-data'
+import { normalizeTransportType } from '@/lib/transport-type'
 
 type Fields = Record<string, unknown>
 
@@ -119,12 +122,6 @@ const ACTIVITY_TYPES = [
   'experience',
   'shopping',
 ] as const satisfies readonly Activity['type'][]
-const TRANSPORT_TYPES = [
-  'train',
-  'car',
-  'plane',
-  'bus',
-] as const satisfies readonly Transport['type'][]
 const ACTIVITY_STATUSES = [
   'planned',
   'done',
@@ -149,13 +146,12 @@ const PRIORITIES = [
 
 const listsCovered: [
   Covers<Activity['type'], typeof ACTIVITY_TYPES>,
-  Covers<Transport['type'], typeof TRANSPORT_TYPES>,
   Covers<NonNullable<Activity['status']>, typeof ACTIVITY_STATUSES>,
   Covers<NonNullable<Transport['status']>, typeof BOOKING_STATUSES>,
   Covers<NonNullable<Accommodation['status']>, typeof BOOKING_STATUSES>,
   Covers<NonNullable<EntityMetadata['source']>, typeof SOURCES>,
   Covers<NonNullable<EntityMetadata['priority']>, typeof PRIORITIES>,
-] = [true, true, true, true, true, true, true]
+] = [true, true, true, true, true, true]
 void listsCovered
 
 // ── Formes ────────────────────────────────────────────────────────────────────
@@ -205,7 +201,7 @@ const ACTIVITY_SHAPE: Shape<Activity> = {
 
 const TRANSPORT_SHAPE: Shape<Transport> = {
   id: text,
-  type: oneOf(TRANSPORT_TYPES),
+  type: normalizeTransportType,
   from: text,
   to: text,
   details: text,
@@ -263,9 +259,10 @@ function activities(value: unknown): Activity[] | undefined {
 function normalizeTransport(value: unknown): Transport | undefined {
   if (!isRecord(value)) return undefined
   const transport = applyShape(value, TRANSPORT_SHAPE)
-  const { id, type } = transport
-  if (id === undefined || type === undefined) return undefined
-  return { ...transport, id, type }
+  const { id } = transport
+  if (id === undefined) return undefined
+  // `normalizeTransportType` rend toujours un type, absent compris.
+  return { ...transport, id, type: transport.type ?? 'other' }
 }
 
 function normalizeAccommodation(value: unknown): Accommodation | undefined {

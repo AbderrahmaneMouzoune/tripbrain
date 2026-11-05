@@ -14,6 +14,8 @@ import {
   Car,
   Check,
   Plane,
+  Route,
+  Ship,
   ShoppingBag,
   Sparkles,
   Train,
@@ -45,6 +47,9 @@ export const TRANSPORT_ICONS: Record<Transport['type'], LucideIcon> = {
   car: Car,
   plane: Plane,
   bus: Bus,
+  boat: Ship,
+  // Un trajet non classé : un chemin, sans véhicule à deviner.
+  other: Route,
 }
 
 /**
