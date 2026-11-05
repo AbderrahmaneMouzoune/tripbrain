@@ -256,7 +256,7 @@ export function useGroupSync({
       }
       setError(
         isOff
-          ? 'Pas de connexion : réessayez une fois en ligne. Rien n’est perdu.'
+          ? 'Pas de connexion : réessaie une fois en ligne. Rien n’est perdu.'
           : err instanceof Error
             ? err.message
             : 'La synchronisation a échoué.',

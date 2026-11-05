@@ -1,5 +1,5 @@
 /**
- * Mise en forme du résultat d'une génération pour l'écran « Votre itinéraire
+ * Mise en forme du résultat d'une génération pour l'écran « Ton itinéraire
  * est prêt » : points à vérifier, regroupement par ville, dates lisibles.
  *
  * Fonctions pures : l'écran ne fait que les afficher, les tests les vérifient.
@@ -51,7 +51,7 @@ export function reviewPoints(
           ? `${plural(days.length, 'jour')} sur ${expectedDays} ont été écrits`
           : 'la réponse s’est arrêtée avant la fin',
       details: [
-        'Relancez la génération pour obtenir le voyage complet, ou enregistrez ces journées et complétez-les à la main.',
+        'Relance la génération pour obtenir le voyage complet, ou enregistre ces journées et complète-les à la main.',
       ],
     })
   }

@@ -30,7 +30,7 @@ type Context = { params: Promise<{ id: string }> }
 
 function tooMany(retryAfter: number): Response {
   return Response.json(
-    { error: 'Trop de requêtes. Réessayez dans un instant.' },
+    { error: 'Trop de requêtes. Réessaie dans un instant.' },
     { status: 429, headers: { 'Retry-After': String(retryAfter) } },
   )
 }
@@ -130,14 +130,14 @@ export async function GET(request: Request, { params }: Context) {
       return Response.json(
         {
           error:
-            'Ce voyage a été modifié avec une version plus récente de TripBrain. Mettez l’application à jour.',
+            'Ce voyage a été modifié avec une version plus récente de TripBrain. Mets l’application à jour.',
         },
         { status: 409 },
       )
     }
     console.error('Lecture du groupe impossible', error)
     return Response.json(
-      { error: 'Synchronisation impossible. Réessayez.' },
+      { error: 'Synchronisation impossible. Réessaie.' },
       { status: 500 },
     )
   }
@@ -195,7 +195,7 @@ export async function PUT(request: Request, { params }: Context) {
     }
     console.error('Écriture du groupe impossible', error)
     return Response.json(
-      { error: 'Synchronisation impossible. Réessayez.' },
+      { error: 'Synchronisation impossible. Réessaie.' },
       { status: 500 },
     )
   }

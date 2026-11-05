@@ -640,7 +640,7 @@ function ChipChoiceControl({
             id={inputId}
             autoFocus
             value={isCustom ? value : ''}
-            placeholder="Votre libellé"
+            placeholder="Ton libellé"
             onChange={(event) => onChange(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {

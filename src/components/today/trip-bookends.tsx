@@ -301,8 +301,8 @@ export function BeforeTrip({ now }: { now: Date }) {
               </h2>
               <span className="text-muted-foreground block text-xs font-bold">
                 {packing.source === 'packing'
-                  ? 'D’après les conseils de votre programme'
-                  : 'Les conseils de votre premier jour'}
+                  ? 'D’après les conseils de ton programme'
+                  : 'Les conseils de ton premier jour'}
               </span>
             </span>
           </div>
@@ -360,7 +360,7 @@ export function AfterTrip() {
     <div className="stagger mx-auto w-full max-w-xl pb-6">
       <BookendHeader title="Voyage terminé" />
       <p className="text-muted-foreground mx-5 mt-2 text-[15px] leading-relaxed">
-        Votre programme reste ici, intact, pour vous souvenir de chaque étape.
+        Ton programme reste ici, intact, pour te souvenir de chaque étape.
       </p>
 
       <dl

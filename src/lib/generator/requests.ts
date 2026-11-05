@@ -31,9 +31,9 @@ const MAX_FREE_TEXT = 300
 const MESSAGES = {
   invalidDate: 'Date de départ illisible : attendu AAAA-MM-JJ.',
   pastDate: 'La date de départ est déjà passée.',
-  shortDescription: 'Décrivez votre voyage en quelques mots de plus.',
+  shortDescription: 'Décris ton voyage en quelques mots de plus.',
   longDescription: `Description trop longue : ${MAX_DESCRIPTION_LENGTH} caractères au maximum.`,
-  shortInstruction: 'Dites en quelques mots ce que vous voulez changer.',
+  shortInstruction: 'Dis en quelques mots ce que tu veux changer.',
   longInstruction: `Demande trop longue : ${MAX_INSTRUCTION_LENGTH} caractères au maximum.`,
 } as const
 

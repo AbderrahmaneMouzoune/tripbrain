@@ -127,7 +127,7 @@ export function ConsentBanner({
           id="consent-description"
           className="text-muted-foreground mt-2 text-[15px] leading-relaxed"
         >
-          Avec votre accord, nous comptons de façon anonyme quels écrans servent
+          Avec ton accord, nous comptons de façon anonyme quels écrans servent
           et où ça coince. Sans accord, rien n’est mesuré.
         </p>
 

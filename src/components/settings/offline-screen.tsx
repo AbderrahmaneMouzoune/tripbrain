@@ -331,7 +331,7 @@ export function OfflineScreen({ onClose }: ScreenProps<'offline'>) {
           </span>
           <span className="text-muted-foreground block text-[13px] leading-snug">
             {connectionTypeKnown
-              ? 'Évite d’utiliser vos données mobiles à l’étranger'
+              ? 'Évite d’utiliser tes données mobiles à l’étranger'
               : isNative
                 ? 'Le téléphone ne dit pas quel réseau est utilisé : le réglage reste sans effet ici.'
                 : 'Ce navigateur ne dit pas quel réseau est utilisé : le réglage reste sans effet ici.'}

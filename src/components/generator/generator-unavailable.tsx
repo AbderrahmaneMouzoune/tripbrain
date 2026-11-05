@@ -29,7 +29,7 @@ export function GeneratorUnavailable({
       onBack={onBack}
       eyebrow="Générateur indisponible"
       title="Le générateur intégré n’est pas activé ici"
-      description="Ce serveur n’a pas d’accès au modèle d’IA. Le générateur du site tripbrain.fr fait le même travail : votre demande s’y ouvre déjà remplie, vous passez par ChatGPT ou Claude, et l’itinéraire revient directement dans l’app."
+      description="Ce serveur n’a pas d’accès au modèle d’IA. Le générateur du site tripbrain.fr fait le même travail : ta demande s’y ouvre déjà remplie, tu passes par ChatGPT ou Claude, et l’itinéraire revient directement dans l’app."
       footer={
         <>
           <Button asChild size="xl" className="w-full">
@@ -61,9 +61,9 @@ export function GeneratorUnavailable({
       <div className="bg-card border-border flex items-start gap-3.5 rounded-[20px] border p-4">
         <IconBadge icon={IconWorldWww} tone="accent" size="lg" />
         <p className="text-muted-foreground flex-1 text-sm leading-relaxed">
-          Rien à remplir à nouveau : votre description et vos réponses partent
-          avec le lien et s’affichent dans le formulaire du site. Elles restent
-          aussi ici, si le générateur intégré est activé plus tard.
+          Rien à remplir à nouveau : ta description et tes réponses partent avec
+          le lien et s’affichent dans le formulaire du site. Elles restent aussi
+          ici, si le générateur intégré est activé plus tard.
         </p>
       </div>
     </MobileScreen>

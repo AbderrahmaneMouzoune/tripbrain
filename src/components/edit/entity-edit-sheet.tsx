@@ -482,8 +482,7 @@ export function EntityEditSheet<T extends object>({
                       obligatoires.{' '}
                     </>
                   )}
-                  {description ??
-                    'Les modifications restent sur votre appareil.'}
+                  {description ?? 'Les modifications restent sur ton appareil.'}
                 </DialogPrimitive.Description>
               </div>
             </div>

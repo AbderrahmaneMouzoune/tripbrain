@@ -119,9 +119,7 @@ export function CodeEntryStep({
       setPasteHint('Le presse-papiers ne contient pas de code TripBrain.')
     } catch {
       // Lecture refusée : on rend la main au champ, où le collage du système marche toujours.
-      setPasteHint(
-        'Collez le code dans le champ (appui long, puis « Coller »).',
-      )
+      setPasteHint('Colle le code dans le champ (appui long, puis « Coller »).')
       inputRef.current?.focus()
     }
   }
@@ -135,7 +133,7 @@ export function CodeEntryStep({
       onBack={onBack}
       backIcon={backIcon}
       progress={progress}
-      title="Entrez votre code"
+      title="Entre ton code"
       description="Il s’affiche sur tripbrain.fr ou sur l’appareil qui partage le voyage. Il reste valable une heure."
       footer={
         <Button
@@ -248,13 +246,13 @@ export function CodeEntryStep({
               id={`${inputId}-help`}
               className="text-secondary-strong px-2.5 pt-2.5 pb-1 text-[11px] font-black tracking-[0.1em] uppercase"
             >
-              Essayez plutôt
+              Essaie plutôt
             </h2>
             <div className="flex items-center gap-3 p-2.5">
               <IconBadge icon={Share2} tone="primary" />
               <span className="min-w-0 flex-1">
                 <span className="block text-[15px] leading-snug font-extrabold">
-                  Demandez un nouveau code sur l’autre appareil
+                  Demande un nouveau code sur l’autre appareil
                 </span>
                 <span className="text-muted-foreground block text-[13px]">
                   Bouton « Partager » sur tripbrain.fr ou dans l’app

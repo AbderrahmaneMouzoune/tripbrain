@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const verdict = checkRateLimit(getClientKey(request))
   if (!verdict.allowed) {
     return Response.json(
-      { error: 'Trop de tentatives. Réessayez dans un instant.' },
+      { error: 'Trop de tentatives. Réessaie dans un instant.' },
       { status: 429, headers: { 'Retry-After': String(verdict.retryAfter) } },
     )
   }
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       console.error('Création du groupe impossible', error)
     }
     return Response.json(
-      { error: 'La synchronisation n’a pas pu démarrer. Réessayez.' },
+      { error: 'La synchronisation n’a pas pu démarrer. Réessaie.' },
       { status: 500 },
     )
   }

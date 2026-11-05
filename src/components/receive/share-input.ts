@@ -130,8 +130,7 @@ export function describeShareError(error: unknown): ShareErrorDescription {
   if (reason === 'network_error') {
     return {
       kind: 'network',
-      message:
-        'Erreur réseau : vérifiez votre connexion internet et réessayez.',
+      message: 'Erreur réseau : vérifie ta connexion internet et réessaie.',
     }
   }
   if (reason === 'invalid_payload') {

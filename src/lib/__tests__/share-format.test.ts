@@ -82,7 +82,7 @@ describe('spellShareCode / toFrenchShareError', () => {
 
   it('traduit les erreurs réseau et garde les messages du serveur', () => {
     expect(toFrenchShareError(new TypeError('Failed to fetch'), 'share')).toBe(
-      'Erreur réseau : vérifiez votre connexion internet et réessayez.',
+      'Erreur réseau : vérifie ta connexion internet et réessaie.',
     )
     expect(
       toFrenchShareError(

@@ -33,8 +33,7 @@ export const metadata: Metadata = {
   // messagerie ne sait alors afficher l'aperçu d'un lien partagé.
   metadataBase: getSiteUrl(),
   title: 'TripBrain',
-  description:
-    'Planifiez et consultez votre itineraire de voyage avec TripBrain',
+  description: 'Planifie et consulte ton itinéraire de voyage avec TripBrain',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -52,16 +51,14 @@ export const metadata: Metadata = {
     type: 'website',
     siteName: 'TripBrain',
     title: 'TripBrain',
-    description:
-      'Planifiez et consultez votre itinéraire de voyage avec TripBrain',
+    description: 'Planifie et consulte ton itinéraire de voyage avec TripBrain',
     url: 'https://app.tripbrain.fr',
     locale: 'fr_FR',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'TripBrain',
-    description:
-      'Planifiez et consultez votre itinéraire de voyage avec TripBrain',
+    description: 'Planifie et consulte ton itinéraire de voyage avec TripBrain',
   },
   alternates: {
     canonical: 'https://app.tripbrain.fr',

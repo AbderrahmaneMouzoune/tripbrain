@@ -220,7 +220,7 @@ export function JourneyIllustration({
               {origin || 'Départ ?'}
             </span>
             <span className="absolute right-3 bottom-1.5 max-w-[45%] truncate text-[13px] font-black text-[#c2410c]">
-              {destination || 'Votre destination'}
+              {destination || 'Ta destination'}
             </span>
           </Stage>
         </Frame>
@@ -245,9 +245,9 @@ export function JourneyIllustration({
       const end = start ? returnDate(startDate, brief.durationDays) : null
       const weekendDays = cells.filter((cell) => cell.weekend).length
       const note = !start
-        ? 'Choisissez une date : chaque journée sera datée.'
+        ? 'Choisis une date : chaque journée sera datée.'
         : brief.durationDays >= 10
-          ? 'Prévoyez une journée sans programme au milieu.'
+          ? 'Prévois une journée sans programme au milieu.'
           : weekendDays
             ? `${weekendDays} jour${weekendDays > 1 ? 's' : ''} de week-end : marchés et musées plus fréquentés.`
             : 'Que des jours de semaine : moins de monde partout.'

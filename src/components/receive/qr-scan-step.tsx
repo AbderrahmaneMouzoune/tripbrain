@@ -324,11 +324,11 @@ export function QrScanStep({
             <p className="text-sm leading-relaxed text-white/80">
               {camera === 'denied'
                 ? native
-                  ? 'Autorisez la caméra pour TripBrain dans les réglages du téléphone, ou saisissez le code affiché sous le QR code.'
-                  : 'Autorisez la caméra pour ce site dans les réglages du navigateur, ou saisissez le code affiché sous le QR code.'
+                  ? 'Autorise la caméra pour TripBrain dans les réglages du téléphone, ou saisis le code affiché sous le QR code.'
+                  : 'Autorise la caméra pour ce site dans les réglages du navigateur, ou saisis le code affiché sous le QR code.'
                 : native
-                  ? 'La caméra n’est pas disponible ici. Saisissez plutôt le code affiché sous le QR code.'
-                  : 'Ce navigateur ne peut pas utiliser la caméra ici. Saisissez plutôt le code affiché sous le QR code.'}
+                  ? 'La caméra n’est pas disponible ici. Saisis plutôt le code affiché sous le QR code.'
+                  : 'Ce navigateur ne peut pas utiliser la caméra ici. Saisis plutôt le code affiché sous le QR code.'}
             </p>
             {camera === 'denied' && native && isNativeApp() && (
               <Button
@@ -368,7 +368,7 @@ export function QrScanStep({
               {camera === 'starting'
                 ? 'Ouverture de la caméra…'
                 : (notice ??
-                  'Visez le QR code affiché sur l’autre téléphone ou sur l’ordinateur.')}
+                  'Vise le QR code affiché sur l’autre téléphone ou sur l’ordinateur.')}
             </p>
           </>
         )}
@@ -388,7 +388,7 @@ export function QrScanStep({
               event.preventDefault()
               if (!accept(pasteValue, 'link')) {
                 setPasteError(
-                  'Ce lien n’est pas un partage TripBrain. Vérifiez qu’il est complet.',
+                  'Ce lien n’est pas un partage TripBrain. Vérifie qu’il est complet.',
                 )
               }
             }}

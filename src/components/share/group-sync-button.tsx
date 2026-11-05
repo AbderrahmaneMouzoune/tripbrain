@@ -41,28 +41,28 @@ export function describeGroupState(status: GroupSyncStatus): StateView {
       return {
         icon: Check,
         short: 'À jour',
-        long: 'Vous avez la même version que le groupe.',
+        long: 'Tu as la même version que le groupe.',
         tone: 'bg-success-soft text-success',
       }
     case 'behind':
       return {
         icon: ArrowDownToLine,
         short: 'Nouvelle version',
-        long: 'Le groupe a modifié le voyage. Synchronisez pour voir ses changements.',
+        long: 'Le groupe a modifié le voyage. Synchronise pour voir ses changements.',
         tone: 'bg-secondary-soft text-secondary-strong',
       }
     case 'ahead':
       return {
         icon: ArrowUpFromLine,
         short: 'À envoyer',
-        long: 'Vos modifications ne sont que sur ce téléphone. Synchronisez pour les envoyer au groupe.',
+        long: 'Tes modifications ne sont que sur ce téléphone. Synchronise pour les envoyer au groupe.',
         tone: 'bg-primary-soft text-primary-strong',
       }
     case 'diverged':
       return {
         icon: RefreshCw,
         short: 'À synchroniser',
-        long: 'Vous et le groupe avez modifié le voyage. La synchronisation réunit les deux.',
+        long: 'Le groupe et toi avez modifié le voyage. La synchronisation réunit les deux.',
         tone: 'bg-secondary-soft text-secondary-strong',
       }
     default:
@@ -87,7 +87,7 @@ export function describeSyncResult(
   result: NonNullable<GroupSyncStatus['lastResult']>,
 ): string {
   if (result.upToDate)
-    return 'Rien de neuf : vous aviez déjà la dernière version.'
+    return 'Rien de neuf : tu avais déjà la dernière version.'
   const parts: string[] = []
   if (result.received) {
     parts.push(
@@ -96,7 +96,7 @@ export function describeSyncResult(
         : 'Modifications du groupe récupérées',
     )
   }
-  if (result.sent) parts.push('vos modifications sont envoyées')
+  if (result.sent) parts.push('tes modifications sont envoyées')
   const sentence = parts.join(', ')
   const conflict =
     result.conflicts > 0
@@ -104,7 +104,7 @@ export function describeSyncResult(
       : ''
   return sentence
     ? `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.${conflict}`
-    : `Vous avez la même version que le groupe.${conflict}`
+    : `Tu as la même version que le groupe.${conflict}`
 }
 
 /**

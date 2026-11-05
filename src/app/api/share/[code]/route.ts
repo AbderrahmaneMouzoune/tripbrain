@@ -26,7 +26,7 @@ export async function GET(
   const verdict = checkRateLimit(getClientKey(request))
   if (!verdict.allowed) {
     return Response.json(
-      { error: 'Trop de tentatives. Réessayez dans un instant.' },
+      { error: 'Trop de tentatives. Réessaie dans un instant.' },
       { status: 429, headers: { 'Retry-After': String(verdict.retryAfter) } },
     )
   }
@@ -86,7 +86,7 @@ export async function GET(
         return Response.json(
           {
             error:
-              'Ce partage vient d’une version plus récente de TripBrain. Mettez l’application à jour.',
+              'Ce partage vient d’une version plus récente de TripBrain. Mets l’application à jour.',
           },
           { status: 409 },
         )
@@ -95,7 +95,7 @@ export async function GET(
 
     console.error('Lecture du partage impossible', error)
     return Response.json(
-      { error: 'Lecture du partage impossible. Réessayez.' },
+      { error: 'Lecture du partage impossible. Réessaie.' },
       { status: 500 },
     )
   }

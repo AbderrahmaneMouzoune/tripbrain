@@ -95,8 +95,7 @@ export function TripReadyScreen(_props: ScreenProps<'trip-ready'>) {
           </Button>
           {willAsk && (
             <p className="text-muted-foreground text-center text-xs leading-relaxed">
-              Votre téléphone vous demandera ensuite d’autoriser les
-              notifications.
+              Ton téléphone te demandera ensuite d’autoriser les notifications.
             </p>
           )}
           {remindersOn &&
@@ -105,7 +104,7 @@ export function TripReadyScreen(_props: ScreenProps<'trip-ready'>) {
               <div className="flex flex-col items-center gap-1">
                 <p className="text-muted-foreground text-center text-xs leading-relaxed">
                   Les notifications sont désactivées pour TripBrain.
-                  Réactivez-les dans les réglages du téléphone (TripBrain →
+                  Réactive-les dans les réglages du téléphone (TripBrain →
                   Notifications) pour recevoir les rappels.
                 </p>
                 <Button variant="link" size="sm" onClick={() => void request()}>
@@ -114,8 +113,8 @@ export function TripReadyScreen(_props: ScreenProps<'trip-ready'>) {
               </div>
             ) : (
               <p className="text-muted-foreground text-center text-xs leading-relaxed">
-                Les notifications sont bloquées pour ce site : autorisez-les
-                dans les réglages du navigateur pour recevoir les rappels.
+                Les notifications sont bloquées pour ce site : autorise-les dans
+                les réglages du navigateur pour recevoir les rappels.
               </p>
             ))}
         </>
@@ -127,7 +126,7 @@ export function TripReadyScreen(_props: ScreenProps<'trip-ready'>) {
           Voyage enregistré
         </span>
         <h1 className="font-display text-[28px] leading-[1.15]">
-          Emportez-le partout
+          Emporte-le partout
         </h1>
         <p className="text-muted-foreground text-[15px] leading-relaxed">
           {photos.total > 0
@@ -228,7 +227,7 @@ export function TripReadyScreen(_props: ScreenProps<'trip-ready'>) {
         {/* Dans l'app, « unsupported » ne vient que du simulateur. */}
         {notification === 'unsupported' && remindersOn && !native && (
           <p className="text-muted-foreground text-xs leading-relaxed">
-            Ce navigateur n’affiche pas de notifications : installez l’app sur
+            Ce navigateur n’affiche pas de notifications : installe l’app sur
             l’écran d’accueil pour recevoir les rappels.
           </p>
         )}

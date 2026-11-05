@@ -71,7 +71,7 @@ const QUICK_ACTION_ICONS: Record<QuickActionIcon, LucideIcon> = {
   hotel: Hotel,
 }
 
-/** Tons de la rangée « Où en êtes-vous ? », selon le statut proposé. */
+/** Tons de la rangée « Où en es-tu ? », selon le statut proposé. */
 const STATUS_TONES: Partial<Record<QuickActionIcon, string>> = {
   check: 'bg-success-soft text-success',
   skip: 'border-border-strong bg-card text-foreground border-[1.5px]',
@@ -170,8 +170,8 @@ interface QuickActionsSheetProps {
 }
 
 /**
- * Feuille d'actions rapides : en-tête de l'élément, rangée « Où en
- * êtes-vous ? » pour les statuts, liste des autres actions, et la suppression
+ * Feuille d'actions rapides : en-tête de l'élément, rangée « Où en es-tu ? »
+ * pour les statuts, liste des autres actions, et la suppression
  * à part, en rouge, qui demande un second appui.
  */
 export function QuickActionsSheet({
@@ -254,7 +254,7 @@ export function QuickActionsSheet({
       {statusActions.length > 0 && (
         <>
           <p className="text-secondary-strong mt-4 mb-2 text-[11px] font-black tracking-[0.1em]">
-            OÙ EN ÊTES-VOUS ?
+            OÙ EN ES-TU ?
           </p>
           <div className="flex gap-2">
             {statusActions.map((action) => {

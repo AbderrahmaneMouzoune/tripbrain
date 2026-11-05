@@ -183,8 +183,7 @@ export function EditReviewSheet() {
       {saving && (
         <p className="bg-background text-muted-foreground mt-3 flex items-center gap-2.5 rounded-[14px] px-3 py-2.5 text-xs leading-snug font-bold">
           <Smartphone aria-hidden className="size-[18px] shrink-0" />
-          Enregistré sur cet appareil. Pour vos compagnons, repartagez le
-          voyage.
+          Enregistré sur cet appareil. Pour tes compagnons, repartage le voyage.
         </p>
       )}
     </BottomSheet>

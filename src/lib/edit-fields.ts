@@ -272,7 +272,7 @@ export const dayForm: EditFormSchema = {
       type: 'coordinates',
       section: 'map',
       required: true,
-      hint: 'Collez « latitude, longitude » depuis une carte.',
+      hint: 'Colle « latitude, longitude » depuis une carte.',
     },
   ],
 }

@@ -97,7 +97,7 @@ export default function OpenGraphImage() {
               letterSpacing: '0.5px',
             }}
           >
-            Planifiez et consultez votre itinéraire de voyage
+            Planifie et consulte ton itinéraire de voyage
           </div>
         </div>
 
@@ -129,7 +129,7 @@ export default function OpenGraphImage() {
               letterSpacing: '0.3px',
             }}
           >
-            Votre compagnon de voyage intelligent
+            Ton compagnon de voyage intelligent
           </span>
         </div>
       </div>

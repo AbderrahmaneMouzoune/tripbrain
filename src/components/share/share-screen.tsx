@@ -183,7 +183,7 @@ export function ShareScreen({ onClose }: ScreenProps<'share'>) {
         status: 'error',
         message:
           reason === 'unavailable'
-            ? `${toFrenchShareError(error, 'share')} Le voyage est trop volumineux pour un QR code autonome : exportez le fichier JSON en attendant.`
+            ? `${toFrenchShareError(error, 'share')} Le voyage est trop volumineux pour un QR code autonome : exporte le fichier JSON en attendant.`
             : toFrenchShareError(error, 'share'),
         reason,
       })
@@ -230,9 +230,9 @@ export function ShareScreen({ onClose }: ScreenProps<'share'>) {
       const copied = await linkClipboard.copy(url)
       setLinkNotice(
         copied
-          ? { text: 'Lien copié : collez-le dans un message.', ok: true }
+          ? { text: 'Lien copié : colle-le dans un message.', ok: true }
           : {
-              text: 'Copie impossible : touchez « Montrer un QR code » pour transmettre le voyage.',
+              text: 'Copie impossible : touche « Montrer un QR code » pour transmettre le voyage.',
               ok: false,
             },
       )
@@ -312,7 +312,7 @@ export function ShareScreen({ onClose }: ScreenProps<'share'>) {
           {showInline
             ? 'Tout le voyage tient dans ce QR code.'
             : server.status === 'ready'
-              ? 'Votre voyage est prêt à être envoyé.'
+              ? 'Ton voyage est prêt à être envoyé.'
               : server.status === 'error'
                 ? 'Le partage n’a pas pu être préparé.'
                 : 'Préparation du partage…'}
@@ -541,8 +541,8 @@ export function ShareScreen({ onClose }: ScreenProps<'share'>) {
             title="Montrer un QR code"
             description={
               canInline
-                ? 'À scanner à côté de vous : ce voyage tient dedans, il fonctionne même sans connexion'
-                : 'À scanner à côté de vous, valable 1 heure'
+                ? 'À scanner à côté de toi : ce voyage tient dedans, il fonctionne même sans connexion'
+                : 'À scanner à côté de toi, valable 1 heure'
             }
             onClick={() => openTransfer(canInline ? 'inline' : 'server')}
           />
@@ -581,11 +581,11 @@ export function ShareScreen({ onClose }: ScreenProps<'share'>) {
             <span className="text-[15px] font-black">
               {activeTrip.group
                 ? 'Voyage synchronisé'
-                : 'Vous partez à plusieurs ?'}
+                : 'Tu pars à plusieurs ?'}
             </span>
             <span className="text-muted-foreground text-[13px] leading-snug">
               {activeTrip.group
-                ? 'Invitez un compagnon de plus, voyez qui a modifié quoi'
+                ? 'Invite un compagnon de plus, vois qui a modifié quoi'
                 : 'Un partage est une copie. Synchronisé, chacun voit les modifications des autres.'}
             </span>
           </span>
@@ -672,7 +672,7 @@ function ServerCode({
   return (
     <div className="mt-[18px] flex flex-col items-center gap-1">
       <p className="text-secondary-strong text-[11px] font-black tracking-[0.1em] uppercase">
-        Ou dictez ce code
+        Ou dicte ce code
       </p>
       <p
         aria-label={spellShareCode(share.code)}

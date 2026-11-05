@@ -32,7 +32,7 @@ export function SharedTripHandoff({ code }: SharedTripHandoffProps) {
 
       <div className="flex flex-col gap-2">
         <h1 className="font-display text-xl font-semibold text-balance">
-          Un voyage vous a été partagé
+          Un voyage t’a été partagé
         </h1>
         <p className="text-muted-foreground max-w-sm text-sm text-pretty">
           Ouverture de l’itinéraire dans TripBrain…

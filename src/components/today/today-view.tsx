@@ -478,7 +478,7 @@ function TodayDay({ now }: { now: Date }) {
           target={activityRef}
           step={1}
           icon={Hand}
-          title="Gardez le doigt appuyé"
+          title="Garde le doigt appuyé"
           body="sur une activité pour la cocher, copier son adresse ou la chercher sur Google."
           onAcknowledge={() => closeTip(false)}
           onSkipAll={() => closeTip(true)}
@@ -490,8 +490,8 @@ function TodayDay({ now }: { now: Date }) {
           target={stripRef}
           step={2}
           icon={MoveHorizontal}
-          title="Balayez pour changer de jour"
-          body="Glissez le doigt vers la gauche ou la droite sur l’écran : la journée suivante ou précédente arrive aussitôt."
+          title="Balaie pour changer de jour"
+          body="Glisse le doigt vers la gauche ou la droite sur l’écran : la journée suivante ou précédente arrive aussitôt."
           onAcknowledge={() => closeTip(false)}
           onSkipAll={() => closeTip(true)}
         />
@@ -502,8 +502,8 @@ function TodayDay({ now }: { now: Date }) {
           target={transportRef}
           step={3}
           icon={Ticket}
-          title="Vos billets, même hors ligne"
-          body="Rangez le billet de ce trajet dans l’onglet Documents : il s’ouvrira d’un geste depuis la fiche du trajet."
+          title="Tes billets, même hors ligne"
+          body="Range le billet de ce trajet dans l’onglet Documents : il s’ouvrira d’un geste depuis la fiche du trajet."
           onAcknowledge={() => closeTip(false)}
           onSkipAll={() => closeTip(true)}
         />

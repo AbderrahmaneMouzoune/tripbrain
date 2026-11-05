@@ -21,9 +21,9 @@ import { SharedTripHandoff } from './shared-trip-handoff'
  */
 const CODE_PATTERN = /^[A-Za-z0-9-]{4,24}$/
 
-const TITLE = 'Un voyage vous a été partagé'
+const TITLE = 'Un voyage t’a été partagé'
 const DESCRIPTION =
-  'Ouvrez ce lien pour récupérer l’itinéraire dans TripBrain : jour par jour, hébergements, transports et documents, sur votre téléphone comme sur votre ordinateur.'
+  'Ouvre ce lien pour récupérer l’itinéraire dans TripBrain : jour par jour, hébergements et transports, sur ton téléphone comme sur ton ordinateur.'
 
 interface SharePageProps {
   params: Promise<{ code: string }>

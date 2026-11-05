@@ -487,7 +487,7 @@ export function TripJourney(props: TripJourneyProps) {
         onBriefChange(applyExpress(brief, express))
         propsRef.current.onExpressUsed?.()
         showToast(
-          `${detected.length} réponse${detected.length > 1 ? 's' : ''} remplie${detected.length > 1 ? 's' : ''} pour vous`,
+          `${detected.length} réponse${detected.length > 1 ? 's' : ''} remplie${detected.length > 1 ? 's' : ''} pour toi`,
         )
         // La date reste à choisir : c'est la seule chose qu'une phrase ne dit jamais.
         openQuestion('when')
@@ -529,7 +529,7 @@ export function TripJourney(props: TripJourneyProps) {
   } else {
     headLabel =
       screen === 'hub'
-        ? 'Votre brief'
+        ? 'Ton brief'
         : screen === 'express'
           ? 'Mode express'
           : overlay
@@ -1540,7 +1540,7 @@ function HubScreen({
 
   return (
     <div className="flex flex-col gap-3.5">
-      <h2 className="sr-only">Votre brief</h2>
+      <h2 className="sr-only">Ton brief</h2>
       {missing.length > 0 && (
         <button
           type="button"
@@ -1600,7 +1600,7 @@ function HubScreen({
       </div>
 
       <p className="text-muted-foreground mt-0.5 text-[15px] font-extrabold">
-        L’essentiel est là. Pour un itinéraire plus juste, affinez un chapitre :
+        L’essentiel est là. Pour un itinéraire plus juste, affine un chapitre :
       </p>
 
       {nextChapter && (
@@ -1652,7 +1652,7 @@ function HubScreen({
               ? progress.answered
                   .map((question) => answerLabel(question, answers))
                   .join(' · ')
-              : 'Passé : l’IA choisira pour vous'
+              : 'Passé : l’IA choisira pour toi'
             : started
               ? progress.answered
                   .map((question) => answerLabel(question, answers))
@@ -1741,13 +1741,13 @@ function ExpressScreen({
         Mode express
       </p>
       <h2 className="font-display text-[29px] leading-[1.08]">
-        Racontez votre voyage en une phrase.
+        Raconte ton voyage en une phrase.
       </h2>
       <p className="text-muted-foreground text-[15px] font-bold">
-        On remplit le billet à mesure que vous écrivez.
+        On remplit le billet à mesure que tu écris.
       </p>
       <textarea
-        aria-label="Votre voyage en une phrase"
+        aria-label="Ton voyage en une phrase"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         maxLength={300}
@@ -1824,7 +1824,7 @@ function RecapScreen({
   return (
     <div className="flex flex-col gap-3.5">
       <h2 className="font-display text-[29px] leading-[1.08]">
-        {missing.length ? 'Presque prêt.' : 'Votre brief est prêt.'}
+        {missing.length ? 'Presque prêt.' : 'Ton brief est prêt.'}
       </h2>
       <div className="tj-rise border-border overflow-hidden rounded-[22px] border bg-white shadow-[0_18px_36px_-24px_rgba(14,26,58,0.45)]">
         <div className="bg-ink flex items-center justify-between px-4 py-[11px] text-white">
@@ -1899,7 +1899,7 @@ function RecapScreen({
           </span>
           <span className="flex-1 text-sm font-extrabold">
             {missing[0].id === 'destination'
-              ? 'Il manque juste votre destination pour lancer l’IA.'
+              ? 'Il manque juste ta destination pour lancer l’IA.'
               : 'Il manque la date de départ pour lancer l’IA.'}
           </span>
           <span className="text-sm font-black text-[#c2410c]">Remplir</span>
@@ -1909,8 +1909,8 @@ function RecapScreen({
       {missing.length === 0 && suggestions.length > 0 && (
         <div className="flex flex-col gap-2">
           <p className="text-muted-foreground text-[10px] font-black tracking-[0.12em] uppercase">
-            Si vous avez 30 secondes · +{Math.round(suggestions.length * unit)}{' '}
-            % de précision
+            Si tu as 30 secondes · +{Math.round(suggestions.length * unit)} % de
+            précision
           </p>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((question) => (
@@ -1954,7 +1954,7 @@ function LiveTicket({
     <div className="bg-primary relative hidden w-[400px] flex-none flex-col gap-4 overflow-hidden px-7 py-8 text-white lg:flex">
       <div className="flex flex-col gap-1">
         <p className="text-[11px] font-black tracking-[0.12em] text-[#e6eefd] uppercase">
-          Votre billet, en direct
+          Ton billet, en direct
         </p>
         <p className="font-display text-2xl leading-[1.1]">
           Chaque réponse s’imprime ici.

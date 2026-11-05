@@ -102,8 +102,8 @@ export function LiveGeneration({
               <IconBell className="text-primary size-5 shrink-0" aria-hidden />
               <p className="flex-1 text-[13px] leading-[1.4] font-bold">
                 {notifies
-                  ? 'Vous pouvez quitter l’écran : on vous prévient quand c’est prêt.'
-                  : 'Vous pouvez quitter l’écran : la génération continue tant que l’app reste ouverte.'}
+                  ? 'Tu peux quitter l’écran : on te prévient quand c’est prêt.'
+                  : 'Tu peux quitter l’écran : la génération continue tant que l’app reste ouverte.'}
               </p>
             </div>
           )}
@@ -169,7 +169,7 @@ export function LiveGeneration({
           {running ? 'Génération en direct' : 'Génération'}
         </p>
         <h1 className="font-display text-[28px] leading-[1.15]">
-          {running ? 'On compose votre voyage' : 'Votre voyage en cours'}
+          {running ? 'On compose ton voyage' : 'Ton voyage en cours'}
         </h1>
         {subtitle && (
           <p className="text-muted-foreground text-sm font-bold">{subtitle}</p>

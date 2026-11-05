@@ -84,7 +84,7 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
         htmlFor={nameId}
         className="text-muted-foreground mb-1.5 block text-[11px] font-black tracking-[0.1em] uppercase"
       >
-        Votre prénom
+        Ton prénom
       </label>
       <div className="border-border-strong bg-card focus-within:border-primary focus-within:ring-primary/20 flex items-center rounded-[14px] border-[1.5px] focus-within:ring-4">
         <UserRound
@@ -119,7 +119,7 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
       } catch (err) {
         setError(
           err instanceof TypeError || !navigator.onLine
-            ? 'Pas de connexion : la synchronisation démarrera une fois en ligne. Réessayez à ce moment-là.'
+            ? 'Pas de connexion : la synchronisation démarrera une fois en ligne. Réessaie à ce moment-là.'
             : err instanceof Error
               ? err.message
               : 'La synchronisation n’a pas pu démarrer.',
@@ -153,7 +153,7 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
         <ol className="flex flex-col gap-3 text-[15px] leading-snug">
           {[
             [
-              'Vous invitez vos compagnons',
+              'Tu invites tes compagnons',
               'par un lien ou un QR code. Ils retrouvent le voyage dans leur propre TripBrain.',
             ],
             [
@@ -162,7 +162,7 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
             ],
             [
               'Chacun synchronise quand il le décide',
-              'un bouton dit si vous avez la même version que les autres. Rien ne change sur votre téléphone sans que vous l’ayez demandé.',
+              'un bouton dit si tu as la même version que les autres. Rien ne change sur ton téléphone sans que tu l’aies demandé.',
             ],
           ].map(([lead, rest], index) => (
             <li key={lead} className="flex gap-3">
@@ -181,8 +181,8 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
 
         <p className="bg-muted text-muted-foreground mt-5 rounded-[14px] px-3 py-2.5 text-xs leading-normal">
           Les documents (billets, réservations) ne sont pas partagés : ils
-          restent sur votre téléphone. Le voyage, lui, est gardé sur nos
-          serveurs tant qu’il est synchronisé.
+          restent sur ton téléphone. Le voyage, lui, est gardé sur nos serveurs
+          tant qu’il est synchronisé.
         </p>
 
         {nameField}
@@ -259,7 +259,7 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
       <GroupSyncPanel />
       {lastChange && (
         <p className="text-muted-foreground mt-2 px-1 text-[13px]">
-          Votre version : dernière modification{' '}
+          Ta version : dernière modification{' '}
           {group.lastAuthor ? (
             <>
               par{' '}
@@ -283,8 +283,8 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
         </div>
         <p className="text-muted-foreground text-[13px] leading-snug">
           À scanner par un compagnon de voyage. Le lien ne s’use pas : il ouvre
-          le voyage et permet de le modifier, ne l’envoyez qu’à ceux qui partent
-          avec vous.
+          le voyage et permet de le modifier, ne l’envoie qu’à ceux qui partent
+          avec toi.
         </p>
       </div>
 
@@ -301,7 +301,7 @@ export function GroupScreen({ onClose }: ScreenProps<'group'>) {
           <div className="bg-destructive-soft rounded-[14px] p-3">
             <p className="text-destructive text-sm leading-snug font-bold">
               Le voyage reste sur ce téléphone, mais ne recevra plus les
-              modifications des autres. Eux continuent sans vous.
+              modifications des autres. Eux continuent sans toi.
             </p>
             <div className="mt-3 flex gap-2">
               <Button

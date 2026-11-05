@@ -115,8 +115,8 @@ export function DriverScreen({ screen, onClose }: ScreenProps<'driver'>) {
             <>
               <SunDim className="size-5 shrink-0" aria-hidden />
               {native
-                ? 'Pensez à monter la luminosité : l’écran peut se mettre en veille.'
-                : 'Pensez à monter la luminosité : ce navigateur ne peut pas garder l’écran allumé.'}
+                ? 'Pense à monter la luminosité : l’écran peut se mettre en veille.'
+                : 'Pense à monter la luminosité : ce navigateur ne peut pas garder l’écran allumé.'}
             </>
           ) : (
             <>

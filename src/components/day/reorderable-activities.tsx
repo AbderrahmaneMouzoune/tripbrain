@@ -368,7 +368,7 @@ export function ReorderableActivities({
         })}
       </ol>
       <p id="reorder-help" className="sr-only">
-        Glissez la poignée, ou touchez-la puis utilisez les boutons monter et
+        Glisse la poignée, ou touche-la puis utilise les boutons monter et
         descendre. Au clavier : Entrée, puis les flèches haut et bas.
       </p>
     </>

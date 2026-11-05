@@ -139,7 +139,7 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
       replace({ kind: 'trip-ready' })
     } catch {
       triggerHaptic('error')
-      setSaveError('L’enregistrement a échoué. Réessayez.')
+      setSaveError('L’enregistrement a échoué. Réessaie.')
       setSaving(false)
     }
   }
@@ -222,7 +222,7 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
         <div className="flex flex-col gap-2">
           {ready && !dateOk && (
             <p className="bg-destructive-soft text-destructive rounded-2xl px-3.5 py-3 text-sm font-extrabold">
-              Cette date de départ est déjà passée : choisissez un jour à venir.
+              Cette date de départ est déjà passée : choisis un jour à venir.
             </p>
           )}
           <Button
@@ -236,7 +236,7 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
           </Button>
           <p className="text-muted-foreground text-center text-[13px] font-bold">
             Les questions passées ne figurent pas dans la demande : l’IA choisit
-            pour vous.
+            pour toi.
           </p>
         </div>
       )}

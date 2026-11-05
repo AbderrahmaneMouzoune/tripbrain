@@ -75,7 +75,7 @@ function GeneratorBanner() {
       <div className="min-w-0 flex-1">
         <p className="text-muted-foreground text-xs leading-relaxed">
           <span className="text-foreground font-medium">
-            Vous n’avez aucun fichier ?
+            Tu n’as aucun fichier ?
           </span>{' '}
           Le générateur de tripbrain.fr construit l’itinéraire avec l’IA et le
           renvoie ici, sans passer par un tableur.
@@ -1326,7 +1326,7 @@ export function ImportFormatGuideContent() {
                     <code className="bg-muted rounded px-1 text-[11px]">
                       Transports
                     </code>{' '}
-                    (respectez la casse).
+                    (respecte la casse).
                   </li>
                   <li>
                     La première ligne de chaque onglet doit être la ligne
@@ -1340,7 +1340,7 @@ export function ImportFormatGuideContent() {
                     </code>
                     .
                   </li>
-                  <li>Laissez une cellule vide pour les champs optionnels.</li>
+                  <li>Laisse une cellule vide pour les champs optionnels.</li>
                 </ul>
               </AlertDescription>
             </Alert>
@@ -2437,7 +2437,7 @@ export function ImportFormatGuide() {
         <DialogHeader className="shrink-0 border-b p-5">
           <DialogTitle>Guide de format d&apos;import</DialogTitle>
           <DialogDescription>
-            Choisissez votre format ci-dessous pour voir les instructions et
+            Choisis ton format ci-dessous pour voir les instructions et
             télécharger un modèle.
           </DialogDescription>
         </DialogHeader>

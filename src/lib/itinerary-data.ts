@@ -1209,7 +1209,7 @@ export const itinerary: DayItinerary[] = [
         currency: 'CNY',
         rating: 4.7,
         tags: ['hot pot', 'épicé', 'sichuan'],
-        tips: 'Commander un bouillon « yuanyang » (mi-épicé, mi-doux) si vous ne supportez pas trop le piment.',
+        tips: 'Commander un bouillon « yuanyang » (mi-épicé, mi-doux) si tu ne supportes pas trop le piment.',
         status: 'planned',
       },
     ],

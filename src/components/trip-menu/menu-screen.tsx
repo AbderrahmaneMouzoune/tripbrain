@@ -78,7 +78,7 @@ export function MenuScreen({ onClose }: ScreenProps<'menu'>) {
       <header className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-secondary-strong text-xs font-black tracking-[0.08em] uppercase">
-            Votre voyage
+            Ton voyage
           </p>
           <h1 className="font-display mt-0.5 text-[30px] leading-[1.1]">
             Voyage
@@ -163,7 +163,7 @@ export function MenuScreen({ onClose }: ScreenProps<'menu'>) {
             label="Voyager à plusieurs"
             description={
               activeTrip.group
-                ? 'Synchronisé avec vos compagnons'
+                ? 'Synchronisé avec tes compagnons'
                 : 'Un programme à jour sur le téléphone de chacun'
             }
             onClick={() => push({ kind: 'group' })}
@@ -298,7 +298,7 @@ export function MenuScreen({ onClose }: ScreenProps<'menu'>) {
       <p className="text-muted-foreground mx-2 mt-5 flex items-start gap-2 text-xs leading-normal">
         <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
         <span>
-          Votre voyage vit sur cet appareil : le partage est le seul moyen de le
+          Ton voyage vit sur cet appareil : le partage est le seul moyen de le
           retrouver ailleurs.
         </span>
       </p>

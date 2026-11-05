@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   const verdict = checkRateLimit(getClientKey(request))
   if (!verdict.allowed) {
     return reply(
-      { error: 'Trop de partages en peu de temps. Réessayez dans un instant.' },
+      { error: 'Trop de partages en peu de temps. Réessaie dans un instant.' },
       { status: 429, headers: { 'Retry-After': String(verdict.retryAfter) } },
     )
   }
@@ -118,13 +118,13 @@ export async function POST(request: Request) {
     }
 
     return reply(
-      { error: 'Impossible de générer un code libre. Réessayez.' },
+      { error: 'Impossible de générer un code libre. Réessaie.' },
       { status: 503 },
     )
   } catch (error) {
     console.error('Création du partage impossible', error)
     return reply(
-      { error: 'Le partage a échoué. Réessayez dans quelques instants.' },
+      { error: 'Le partage a échoué. Réessaie dans quelques instants.' },
       { status: 500 },
     )
   }

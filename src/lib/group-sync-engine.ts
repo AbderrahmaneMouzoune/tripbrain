@@ -192,7 +192,7 @@ export async function syncGroupTrip(
         }
       }
     }
-    throw new Error('Trop de modifications simultanées. Réessayez.')
+    throw new Error('Trop de modifications simultanées. Réessaie.')
   } catch (error) {
     if (error instanceof GroupNotFoundError) {
       return {

@@ -73,6 +73,10 @@ describe('buildExpressPrompt', () => {
     expect(system).toContain('Seule exception : un hébergement qu’il demande')
   })
 
+  it('fait tutoyer le voyageur dans les textes générés', () => {
+    expect(system).toContain('tutoie le voyageur')
+  })
+
   it('n’impose pas de durée quand elle est inconnue', () => {
     const open = buildExpressPrompt('Un week-end à Rome', '2027-04-12').user
     expect(open).not.toContain('Il dure exactement')
@@ -155,6 +159,7 @@ describe('buildRefinePrompt', () => {
     expect(user).toContain('Garde 2 jours au total')
     expect(user).toContain('- Jour 2 : mardi 13 avril 2027 (2027-04-13)')
     expect(system).toContain('Recopie à l’identique')
+    expect(system).toContain('tutoie le voyageur')
     expect(system).not.toContain('```json')
   })
   it('sans demande d’origine, ne parle pas du voyageur', () => {
