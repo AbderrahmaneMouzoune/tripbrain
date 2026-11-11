@@ -55,8 +55,13 @@ export function LiveGeneration({
   onEdit: () => void
 }) {
   const notifies = useNotificationsGranted()
+  // Import d'un programme existant : même écran, d'autres mots.
+  const imported = state.request?.mode === 'import'
+  const noun = imported ? 'lecture' : 'génération'
   const running = state.status === 'running'
   const total = Math.max(state.expectedDays, state.days.length)
+  /** Avancement mesurable : seulement quand le nombre de jours est annoncé. */
+  const measured = state.expectedDays > 0
   const done = state.days.length
   const currentNumber = Math.min(done + 1, total || done + 1)
   const currentCity = state.current?.city ?? state.days[done - 1]?.city
@@ -65,35 +70,44 @@ export function LiveGeneration({
 
   const subtitle = [
     state.tripTitle,
-    total > 0 && startDate ? formatTripRange(startDate, total) : '',
+    measured && startDate ? formatTripRange(startDate, total) : '',
   ]
     .filter(Boolean)
     .join(' · ')
 
   let status: string
   if (state.status === 'stopped') {
-    status = `Arrêtée au jour ${done}${total ? ` sur ${total}` : ''}`
+    status = `Arrêtée au jour ${done}${total && !imported ? ` sur ${total}` : ''}`
   } else if (state.status === 'error') {
-    status = 'Génération interrompue'
+    status = imported ? 'Lecture interrompue' : 'Génération interrompue'
   } else if (done === 0 && !state.current) {
-    status = 'Préparation du voyage…'
+    status = imported ? 'Lecture du programme…' : 'Préparation du voyage…'
   } else {
-    status = `Jour ${currentNumber}${total ? ` sur ${total}` : ''}${
+    // Un import ne connaît pas le nombre de jours avant d'avoir tout lu.
+    status = `Jour ${currentNumber}${total && !imported ? ` sur ${total}` : ''}${
       currentCity ? ` · ${currentCity}` : ''
     }`
   }
 
   const remaining = Math.max(0, total - done - (state.current ? 1 : 0))
-  const skeletons = running ? Math.min(SKELETONS_AHEAD, remaining) : 0
+  const skeletons = !running
+    ? 0
+    : measured
+      ? Math.min(SKELETONS_AHEAD, remaining)
+      : 1
 
   return (
     <MobileScreen
       onBack={onClose}
       backIcon="close"
       backLabel={
-        running ? 'Fermer, la génération continue' : 'Fermer le générateur'
+        running
+          ? `Fermer, la ${noun} continue`
+          : imported
+            ? 'Fermer l’import'
+            : 'Fermer le générateur'
       }
-      progress={{ step: 2, total: 4 }}
+      progress={{ step: imported ? 3 : 2, total: 4 }}
       stagger={false}
       footer={
         <>
@@ -103,7 +117,7 @@ export function LiveGeneration({
               <p className="flex-1 text-[13px] leading-[1.4] font-bold">
                 {notifies
                   ? 'Vous pouvez quitter l’écran : on vous prévient quand c’est prêt.'
-                  : 'Vous pouvez quitter l’écran : la génération continue tant que l’app reste ouverte.'}
+                  : `Vous pouvez quitter l’écran : la ${noun} continue tant que l’app reste ouverte.`}
               </p>
             </div>
           )}
@@ -166,10 +180,22 @@ export function LiveGeneration({
               className="bg-secondary animate-pulse-dot size-2 rounded-full"
             />
           )}
-          {running ? 'Génération en direct' : 'Génération'}
+          {imported
+            ? running
+              ? 'Lecture en direct'
+              : 'Lecture'
+            : running
+              ? 'Génération en direct'
+              : 'Génération'}
         </p>
         <h1 className="font-display text-[28px] leading-[1.15]">
-          {running ? 'On compose votre voyage' : 'Votre voyage en cours'}
+          {imported
+            ? running
+              ? 'On recopie votre programme'
+              : 'Votre programme en cours'
+            : running
+              ? 'On compose votre voyage'
+              : 'Votre voyage en cours'}
         </h1>
         {subtitle && (
           <p className="text-muted-foreground text-sm font-bold">{subtitle}</p>
@@ -192,7 +218,7 @@ export function LiveGeneration({
           <span className="flex-1 truncate text-[15px] font-black">
             {status}
           </span>
-          {total > 0 && (
+          {measured && (
             <span className="text-ink-foreground/70 font-mono text-[13px] font-semibold">
               {percent} %
             </span>
@@ -200,7 +226,7 @@ export function LiveGeneration({
         </div>
         <span
           role="progressbar"
-          aria-label="Avancement de la génération"
+          aria-label={`Avancement de la ${noun}`}
           aria-valuemin={0}
           aria-valuemax={total || undefined}
           aria-valuenow={done}
@@ -208,8 +234,14 @@ export function LiveGeneration({
           className="bg-ink-foreground/15 block h-1.5 overflow-hidden rounded-full"
         >
           <span
-            className="bg-secondary block h-1.5 rounded-full transition-[width] duration-700"
-            style={{ width: `${percent}%` }}
+            className={cn(
+              'bg-secondary block h-1.5 rounded-full transition-[width] duration-700',
+              // Sans total connu, la barre bat au lieu d'avancer.
+              running && !measured && 'animate-pulse',
+            )}
+            style={{
+              width: measured ? `${percent}%` : running ? '100%' : '0%',
+            }}
           />
         </span>
         {state.summary && (
@@ -236,7 +268,7 @@ export function LiveGeneration({
 
       <ol
         aria-live="polite"
-        aria-label="Journées générées"
+        aria-label={imported ? 'Journées recopiées' : 'Journées générées'}
         className="mt-3.5 flex flex-col gap-2"
       >
         {state.days.map((day, index) => (

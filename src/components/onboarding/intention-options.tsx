@@ -1,15 +1,17 @@
 'use client'
 
-import { KeyRound, QrCode, Sparkles } from 'lucide-react'
+import { FileText, KeyRound, QrCode, Sparkles } from 'lucide-react'
 import { OptionCard } from '@/components/mobile/option-card'
 
 /** Les points de départ d'un voyage à charger. */
-export type IntentionChoice = 'code' | 'scan' | 'generator' | 'file'
+export type IntentionChoice = 'code' | 'scan' | 'program' | 'generator' | 'file'
 
 /**
- * Les trois façons de commencer, dans l'ordre de qui arrive : la plupart ont
- * préparé leur voyage sur le site et viennent le récupérer avec un code. Le
- * générateur ferme la marche : il sert ceux qui arrivent les mains vides.
+ * Les façons de commencer, dans l'ordre de qui arrive : la plupart ont
+ * préparé leur voyage sur le site et viennent le récupérer avec un code. Puis
+ * ceux qui ont déjà un programme ailleurs (agence, ChatGPT, notes) et veulent
+ * le retrouver ici. Le générateur ferme la marche : il sert ceux qui arrivent
+ * les mains vides.
  */
 export function IntentionOptions({
   onChoose,
@@ -33,6 +35,13 @@ export function IntentionOptions({
         title="On me l’a partagé"
         description="Scannez le QR code ou ouvrez le lien reçu"
         onClick={() => onChoose('scan')}
+      />
+      <OptionCard
+        icon={FileText}
+        tone="success"
+        title="J’ai déjà un programme ailleurs"
+        description="Agence, ChatGPT, notes, PDF : on le recopie pour vous"
+        onClick={() => onChoose('program')}
       />
       <OptionCard
         icon={Sparkles}

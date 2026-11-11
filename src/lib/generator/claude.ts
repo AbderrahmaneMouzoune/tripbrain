@@ -117,8 +117,8 @@ export interface CompletionEnd {
  * voyage lui-même : ni description, ni brief, ni réponse.
  */
 export interface CompletionContext {
-  route: 'generate' | 'refine'
-  mode?: 'express' | 'brief'
+  route: 'generate' | 'refine' | 'import'
+  mode?: 'express' | 'brief' | 'text' | 'pdf'
   /** Nombre de journées demandées, quand il est connu. */
   days?: number
 }
@@ -130,7 +130,24 @@ function buildParams(prompt: GeneratorPrompt): BetaMessageStreamParams {
     max_tokens: MAX_TOKENS,
     output_config: { effort: generatorEffort() },
     system: prompt.system,
-    messages: [{ role: 'user', content: prompt.user }],
+    messages: [
+      {
+        role: 'user',
+        content: prompt.document
+          ? [
+              {
+                type: 'document',
+                source: {
+                  type: 'base64',
+                  media_type: prompt.document.mediaType,
+                  data: prompt.document.data,
+                },
+              },
+              { type: 'text', text: prompt.user },
+            ]
+          : prompt.user,
+      },
+    ],
   }
   if (SERVER_FALLBACK_MODELS.has(model)) {
     params.betas = [SERVER_FALLBACK_BETA]

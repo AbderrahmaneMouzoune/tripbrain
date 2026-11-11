@@ -17,6 +17,7 @@ import { GeneratedDaySheet } from '@/components/generator/generated-day-sheet'
 import { RefineSheet } from '@/components/generator/refine-sheet'
 import type { GenerationState } from '@/lib/generator/generation-store'
 import { analyzeItinerary } from '@/lib/generator/itinerary-quality'
+import { importGaps, importSummary } from '@/lib/generator/program-import'
 import {
   toDayItineraries,
   type GeneratedItinerary,
@@ -72,26 +73,54 @@ export function GenerationResult({
 }) {
   const [refineOpen, setRefineOpen] = useState(false)
   const [openDay, setOpenDay] = useState<number | null>(null)
-  const days = useMemo(() => toDayItineraries(itinerary), [itinerary])
+  // Import d'un programme existant : on ne juge pas la qualité d'un texte que
+  // le voyageur a écrit, on relève ce qui n'y figurait pas.
+  const imported = state.request?.mode === 'import'
+  const days = useMemo(
+    () => toDayItineraries(itinerary, imported ? 'import' : 'ai'),
+    [itinerary, imported],
+  )
   const report = useMemo(() => analyzeItinerary(days), [days])
   const points = useMemo(
     () =>
-      reviewPoints(report, days, {
-        truncated: state.truncated,
-        droppedDays: state.droppedDays,
-        expectedDays: state.expectedDays,
-      }),
-    [report, days, state.truncated, state.droppedDays, state.expectedDays],
+      imported
+        ? importGaps(days, {
+            datesAssumed: state.datesAssumed,
+            truncated: state.truncated,
+            droppedDays: state.droppedDays,
+          })
+        : reviewPoints(report, days, {
+            truncated: state.truncated,
+            droppedDays: state.droppedDays,
+            expectedDays: state.expectedDays,
+          }),
+    [
+      imported,
+      report,
+      days,
+      state.datesAssumed,
+      state.truncated,
+      state.droppedDays,
+      state.expectedDays,
+    ],
   )
   const stops = groupByCity(days)
   const startDate = days[0]?.date ?? state.request?.startDate ?? ''
+  /** Journées signalées dans la liste : défauts de fond, ou journées vides d'un import. */
+  const emptyDays = new Set(
+    days.flatMap((day, index) =>
+      day.activities.length === 0 && !day.transport ? [index + 1] : [],
+    ),
+  )
   const cityCount = tripCities(days).length
   const activityCount = report.stats.activities
-  const flaggedDays = new Set(
-    report.issues
-      .filter((issue) => issue.blocking && issue.dayNumber !== undefined)
-      .map((issue) => issue.dayNumber),
-  )
+  const flaggedDays = imported
+    ? emptyDays
+    : new Set(
+        report.issues
+          .filter((issue) => issue.blocking && issue.dayNumber !== undefined)
+          .map((issue) => issue.dayNumber),
+      )
 
   const request = state.request
   const chips: string[] = []
@@ -112,8 +141,8 @@ export function GenerationResult({
   return (
     <MobileScreen
       onBack={onBack}
-      backLabel="Retour à la génération"
-      progress={{ step: 3, total: 4 }}
+      backLabel={imported ? 'Retour au programme' : 'Retour à la génération'}
+      progress={{ step: imported ? 4 : 3, total: 4 }}
       footer={
         <>
           {saveError && (
@@ -132,7 +161,7 @@ export function GenerationResult({
               onClick={() => setRefineOpen(true)}
             >
               <IconWand aria-hidden />
-              Affiner
+              {imported ? 'Corriger' : 'Affiner'}
             </Button>
             <Button
               size="xl"
@@ -149,8 +178,12 @@ export function GenerationResult({
       <div className="flex flex-col gap-1.5">
         <p className="text-secondary-strong text-xs font-black tracking-[0.08em] uppercase">
           {state.status === 'stopped'
-            ? 'Itinéraire partiel'
-            : 'Votre itinéraire est prêt'}
+            ? imported
+              ? 'Programme partiel'
+              : 'Itinéraire partiel'
+            : imported
+              ? 'Votre programme est importé'
+              : 'Votre itinéraire est prêt'}
         </p>
         <h1 className="font-display text-[32px] leading-[1.1]">
           {itinerary.tripTitle.trim() || 'Voyage sans titre'}
@@ -183,10 +216,21 @@ export function GenerationResult({
         )}
       </div>
 
+      {imported && (
+        <p className="bg-success-soft text-foreground mt-[18px] flex items-center gap-2.5 rounded-2xl px-3.5 py-3 text-sm leading-snug font-extrabold">
+          <IconCircleCheck
+            className="text-success size-5 shrink-0"
+            aria-hidden
+          />
+          <span>Repris tel quel : {importSummary(days)}</span>
+        </p>
+      )}
+
       <QualityCard
         points={points}
         confidence={report.confidence}
         startDate={startDate}
+        imported={imported}
       />
 
       <div className="mt-[22px] mb-2.5 flex items-center justify-between">
@@ -243,7 +287,7 @@ export function GenerationResult({
                       </span>
                       {flagged ? (
                         <span className="bg-secondary-soft text-secondary-strong rounded-full px-2 py-0.5 text-[11px] font-extrabold">
-                          À vérifier
+                          {imported ? 'Vide' : 'À vérifier'}
                         </span>
                       ) : (
                         <span className="text-muted-foreground text-xs">
@@ -270,7 +314,7 @@ export function GenerationResult({
           className="text-muted-foreground flex min-h-11 items-center gap-2 text-sm font-extrabold"
         >
           <IconRefresh className="size-[18px]" aria-hidden />
-          Tout régénérer
+          {imported ? 'Relire le programme' : 'Tout régénérer'}
         </button>
       </div>
 
@@ -296,13 +340,28 @@ function QualityCard({
   points,
   confidence,
   startDate,
+  imported = false,
 }: {
   points: ReviewPoint[]
   confidence: number
   startDate: string
+  /** Import : la carte liste ce qui manquait au programme, sans jauge. */
+  imported?: boolean
 }) {
   const [open, setOpen] = useState<string | null>(null)
   const bars = confidenceBars(confidence)
+
+  if (points.length === 0 && imported) {
+    return (
+      <section className="bg-card border-border text-foreground mt-2.5 flex items-center gap-3 rounded-[22px] border p-4">
+        <IconChecks className="text-success size-6 shrink-0" aria-hidden />
+        <p className="text-[13px] font-bold">
+          Rien à compléter : dates, villes, hébergements et horaires de trajet
+          figuraient dans votre programme.
+        </p>
+      </section>
+    )
+  }
 
   if (points.length === 0) {
     return (
@@ -323,7 +382,10 @@ function QualityCard({
   return (
     <section
       aria-labelledby="generator-quality-title"
-      className="bg-secondary-soft border-secondary/40 mt-[18px] flex flex-col gap-3 rounded-[22px] border p-4"
+      className={cn(
+        'bg-secondary-soft border-secondary/40 flex flex-col gap-3 rounded-[22px] border p-4',
+        imported ? 'mt-2.5' : 'mt-[18px]',
+      )}
     >
       <div className="flex items-center gap-3">
         <span className="bg-secondary text-secondary-foreground flex size-11 shrink-0 items-center justify-center rounded-[14px]">
@@ -331,16 +393,18 @@ function QualityCard({
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-secondary-strong text-[11px] font-black tracking-[0.08em] uppercase">
-            Indicateur de confiance
+            {imported ? 'Absent de votre programme' : 'Indicateur de confiance'}
           </p>
           <h2
             id="generator-quality-title"
             className="text-secondary-strong text-lg font-black"
           >
-            {points.length} point{points.length > 1 ? 's' : ''} à vérifier
+            {points.length} point{points.length > 1 ? 's' : ''} à{' '}
+            {imported ? 'compléter' : 'vérifier'}
           </h2>
         </div>
         <span
+          hidden={imported}
           role="img"
           aria-label={`Confiance ${bars} sur 5`}
           className="flex gap-[3px]"
@@ -404,11 +468,18 @@ function QualityCard({
         )
       })}
 
-      {startDate && (
-        <p className="text-secondary-strong flex items-center gap-1.5 text-xs font-bold">
-          <IconChecks className="size-4 shrink-0" aria-hidden />
-          Dates consécutives à partir du départ choisi
+      {imported ? (
+        <p className="text-secondary-strong text-xs font-bold">
+          Rien n’a été inventé pour combler ces manques : complétez-les après
+          l’enregistrement, dans le mode édition.
         </p>
+      ) : (
+        startDate && (
+          <p className="text-secondary-strong flex items-center gap-1.5 text-xs font-bold">
+            <IconChecks className="size-4 shrink-0" aria-hidden />
+            Dates consécutives à partir du départ choisi
+          </p>
+        )
       )}
     </section>
   )
