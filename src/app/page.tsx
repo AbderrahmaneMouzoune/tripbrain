@@ -22,6 +22,7 @@ import { usePwaInstall } from '@/components/pwa-install-provider'
 import { useAnalytics } from '@/hooks/use-analytics'
 import { trackEvent } from '@/lib/analytics/client'
 import { isInsideNativeApp } from '@/lib/native-app'
+import { PROGRAM_IMPORT_PARAM } from '@/components/native/native-path'
 
 function TabContent() {
   const { tab } = useAppNav()
@@ -66,7 +67,7 @@ function HomePageContent() {
     loadMockData,
     getCurrentDayIndex,
   } = useTrip()
-  const { selectDay } = useAppNav()
+  const { selectDay, push } = useAppNav()
   const searchParams = useSearchParams()
   const { armAutoPrompt } = usePwaInstall()
   const { consent, isConfigured: isAnalyticsConfigured } = useAnalytics()
@@ -77,6 +78,20 @@ function HomePageContent() {
       void loadMockData()
     }
   }, [hasData, isLoading, searchParams, loadMockData])
+
+  // `?importer=programme` : lien de tripbrain.fr vers l'import d'un programme
+  // existant. L'écran s'ouvre par-dessus l'accueil ou le voyage en cours, et
+  // le paramètre est retiré pour qu'un rechargement ne le rouvre pas.
+  const importLinkHandled = useRef(false)
+  useEffect(() => {
+    if (isLoading || importLinkHandled.current) return
+    if (searchParams.get(PROGRAM_IMPORT_PARAM) !== 'programme') return
+    importLinkHandled.current = true
+    const url = new URL(window.location.href)
+    url.searchParams.delete(PROGRAM_IMPORT_PARAM)
+    window.history.replaceState(window.history.state, '', url)
+    push({ kind: 'import-program' })
+  }, [isLoading, searchParams, push])
 
   // On ne propose l'installation qu'une fois le voyage chargé : avant, la
   // proposition arriverait sans que l'app ait rendu le moindre service. Tant
