@@ -119,6 +119,10 @@ export function NativeNavigationHost() {
           closeAll()
           setIncoming(intent.share)
           return
+        case 'program-import':
+          closeAll()
+          push({ kind: 'import-program' })
+          return
         case 'home':
           closeAll()
           return
@@ -126,7 +130,7 @@ export function NativeNavigationHost() {
           window.location.assign(intent.href)
       }
     })
-  }, [openTarget, closeAll])
+  }, [openTarget, closeAll, push])
 
   // Version plus récente de la webapp : vérifiée au retour après une longue
   // absence, sans recharger (elle servira au prochain lancement).

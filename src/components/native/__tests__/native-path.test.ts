@@ -18,6 +18,15 @@ describe('parseNativePath', () => {
     ).toEqual({ tripId: 'abc', dayIndex: null, open: null })
   })
 
+  it('ouvre l’import d’un programme depuis le lien du site', () => {
+    expect(parseNativePath('/?importer=programme', ORIGIN)).toEqual({
+      kind: 'program-import',
+    })
+    expect(parseNativePath('/?importer=autre', ORIGIN)).toEqual({
+      kind: 'home',
+    })
+  })
+
   it('reconnaît un partage, par code ou par lien court', () => {
     expect(parseNativePath('/?code=AB12CD', ORIGIN)).toEqual({
       kind: 'share',
