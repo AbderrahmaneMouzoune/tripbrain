@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import type { Activity, DayItinerary, Transport } from '@/lib/itinerary-data'
+import type {
+  Accommodation,
+  Activity,
+  DayItinerary,
+  Transport,
+} from '@/lib/itinerary-data'
 
 /**
  * Schémas de l'itinéraire produit par le modèle à partir du prompt du
@@ -78,6 +83,21 @@ const generatedTransportSchema = z.object({
   duration: z.string().optional().describe('Durée du trajet, ex. "2h10"'),
 })
 
+/**
+ * Hébergement de la nuit. Le générateur n'en propose jamais (le voyageur
+ * réserve lui-même) : ce champ sert à l'import d'un programme existant, où
+ * l'hôtel figure noir sur blanc et doit arriver dans l'app.
+ */
+const generatedAccommodationSchema = z.object({
+  name: z.string().describe("Nom de l'hébergement"),
+  address: z.string().optional().describe('Adresse'),
+  checkIn: z.string().optional().describe("Date d'arrivée (YYYY-MM-DD)"),
+  checkOut: z.string().optional().describe('Date de départ (YYYY-MM-DD)'),
+  bookingReference: z.string().optional().describe('Référence de réservation'),
+  price: z.number().optional().describe('Prix total du séjour'),
+  currency: z.string().optional().describe('Devise du prix, ex. "EUR"'),
+})
+
 export const generatedDaySchema = z.object({
   date: z.string().describe('Date du jour au format ISO 8601 (YYYY-MM-DD)'),
   city: z.string().describe('Ville principale de la journée'),
@@ -117,6 +137,11 @@ export const generatedDaySchema = z.object({
     .optional()
     .describe(
       'Trajet inter-villes du jour, uniquement s’il y a un déplacement notable',
+    ),
+  accommodation: generatedAccommodationSchema
+    .optional()
+    .describe(
+      'Hébergement de la nuit, seulement s’il figure dans le programme',
     ),
   // Une journée sans activité s'enregistre, mais elle est signalée : c'est une
   // journée à compléter, pas un itinéraire à jeter.
@@ -297,6 +322,11 @@ function compact<T extends object>(value: T): T {
  */
 export function toDayItineraries(
   generated: GeneratedItinerary,
+  /**
+   * D'où vient le contenu : écrit par le modèle (`ai`), ou recopié d'un
+   * programme que le voyageur avait déjà (`import`).
+   */
+  source: 'ai' | 'import' = 'ai',
 ): DayItinerary[] {
   return generated.days.map((day, dayIndex) => {
     const activities: Activity[] = day.activities.map(
@@ -316,7 +346,7 @@ export function toDayItineraries(
           tags: activity.tags,
           status: 'planned',
           tips: activity.tips,
-          source: 'ai',
+          source,
         }),
     )
 
@@ -331,7 +361,25 @@ export function toDayItineraries(
           arrivalTime: day.transport.arrivalTime,
           duration: day.transport.duration,
           status: 'planned',
-          source: 'ai',
+          source,
+        })
+      : undefined
+
+    // Les champs texte de l'hébergement sont obligatoires dans l'app : vides
+    // plutôt qu'absents, ils se complètent ensuite dans le mode édition.
+    const accommodation: Accommodation | undefined = day.accommodation
+      ? compact<Accommodation>({
+          id: `acc-${dayIndex + 1}`,
+          name: day.accommodation.name,
+          address: day.accommodation.address ?? '',
+          bookingUrl: '',
+          checkIn: day.accommodation.checkIn ?? '',
+          checkOut: day.accommodation.checkOut ?? '',
+          bookingReference: day.accommodation.bookingReference,
+          price: day.accommodation.price,
+          currency: day.accommodation.currency,
+          status: 'planned',
+          source,
         })
       : undefined
 
@@ -347,12 +395,13 @@ export function toDayItineraries(
       notes: day.notes,
       dayType: day.dayType,
       tips: day.tips,
+      accommodation,
       activities,
       transport,
       // Absentes, elles retombent sur l'origine du repère : la journée
       // n'apparaît pas sur la carte, ce que l'indice de confiance signale.
       coordinates: toCoords(day.coordinates) ?? [0, 0],
-      source: 'ai',
+      source,
     })
   })
 }

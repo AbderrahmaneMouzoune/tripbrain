@@ -12,6 +12,7 @@ import {
   generatedItinerarySchema,
   type GeneratedItinerary,
 } from '@/lib/generator/itinerary-schema'
+import type { ImportRequest } from '@/lib/generator/program-import'
 import type { GenerateRequest, RefineRequest } from '@/lib/generator/requests'
 import { STREAM_ERROR_MARKER } from '@/lib/generator/stream-parser'
 
@@ -67,15 +68,24 @@ async function toRequestError(
  * quand `signal` est déclenché.
  */
 export async function streamGeneration(
-  request: GenerateRequest,
+  request: GenerateRequest | ImportRequest,
   { signal, onText }: { signal?: AbortSignal; onText: (chunk: string) => void },
 ): Promise<{ streamError?: GeneratorFailureReason }> {
   let response: Response
   try {
-    response = await fetch('/api/generate', {
+    // Un import suit le même flux, par sa propre route. Le nom du fichier ne
+    // sert qu'à l'écran : il ne quitte pas l'appareil.
+    const { url, body } =
+      request.mode === 'import'
+        ? {
+            url: '/api/generate/import',
+            body: { ...request, fileName: undefined },
+          }
+        : { url: '/api/generate', body: request }
+    response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request),
+      body: JSON.stringify(body),
       signal,
     })
   } catch (error) {

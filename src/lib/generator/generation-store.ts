@@ -33,6 +33,10 @@ import {
   type GeneratedDay,
   type GeneratedItinerary,
 } from '@/lib/generator/itinerary-schema'
+import {
+  readImportedItinerary,
+  type ImportRequest,
+} from '@/lib/generator/program-import'
 import { readGeneratedItinerary } from '@/lib/generator/read-result'
 import {
   IncrementalItineraryParser,
@@ -50,9 +54,12 @@ import {
 
 export type GenerationStatus = 'idle' | 'running' | 'done' | 'stopped' | 'error'
 
+/** Ce qui a lancé le flux : une génération, ou l'import d'un programme. */
+export type GenerationRequest = GenerateRequest | ImportRequest
+
 export interface GenerationState {
   status: GenerationStatus
-  request: GenerateRequest | null
+  request: GenerationRequest | null
   /** Nombre de journées attendues : le « N » de « Jour n sur N ». */
   expectedDays: number
   tripTitle?: string
@@ -67,6 +74,8 @@ export interface GenerationState {
   droppedDays: number
   /** Vrai quand la réponse a été coupée avant la dernière journée. */
   truncated: boolean
+  /** Import : le programme n'avait pas de dates, le départ est supposé. */
+  datesAssumed: boolean
   error: {
     reason: GeneratorFailureReason
     message: string
@@ -90,6 +99,7 @@ const IDLE: GenerationState = {
   itinerary: null,
   droppedDays: 0,
   truncated: false,
+  datesAssumed: false,
   error: null,
 }
 
@@ -350,7 +360,9 @@ function fail(
  * Lance une génération. Une génération déjà en cours est arrêtée d'abord :
  * « Tout régénérer » ne doit pas laisser deux réponses se disputer l'écran.
  */
-export async function startGeneration(request: GenerateRequest): Promise<void> {
+export async function startGeneration(
+  request: GenerationRequest,
+): Promise<void> {
   controller?.abort()
   const own = new AbortController()
   controller = own
@@ -362,7 +374,7 @@ export async function startGeneration(request: GenerateRequest): Promise<void> {
     ...IDLE,
     status: 'running',
     request,
-    expectedDays: expectedDays(request) ?? 0,
+    expectedDays: request.mode === 'import' ? 0 : (expectedDays(request) ?? 0),
   }
   emit()
   trackEvent('generator_started', { mode: request.mode })
@@ -390,7 +402,18 @@ export async function startGeneration(request: GenerateRequest): Promise<void> {
     })
     if (controller !== own) return
 
-    const result = readGeneratedItinerary(parser.text, request.startDate)
+    const result =
+      request.mode === 'import'
+        ? readImportedItinerary(parser.text, { startDate: request.startDate })
+        : {
+            ...readGeneratedItinerary(parser.text, request.startDate),
+            notAProgram: false,
+            datesAssumed: false,
+          }
+    if (result.notAProgram) {
+      fail('not_a_program')
+      return
+    }
     if (streamError && !result.itinerary) {
       fail(streamError)
       return
@@ -411,6 +434,7 @@ export async function startGeneration(request: GenerateRequest): Promise<void> {
       days: result.itinerary.days,
       droppedDays: result.droppedDays,
       truncated: result.truncated || Boolean(streamError),
+      datesAssumed: result.datesAssumed,
     })
     trackEvent('generator_completed', {
       mode: request.mode,

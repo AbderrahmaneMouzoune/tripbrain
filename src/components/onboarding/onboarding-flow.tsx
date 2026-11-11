@@ -38,7 +38,10 @@ import { TripPreviewStep } from '@/components/receive/trip-preview-step'
 import type { ReceivedTrip } from '@/components/receive/received-trip'
 import { groupCodeDigits } from '@/components/receive/share-input'
 import { ImportFilePanel } from '@/components/onboarding/import-file-screen'
-import { IntentionOptions } from '@/components/onboarding/intention-options'
+import {
+  IntentionOptions,
+  type IntentionChoice,
+} from '@/components/onboarding/intention-options'
 import { useClipboardShare } from '@/components/onboarding/use-clipboard-share'
 import { buildShowcase } from '@/components/onboarding/showcase'
 
@@ -100,6 +103,7 @@ export function OnboardingFlow(_props: {}) {
             onBack={() => setStep({ kind: 'welcome' })}
             onChoose={(choice) => {
               if (choice === 'generator') push({ kind: 'generator' })
+              else if (choice === 'program') push({ kind: 'import-program' })
               else if (choice === 'file') setStep({ kind: 'file' })
               else setStep({ kind: 'receive', start: { method: choice } })
             }}
@@ -278,7 +282,7 @@ function IntentionStep({
   onUseClipboard,
 }: {
   onBack: () => void
-  onChoose: (choice: 'code' | 'scan' | 'generator' | 'file') => void
+  onChoose: (choice: IntentionChoice) => void
   onUseClipboard: (incoming: IncomingShare) => void
 }) {
   const clipboard = useClipboardShare()
@@ -297,7 +301,7 @@ function IntentionStep({
             onClick={() => onChoose('file')}
           >
             <FileText className="size-[18px]" aria-hidden />
-            J’ai un fichier (JSON, Excel ou CSV)
+            J’ai un fichier au format TripBrain
           </Button>
           <Link
             href="/guide"
