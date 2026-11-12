@@ -317,6 +317,22 @@ export const analyticsEvents = {
     description: 'Export du voyage ou d’une journée vers un calendrier.',
     properties: { scope: choice('trip', 'day') },
   },
+  calendar_native_failed: {
+    description:
+      'Échec de l’ajout direct à l’agenda du téléphone (app) : à quelle étape — jamais le contenu du voyage.',
+    properties: {
+      scope: choice('trip', 'day'),
+      step: choice(
+        'permission',
+        'default_calendar',
+        'calendar_list',
+        'no_calendar',
+        'create',
+        'no_response',
+        'unknown',
+      ),
+    },
+  },
   document_added: {
     description:
       'Ajout de documents : combien, et de quelle famille de fichier — jamais leur nom ni leur contenu.',
