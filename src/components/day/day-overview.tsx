@@ -47,7 +47,7 @@ export function ActivityDots({
           key={index}
           className={cn(
             'size-[5px] rounded-full',
-            inverted ? 'bg-secondary' : 'bg-primary',
+            inverted ? 'bg-ink-foreground' : 'bg-muted-foreground/60',
           )}
         />
       ))}
@@ -55,7 +55,7 @@ export function ActivityDots({
         <span
           className={cn(
             'ml-0.5 text-[10px] leading-none font-black',
-            inverted ? 'text-ink-foreground' : 'text-primary-strong',
+            inverted ? 'text-ink-foreground' : 'text-muted-foreground',
           )}
         >
           +{count - MAX_DOTS}
@@ -72,20 +72,17 @@ function activityLabel(count: number): string {
 
 /**
  * Les journées du voyage d'un coup d'œil, depuis le roadbook : ville et
- * charge de chaque jour, pour sauter de l'un à l'autre ou décider d'en
- * échanger deux.
+ * charge de chaque jour, pour sauter de l'un à l'autre en un geste.
  */
 export function DayOverviewStrip({
   itinerary,
   current,
   onSelect,
-  onSwap,
   className,
 }: {
   itinerary: DayItinerary[]
   current: number
   onSelect: (index: number) => void
-  onSwap: () => void
   className?: string
 }) {
   const scroller = useRef<HTMLDivElement>(null)
@@ -110,22 +107,9 @@ export function DayOverviewStrip({
       aria-labelledby="day-overview-title"
       className={cn('mt-5', className)}
     >
-      <div className="flex items-center justify-between px-5">
-        <h2
-          id="day-overview-title"
-          className="text-muted-foreground text-xs font-black tracking-[0.08em] uppercase"
-        >
-          Les jours du voyage
-        </h2>
-        <button
-          type="button"
-          onClick={onSwap}
-          className="pressable text-primary-strong focus-visible:ring-ring/50 -mr-2 flex min-h-11 items-center gap-1.5 rounded-xl px-2 text-[13px] font-extrabold outline-none focus-visible:ring-[3px]"
-        >
-          <ArrowLeftRight className="size-4" aria-hidden />
-          Échanger ce jour
-        </button>
-      </div>
+      <h2 id="day-overview-title" className="sr-only">
+        Les jours du voyage
+      </h2>
       <div
         ref={scroller}
         data-swipe-ignore
