@@ -225,10 +225,11 @@ export function DocumentsTab(_props: {}) {
       ) : files.length === 0 ? (
         <EmptyDocuments
           onPick={open}
-          onSuggest={(dayIndex) =>
+          onSuggest={(dayIndex, preset) =>
             push({
               kind: 'add-document',
               dayIndex: dayIndex >= 0 ? dayIndex : undefined,
+              preset,
             })
           }
           missing={missingDocuments(itinerary, files)}
@@ -262,7 +263,7 @@ function EmptyDocuments({
   missing,
 }: {
   onPick: (kind: 'photos' | 'files' | 'scan') => void
-  onSuggest: (dayIndex: number) => void
+  onSuggest: (dayIndex: number, preset: 'ticket' | 'hotel') => void
   missing: ReturnType<typeof missingDocuments>
 }) {
   const { transports, accommodations } = missing
@@ -333,7 +334,7 @@ function EmptyDocuments({
                     : `${transports.missing} trajet${transports.missing > 1 ? 's' : ''} sur ${transports.total} sans billet`
                 }
                 action="Ajouter un billet"
-                onClick={() => onSuggest(transports.firstDayIndex)}
+                onClick={() => onSuggest(transports.firstDayIndex, 'ticket')}
               />
             )}
             {accommodations.missing > 0 && (
@@ -347,7 +348,7 @@ function EmptyDocuments({
                     : `${accommodations.missing} hébergement${accommodations.missing > 1 ? 's' : ''} sur ${accommodations.total} sans confirmation`
                 }
                 action="Ajouter une confirmation"
-                onClick={() => onSuggest(accommodations.firstDayIndex)}
+                onClick={() => onSuggest(accommodations.firstDayIndex, 'hotel')}
               />
             )}
           </div>
