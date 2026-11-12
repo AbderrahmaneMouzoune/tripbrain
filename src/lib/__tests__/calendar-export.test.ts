@@ -8,6 +8,7 @@ import {
   transportSummary,
   transportTimeRange,
   toNativeCalendarEvents,
+  nativeCalendarFailureStep,
   nativeCalendarSignature,
 } from '../calendar-export'
 import { type DayItinerary } from '../itinerary-data'
@@ -589,5 +590,29 @@ describe('nativeCalendarSignature', () => {
     const c = toNativeCalendarEvents([minimalDay])
     expect(nativeCalendarSignature(a)).toBe(nativeCalendarSignature(b))
     expect(nativeCalendarSignature(a)).not.toBe(nativeCalendarSignature(c))
+  })
+})
+
+describe('nativeCalendarFailureStep', () => {
+  it('distingue l’absence de réponse d’une raison inconnue', () => {
+    expect(nativeCalendarFailureStep(undefined)).toBe('no_response')
+    expect(nativeCalendarFailureStep('')).toBe('unknown')
+  })
+
+  it('retient la dernière étape tentée', () => {
+    expect(nativeCalendarFailureStep('permission: E_MISSING_PLIST')).toBe(
+      'permission',
+    )
+    expect(nativeCalendarFailureStep('default: denied | list: denied')).toBe(
+      'calendar_list',
+    )
+    expect(nativeCalendarFailureStep('default: not found')).toBe(
+      'default_calendar',
+    )
+    expect(nativeCalendarFailureStep('no writable calendar (0)')).toBe(
+      'no_calendar',
+    )
+    expect(nativeCalendarFailureStep('create: EKErrorDomain 1')).toBe('create')
+    expect(nativeCalendarFailureStep('no valid day')).toBe('create')
   })
 })

@@ -365,3 +365,31 @@ export function getGoogleCalendarUrl(day: DayItinerary): string {
 
   return `https://www.google.com/calendar/render?${params.toString()}`
 }
+
+export type NativeCalendarFailureStep =
+  | 'permission'
+  | 'default_calendar'
+  | 'calendar_list'
+  | 'no_calendar'
+  | 'create'
+  | 'no_response'
+  | 'unknown'
+
+/**
+ * Étape d'un échec d'ajout natif, tirée de la raison renvoyée par l'app
+ * (« create: … », « default: … | list: … »). Seule l'étape est mesurée : le
+ * message, libre, ne quitte pas le téléphone.
+ */
+export function nativeCalendarFailureStep(
+  reason: string | undefined,
+): NativeCalendarFailureStep {
+  if (reason === undefined) return 'no_response'
+  // La dernière étape tentée est celle qui a fait échouer l'ajout.
+  const last = reason.split(' | ').pop() ?? ''
+  if (last.startsWith('permission:')) return 'permission'
+  if (last.startsWith('create:') || last === 'no valid day') return 'create'
+  if (last.startsWith('list:')) return 'calendar_list'
+  if (last.startsWith('default:')) return 'default_calendar'
+  if (last.startsWith('no writable calendar')) return 'no_calendar'
+  return 'unknown'
+}
