@@ -1,6 +1,6 @@
 'use client'
 
-import { useSyncExternalStore } from 'react'
+import { useEffect, useRef, useSyncExternalStore } from 'react'
 import {
   IconAlertTriangle,
   IconBell,
@@ -88,6 +88,26 @@ export function LiveGeneration({
       currentCity ? ` · ${currentCity}` : ''
     }`
   }
+
+  // La liste s'allonge sous l'écran : on suit la journée en cours d'écriture,
+  // pour que « on en est où » se lise sans toucher à rien. Si le voyageur est
+  // remonté relire le début, on ne le ramène pas de force : le suivi reprend
+  // quand la journée en cours revient à portée d'écran.
+  const currentRef = useRef<HTMLLIElement>(null)
+  const hasCurrent = Boolean(state.current)
+  useEffect(() => {
+    const row = currentRef.current
+    if (!running || !row) return
+    const { top, bottom } = row.getBoundingClientRect()
+    const reach = window.innerHeight * 0.75
+    if (bottom < -reach || top > window.innerHeight + reach) return
+    row.scrollIntoView({
+      block: 'center',
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? 'auto'
+        : 'smooth',
+    })
+  }, [running, done, hasCurrent])
 
   const remaining = Math.max(0, total - done - (state.current ? 1 : 0))
   const skeletons = !running
@@ -276,6 +296,7 @@ export function LiveGeneration({
         ))}
         {running && state.current && (
           <li
+            ref={currentRef}
             aria-current="step"
             className="bg-card border-primary ring-ring/30 animate-fade flex gap-3 rounded-2xl border px-3 py-2.5 ring-[3px]"
           >
