@@ -40,6 +40,8 @@ export type AppScreen =
   /** Menu « Voyage » : partage, calendrier, réglages, réinitialisation. */
   | { kind: 'menu' }
   | { kind: 'trips' }
+  /** « Nouveau voyage » : choisir d'où il vient (code, partage, programme, générateur). */
+  | { kind: 'new-trip' }
   | { kind: 'share' }
   /** Voyager à plusieurs : synchronisation et invitations. */
   | { kind: 'group' }

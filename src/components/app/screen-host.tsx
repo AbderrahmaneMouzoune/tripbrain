@@ -26,6 +26,7 @@ import {
   type NativeStatusBarStyle,
 } from '@/lib/native-app'
 import { ImportFileScreen } from '@/components/onboarding/import-file-screen'
+import { NewTripSheet } from '@/components/trip-menu/new-trip-sheet'
 import { ReceiveScreen } from '@/components/receive/receive-screen'
 import { TripReadyScreen } from '@/components/onboarding/trip-ready-screen'
 import { GeneratorScreen } from '@/components/generator/generator-flow'
@@ -94,6 +95,11 @@ const REGISTRY: { [K in AppScreenKind]: Entry<K> } = {
     component: GroupScreen,
     presentation: 'screen',
     label: 'Voyager à plusieurs',
+  },
+  'new-trip': {
+    component: NewTripSheet,
+    presentation: 'sheet',
+    label: 'Nouveau voyage',
   },
   receive: {
     component: ReceiveScreen,

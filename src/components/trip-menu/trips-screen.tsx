@@ -3,10 +3,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   Copy,
-  FileUp,
   Flag,
   Hand,
-  KeyRound,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -105,34 +103,14 @@ export function TripsScreen({ onClose }: ScreenProps<'trips'>) {
       onBack={onClose}
       title="Mes voyages"
       footer={
-        <>
-          <Button
-            size="xl"
-            className="w-full shadow-[0_10px_24px_color-mix(in_srgb,var(--primary)_30%,transparent)]"
-            onClick={() => push({ kind: 'generator' })}
-          >
-            <Plus aria-hidden />
-            Nouveau voyage
-          </Button>
-          <div className="grid grid-cols-2 gap-1">
-            <Button
-              variant="ghost"
-              className="text-primary-strong h-11 text-[15px] font-extrabold"
-              onClick={() => push({ kind: 'receive', method: 'code' })}
-            >
-              <KeyRound aria-hidden />
-              Recevoir un partage
-            </Button>
-            <Button
-              variant="ghost"
-              className="text-primary-strong h-11 text-[15px] font-extrabold"
-              onClick={() => push({ kind: 'import-program' })}
-            >
-              <FileUp aria-hidden />
-              Importer un programme
-            </Button>
-          </div>
-        </>
+        <Button
+          size="xl"
+          className="w-full shadow-[0_10px_24px_color-mix(in_srgb,var(--primary)_30%,transparent)]"
+          onClick={() => push({ kind: 'new-trip' })}
+        >
+          <Plus aria-hidden />
+          Nouveau voyage
+        </Button>
       }
     >
       {sections.length === 0 && (
