@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type Ref } from 'react'
 import { ArrowLeftRight, Check, TriangleAlert } from 'lucide-react'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { useTrip } from '@/components/app/trip-provider'
@@ -79,11 +79,13 @@ export function DayOverviewStrip({
   current,
   onSelect,
   className,
+  ref,
 }: {
   itinerary: DayItinerary[]
   current: number
   onSelect: (index: number) => void
   className?: string
+  ref?: Ref<HTMLElement>
 }) {
   const scroller = useRef<HTMLDivElement>(null)
 
@@ -104,6 +106,7 @@ export function DayOverviewStrip({
 
   return (
     <section
+      ref={ref}
       aria-labelledby="day-overview-title"
       className={cn('mt-5', className)}
     >

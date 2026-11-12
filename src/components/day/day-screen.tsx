@@ -1,13 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
   ArrowLeftRight,
   Check,
-  ChevronLeft,
-  ChevronRight,
-  Hand,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -27,34 +24,38 @@ import { useSwipe } from '@/hooks/use-swipe'
 import { QuickActionsTarget } from '@/components/quick-actions'
 import { useDayEditor } from '@/components/day/use-day-editor'
 import { ReorderableActivities } from '@/components/day/reorderable-activities'
-import { PhotoCarousel } from '@/components/day/photo-carousel'
-import { DashedAdd, TransportSummary } from '@/components/day/day-sections'
-import { DayExtras, DayTimeline, StayRow } from '@/components/day/day-timeline'
+import { DashedAdd } from '@/components/day/day-sections'
+import { DayView } from '@/components/day/day-view'
 import {
   BOOKING_STATUS_LABELS,
   dayTypeLabel,
-  findNextActivity,
   formatDateRange,
   longDate,
-  shortDate,
   transportLabel,
 } from '@/components/day/day-logic'
 import { Pill, TRANSPORT_ICONS } from '@/components/day/day-ui'
-import { DayOverviewStrip, SwapDaySheet } from '@/components/day/day-overview'
-import { PhoneText } from '@/components/phone-text'
+import { SwapDaySheet } from '@/components/day/day-overview'
 
 const headerButton = 'border-border bg-card shrink-0 shadow-none'
 
 /** Roadbook complet d'une journée, en lecture comme en mode édition. */
 export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
   const { itinerary } = useTrip()
-  const { push, replace, selectDay, dayDirection } = useAppNav()
+  const { push, replace, selectDay } = useAppNav()
   const { isEditing, startEditing, finishEditing, pendingChanges } =
     useEditSession()
   const index = Math.min(Math.max(screen.dayIndex, 0), itinerary.length - 1)
   const editor = useDayEditor(index)
   const day = editor.day
   const [swapOpen, setSwapOpen] = useState(false)
+
+  // Ouvert pour modifier (crayon d'Aujourd'hui ou du Programme) : la
+  // modification terminée — enregistrée ou annulée — on revient d'où l'on
+  // vient, sans laisser une seconde vue de la journée dans la pile.
+  const openedForEdit = useRef(isEditing)
+  useEffect(() => {
+    if (openedForEdit.current && !isEditing) onClose()
+  }, [isEditing, onClose])
 
   const goToDay = (target: number, method: DayChangeMethod = 'arrow') => {
     if (target < 0 || target >= itinerary.length) return
@@ -86,21 +87,8 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
     if (pendingChanges === 0) onClose()
   }
 
-  const previous = itinerary[index - 1]
-  const following = itinerary[index + 1]
-  const next = findNextActivity(day)
-  const photos = (day.images ?? []).map((image) => ({
-    url: image.url,
-    caption: image.caption,
-  }))
   const typeLabel = dayTypeLabel(day.dayType)
 
-  const hasExtras = Boolean(
-    day.highlights?.length ||
-    day.packingTips?.length ||
-    day.foodRecommendations?.length ||
-    day.tips?.length,
-  )
   const metaLine = [
     day.city,
     day.activities.length > 0
@@ -371,125 +359,9 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
       onTouchStart={swipe.onTouchStart}
       onTouchEnd={swipe.onTouchEnd}
     >
-      {/* Hors du bloc animé : la bande des jours ne glisse pas et ne saute
-          pas quand la hauteur du titre change d'une journée à l'autre. */}
-      <div className="mx-auto w-full max-w-xl">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(var(--safe-bottom)+24px)]">
         {topBar}
-        <DayOverviewStrip
-          itinerary={itinerary}
-          current={index}
-          onSelect={(target) => {
-            if (target !== index) goToDay(target)
-          }}
-          className="mt-3"
-        />
-      </div>
-      <div
-        key={index}
-        className={cn(
-          'mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(var(--safe-bottom)+24px)]',
-          dayDirection === 'next'
-            ? 'animate-[slide-in-from-right_0.3s_ease-out_backwards]'
-            : dayDirection === 'previous'
-              ? 'animate-[slide-in-from-left_0.3s_ease-out_backwards]'
-              : undefined,
-        )}
-      >
-        <div className="mt-2">{titleBlock}</div>
-
-        {day.notes && (
-          <p className="text-muted-foreground mx-5 mt-2 text-[15px] leading-[21px]">
-            <PhoneText text={day.notes} />
-          </p>
-        )}
-
-        {day.transport && (
-          <div className="mx-5 mt-4">
-            <TransportSummary day={day} dayIndex={index} editor={editor} />
-          </div>
-        )}
-
-        <div className="mt-5">
-          {day.activities.length > 0 ? (
-            <DayTimeline
-              day={day}
-              dayIndex={index}
-              nextIndex={next?.index ?? null}
-              editor={editor}
-            />
-          ) : (
-            <div className="mx-5">
-              <DashedAdd
-                empty="Rien de prévu"
-                label="Ajouter une activité"
-                onClick={editor.addActivity}
-              />
-            </div>
-          )}
-        </div>
-
-        {photos.length > 0 && (
-          <PhotoCarousel
-            photos={photos}
-            label="Photos du jour"
-            className="mt-2"
-          />
-        )}
-
-        {(editor.stay || hasExtras) && (
-          <div className="bg-card border-border divide-border/70 mx-5 mt-4 divide-y overflow-hidden rounded-[18px] border">
-            <StayRow dayIndex={index} editor={editor} />
-            <DayExtras day={day} editor={editor} />
-          </div>
-        )}
-
-        <p className="text-muted-foreground mx-5 my-3 flex items-center justify-center gap-1.5 text-xs font-bold">
-          <Hand className="size-4" aria-hidden />
-          Appui long sur un élément pour plus d’actions
-        </p>
-
-        <span className="flex-1" />
-
-        <nav aria-label="Jours voisins" className="mx-5 mt-2 flex gap-2.5">
-          {previous ? (
-            <button
-              type="button"
-              onClick={() => goToDay(index - 1)}
-              className="bg-card border-border pressable flex min-w-0 flex-1 items-center gap-2 rounded-2xl border px-3 py-2.5 text-left"
-            >
-              <ChevronLeft className="size-5 shrink-0" aria-hidden />
-              <span className="flex min-w-0 flex-col">
-                <span className="text-muted-foreground text-xs font-extrabold capitalize">
-                  {shortDate(previous.date)}
-                </span>
-                <span className="truncate text-sm font-black">
-                  {previous.title}
-                </span>
-              </span>
-            </button>
-          ) : (
-            <span className="flex-1" />
-          )}
-          {following ? (
-            <button
-              type="button"
-              onClick={() => goToDay(index + 1)}
-              className="bg-card border-border pressable flex min-w-0 flex-1 items-center justify-end gap-2 rounded-2xl border px-3 py-2.5 text-right"
-            >
-              <span className="flex min-w-0 flex-col">
-                <span className="text-muted-foreground text-xs font-extrabold capitalize">
-                  {shortDate(following.date)}
-                </span>
-                <span className="truncate text-sm font-black">
-                  {following.title}
-                </span>
-              </span>
-              <ChevronRight className="size-5 shrink-0" aria-hidden />
-            </button>
-          ) : (
-            <span className="flex-1" />
-          )}
-        </nav>
+        <DayView index={index} editor={editor} onSelectDay={goToDay} />
       </div>
       {editor.sheets}
     </div>

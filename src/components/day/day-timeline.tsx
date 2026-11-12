@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type Ref } from 'react'
 import {
   Check,
   ChevronDown,
@@ -77,15 +77,19 @@ export function DayTimeline({
   dayIndex,
   nextIndex,
   editor,
+  highlightRef,
 }: {
   day: DayItinerary
   dayIndex: number
   nextIndex: number | null
   editor: DayEditor
+  /** Posé sur la prochaine étape, sinon la première. */
+  highlightRef?: Ref<HTMLLIElement>
 }) {
   const { push } = useAppNav()
   const apple = useApplePlatform()
   const last = day.activities.length - 1
+  const highlighted = nextIndex ?? 0
 
   return (
     <ol aria-label="Étapes de la journée" className="mx-5 flex flex-col">
@@ -119,7 +123,10 @@ export function DayTimeline({
             icon={ACTIVITY_ICONS[activity.type]}
             actions={editor.activityActions(activity, position)}
           >
-            <li className="flex gap-3">
+            <li
+              ref={position === highlighted ? highlightRef : undefined}
+              className="flex gap-3"
+            >
               <div className="flex w-6 shrink-0 flex-col items-center">
                 <TimelineDot status={status} isNext={isNext} />
                 {position < last && (

@@ -1,5 +1,6 @@
 'use client'
 
+import type { Ref } from 'react'
 import { ChevronRight, Lightbulb, Plus } from 'lucide-react'
 import type { DayItinerary } from '@/lib/itinerary-data'
 import { cn } from '@/lib/utils'
@@ -61,10 +62,12 @@ export function TransportSummary({
   day,
   dayIndex,
   editor,
+  ref,
 }: {
   day: DayItinerary
   dayIndex: number
   editor: DayEditor
+  ref?: Ref<HTMLButtonElement>
 }) {
   const { push } = useAppNav()
   const transport = day.transport
@@ -93,6 +96,7 @@ export function TransportSummary({
       actions={editor.transportActions()}
     >
       <button
+        ref={ref}
         type="button"
         onClick={() => push({ kind: 'transport', dayIndex })}
         className="bg-card border-border pressable flex w-full items-center gap-3 rounded-[20px] border p-3.5 text-left"
