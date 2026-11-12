@@ -113,7 +113,7 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
     typeLabel ? { value: typeLabel, label: 'type de journée' } : undefined,
   ].filter((stat): stat is { value: string; label: string } => Boolean(stat))
 
-  const header = (
+  const topBar = (
     <header className="px-5 pt-[calc(var(--safe-top)+12px)]">
       <div className="flex items-center gap-2">
         <Button
@@ -167,6 +167,11 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
           </>
         )}
       </div>
+    </header>
+  )
+
+  const titleBlock = (
+    <div className="px-5">
       <QuickActionsTarget
         entity="day"
         title={day.title}
@@ -184,7 +189,7 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
           {day.city}
         </p>
       </QuickActionsTarget>
-    </header>
+    </div>
   )
 
   if (isEditing) {
@@ -206,7 +211,8 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
     return (
       <div className="bg-background text-foreground min-h-dvh">
         <div className="mx-auto w-full max-w-xl pb-6">
-          {header}
+          {topBar}
+          {titleBlock}
 
           <div
             role="status"
@@ -362,6 +368,20 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
       onTouchStart={swipe.onTouchStart}
       onTouchEnd={swipe.onTouchEnd}
     >
+      {/* Hors du bloc animé : la bande des jours ne glisse pas et ne saute
+          pas quand la hauteur du titre change d'une journée à l'autre. */}
+      <div className="mx-auto w-full max-w-xl">
+        {topBar}
+        <DayOverviewStrip
+          itinerary={itinerary}
+          current={index}
+          onSelect={(target) => {
+            if (target !== index) goToDay(target)
+          }}
+          onSwap={() => setSwapOpen(true)}
+          className="mt-3"
+        />
+      </div>
       <div
         key={index}
         className={cn(
@@ -373,16 +393,7 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
               : undefined,
         )}
       >
-        {header}
-
-        <DayOverviewStrip
-          itinerary={itinerary}
-          current={index}
-          onSelect={(target) => {
-            if (target !== index) goToDay(target)
-          }}
-          onSwap={() => setSwapOpen(true)}
-        />
+        <div className="mt-2">{titleBlock}</div>
         <SwapDaySheet
           open={swapOpen}
           onOpenChange={setSwapOpen}
