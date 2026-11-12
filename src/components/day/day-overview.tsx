@@ -80,11 +80,13 @@ export function DayOverviewStrip({
   current,
   onSelect,
   onSwap,
+  className,
 }: {
   itinerary: DayItinerary[]
   current: number
   onSelect: (index: number) => void
   onSwap: () => void
+  className?: string
 }) {
   const scroller = useRef<HTMLDivElement>(null)
 
@@ -104,7 +106,10 @@ export function DayOverviewStrip({
   }, [current])
 
   return (
-    <section aria-labelledby="day-overview-title" className="mt-5">
+    <section
+      aria-labelledby="day-overview-title"
+      className={cn('mt-5', className)}
+    >
       <div className="flex items-center justify-between px-5">
         <h2
           id="day-overview-title"
