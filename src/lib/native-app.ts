@@ -22,7 +22,7 @@
  *   haptic/trigger      { kind }                     → (aucune)
  *   qr/scan             {}                           → qr/result           { value }
  *   notifications/sync  { reminders }                → notifications/state { permission, scheduled }
- *   calendar/add        { events }                   → calendar/result     { outcome, count }
+ *   calendar/add        { events }                   → calendar/result     { outcome, count, reason? }
  *   app/openSettings    {}                           → (aucune)
  *   app/ready           { capabilities }             → (aucune)            v2
  *   ui/statusBar        { style: light|dark }        → (aucune)            v2
@@ -468,6 +468,8 @@ function markNativeNotificationsAsked(): void {
 export function addToNativeCalendar(events: NativeCalendarEvent[]): Promise<{
   outcome: 'added' | 'denied' | 'unavailable'
   count: number
+  /** Étape et message d'erreur côté natif, pour le diagnostic. */
+  reason?: string
 } | null> {
   return requestNative('calendar/add', { events }, 'calendar/result')
 }
