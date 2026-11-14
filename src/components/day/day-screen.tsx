@@ -1,18 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeft,
-  Backpack,
+  ArrowLeftRight,
   Check,
-  ChevronLeft,
-  ChevronRight,
-  Hand,
-  MapPin,
   MoreHorizontal,
   Pencil,
   Plus,
-  Share,
   SquarePen,
   Train,
   Hotel,
@@ -29,41 +24,38 @@ import { useSwipe } from '@/hooks/use-swipe'
 import { QuickActionsTarget } from '@/components/quick-actions'
 import { useDayEditor } from '@/components/day/use-day-editor'
 import { ReorderableActivities } from '@/components/day/reorderable-activities'
-import { PhotoCarousel } from '@/components/day/photo-carousel'
-import {
-  ActivityCard,
-  DashedAdd,
-  FoodList,
-  SectionHeading,
-  StayCard,
-  TipsList,
-  TransportSummary,
-} from '@/components/day/day-sections'
+import { DashedAdd } from '@/components/day/day-sections'
+import { DayView } from '@/components/day/day-view'
 import {
   BOOKING_STATUS_LABELS,
   dayTypeLabel,
-  findNextActivity,
   formatDateRange,
   longDate,
-  shortDate,
   transportLabel,
 } from '@/components/day/day-logic'
 import { Pill, TRANSPORT_ICONS } from '@/components/day/day-ui'
-import { DayOverviewStrip, SwapDaySheet } from '@/components/day/day-overview'
-import { PhoneText } from '@/components/phone-text'
+import { SwapDaySheet } from '@/components/day/day-overview'
 
 const headerButton = 'border-border bg-card shrink-0 shadow-none'
 
 /** Roadbook complet d'une journée, en lecture comme en mode édition. */
 export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
   const { itinerary } = useTrip()
-  const { push, replace, selectDay, dayDirection } = useAppNav()
+  const { push, replace, selectDay } = useAppNav()
   const { isEditing, startEditing, finishEditing, pendingChanges } =
     useEditSession()
   const index = Math.min(Math.max(screen.dayIndex, 0), itinerary.length - 1)
   const editor = useDayEditor(index)
   const day = editor.day
   const [swapOpen, setSwapOpen] = useState(false)
+
+  // Ouvert pour modifier (crayon d'Aujourd'hui ou du Programme) : la
+  // modification terminée — enregistrée ou annulée — on revient d'où l'on
+  // vient, sans laisser une seconde vue de la journée dans la pile.
+  const openedForEdit = useRef(isEditing)
+  useEffect(() => {
+    if (openedForEdit.current && !isEditing) onClose()
+  }, [isEditing, onClose])
 
   const goToDay = (target: number, method: DayChangeMethod = 'arrow') => {
     if (target < 0 || target >= itinerary.length) return
@@ -95,23 +87,17 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
     if (pendingChanges === 0) onClose()
   }
 
-  const previous = itinerary[index - 1]
-  const following = itinerary[index + 1]
-  const next = findNextActivity(day)
-  const doneCount = day.activities.filter((a) => a.status === 'done').length
-  const photos = (day.images ?? []).map((image) => ({
-    url: image.url,
-    caption: image.caption,
-  }))
   const typeLabel = dayTypeLabel(day.dayType)
 
-  const stats = [
-    { value: String(day.activities.length), label: 'activités' },
-    day.walkingDistance
-      ? { value: day.walkingDistance, label: 'à pied' }
+  const metaLine = [
+    day.city,
+    day.activities.length > 0
+      ? `${day.activities.length} étape${day.activities.length > 1 ? 's' : ''}`
       : undefined,
-    typeLabel ? { value: typeLabel, label: 'type de journée' } : undefined,
-  ].filter((stat): stat is { value: string; label: string } => Boolean(stat))
+    day.walkingDistance ? `${day.walkingDistance} à pied` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   const topBar = (
     <header className="px-5 pt-[calc(var(--safe-top)+12px)]">
@@ -137,15 +123,6 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
           </Button>
         ) : (
           <>
-            <Button
-              variant="outline"
-              size="icon-round"
-              aria-label="Partager le voyage"
-              onClick={() => push({ kind: 'share' })}
-              className={headerButton}
-            >
-              <Share />
-            </Button>
             <Button
               variant="outline"
               size="icon-round"
@@ -178,15 +155,14 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
         description={`Jour ${index + 1} · ${day.city}`}
         actions={editor.dayActions()}
       >
-        <p className="text-secondary-strong mt-2.5 text-xs leading-4 font-black tracking-[0.08em]">
-          {`${longDate(day.date)} · Jour ${index + 1}`.toUpperCase()}
+        <p className="text-muted-foreground mt-2.5 text-sm leading-5 font-bold first-letter:uppercase">
+          {`${longDate(day.date)} · Jour ${index + 1}`}
         </p>
-        <h1 className="font-display mt-0.5 text-[32px] leading-9">
+        <h1 className="font-display mt-0.5 text-[30px] leading-[34px]">
           {day.title}
         </h1>
-        <p className="text-muted-foreground mt-0.5 flex items-center gap-1.5 text-base leading-[22px] font-extrabold">
-          <MapPin className="size-4" aria-hidden />
-          {day.city}
+        <p className="text-muted-foreground mt-1 text-[15px] leading-[22px]">
+          {metaLine}
         </p>
       </QuickActionsTarget>
     </div>
@@ -254,7 +230,22 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
               <Pencil />
               Modifier la journée
             </Button>
+            {itinerary.length > 1 && (
+              <Button
+                variant="outline"
+                onClick={() => setSwapOpen(true)}
+                className="h-11 rounded-xl text-[15px] font-extrabold"
+              >
+                <ArrowLeftRight />
+                Échanger avec un autre jour
+              </Button>
+            )}
           </section>
+          <SwapDaySheet
+            open={swapOpen}
+            onOpenChange={setSwapOpen}
+            dayIndex={index}
+          />
 
           <div className="mx-5 mt-5 mb-2 flex items-center justify-between">
             <h2 className="text-[17px] font-black">Activités</h2>
@@ -368,263 +359,9 @@ export function DayScreen({ screen, onClose }: ScreenProps<'day'>) {
       onTouchStart={swipe.onTouchStart}
       onTouchEnd={swipe.onTouchEnd}
     >
-      {/* Hors du bloc animé : la bande des jours ne glisse pas et ne saute
-          pas quand la hauteur du titre change d'une journée à l'autre. */}
-      <div className="mx-auto w-full max-w-xl">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(var(--safe-bottom)+24px)]">
         {topBar}
-        <DayOverviewStrip
-          itinerary={itinerary}
-          current={index}
-          onSelect={(target) => {
-            if (target !== index) goToDay(target)
-          }}
-          onSwap={() => setSwapOpen(true)}
-          className="mt-3"
-        />
-      </div>
-      <div
-        key={index}
-        className={cn(
-          'mx-auto flex w-full max-w-xl flex-1 flex-col pb-[calc(var(--safe-bottom)+24px)]',
-          dayDirection === 'next'
-            ? 'animate-[slide-in-from-right_0.3s_ease-out_backwards]'
-            : dayDirection === 'previous'
-              ? 'animate-[slide-in-from-left_0.3s_ease-out_backwards]'
-              : undefined,
-        )}
-      >
-        <div className="mt-2">{titleBlock}</div>
-        <SwapDaySheet
-          open={swapOpen}
-          onOpenChange={setSwapOpen}
-          dayIndex={index}
-        />
-
-        {photos.length > 0 && (
-          <PhotoCarousel
-            photos={photos}
-            label="Photos du jour"
-            className="mt-3.5"
-          />
-        )}
-
-        {day.notes && (
-          <p className="border-secondary text-muted-foreground mx-5 mt-3 border-l-[3px] pl-3 text-[15px] leading-[21px] font-semibold">
-            <PhoneText text={day.notes} />
-          </p>
-        )}
-
-        {stats.length > 0 && (
-          <dl
-            className="bg-card border-border mx-5 mt-3.5 grid rounded-[20px] border px-1.5 py-3"
-            style={{
-              gridTemplateColumns: `repeat(${stats.length}, minmax(0, 1fr))`,
-            }}
-          >
-            {stats.map((stat, position) => (
-              <div
-                key={stat.label}
-                className={cn(
-                  'flex flex-col-reverse items-center gap-0.5 px-1 text-center',
-                  position > 0 && 'border-border/70 border-l',
-                )}
-              >
-                <dt className="text-muted-foreground text-xs font-extrabold">
-                  {stat.label}
-                </dt>
-                <dd
-                  className={cn(
-                    'text-xl leading-6 font-black',
-                    stat.label === 'type de journée' && 'text-secondary-strong',
-                  )}
-                >
-                  {stat.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        )}
-
-        {day.highlights && day.highlights.length > 0 && (
-          <section className="mx-5 mt-[18px]">
-            <SectionHeading>Points forts</SectionHeading>
-            <ul className="flex flex-wrap gap-2">
-              {day.highlights.map((highlight, position) => (
-                <QuickActionsTarget
-                  key={`${highlight}-${position}`}
-                  asChild
-                  entity="day"
-                  title={highlight}
-                  description="Point fort de la journée"
-                  actions={editor.listItemActions(
-                    'highlights',
-                    highlight,
-                    position,
-                  )}
-                >
-                  <li className="bg-secondary-soft text-secondary-strong border-secondary/30 rounded-full border px-3 py-[7px] text-[13px] font-extrabold">
-                    {highlight}
-                  </li>
-                </QuickActionsTarget>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        <section className="mx-5 mt-[18px]">
-          <SectionHeading>Transport du jour</SectionHeading>
-          {day.transport ? (
-            <TransportSummary day={day} dayIndex={index} editor={editor} />
-          ) : (
-            <DashedAdd
-              icon={Train}
-              empty="Aucun trajet ce jour"
-              label="Ajouter un transport"
-              onClick={() => editor.editTransport()}
-            />
-          )}
-        </section>
-
-        <section className="mx-5 mt-[18px]">
-          <SectionHeading
-            aside={
-              day.activities.length > 0 && (
-                <span className="text-muted-foreground text-[13px] font-extrabold">
-                  {doneCount} sur {day.activities.length} faite
-                  {doneCount > 1 ? 's' : ''}
-                </span>
-              )
-            }
-          >
-            Activités
-          </SectionHeading>
-          {day.activities.length > 0 ? (
-            <ol className="flex flex-col gap-2.5">
-              {day.activities.map((activity, position) => (
-                <ActivityCard
-                  key={activity.id}
-                  activity={activity}
-                  index={position}
-                  dayIndex={index}
-                  isNext={next?.index === position}
-                  editor={editor}
-                />
-              ))}
-            </ol>
-          ) : (
-            <DashedAdd
-              empty="Rien de prévu"
-              label="Ajouter une activité"
-              onClick={editor.addActivity}
-            />
-          )}
-        </section>
-
-        <section className="mx-5 mt-[18px]">
-          <SectionHeading>Hébergement</SectionHeading>
-          {editor.stay ? (
-            <StayCard dayIndex={index} editor={editor} surface="day" />
-          ) : (
-            <DashedAdd
-              icon={Hotel}
-              empty="Aucun hébergement"
-              label="Ajouter"
-              onClick={editor.editAccommodation}
-            />
-          )}
-        </section>
-
-        <FoodList day={day} editor={editor} />
-
-        <section className="mx-5 mt-[18px]">
-          <SectionHeading>Bagages</SectionHeading>
-          {day.packingTips && day.packingTips.length > 0 ? (
-            <ul className="bg-card border-border divide-border/70 divide-y rounded-[18px] border px-3.5">
-              {day.packingTips.map((tip, position) => (
-                <QuickActionsTarget
-                  key={`${tip}-${position}`}
-                  asChild
-                  entity="day"
-                  title={tip}
-                  description="Bagages de la journée"
-                  actions={editor.listItemActions('packingTips', tip, position)}
-                >
-                  <li className="flex min-h-11 items-center gap-2.5 py-2 text-sm font-bold">
-                    <span
-                      aria-hidden
-                      className="bg-secondary size-1.5 shrink-0 rounded-full"
-                    />
-                    {tip}
-                  </li>
-                </QuickActionsTarget>
-              ))}
-            </ul>
-          ) : (
-            <div className="bg-card border-border text-muted-foreground flex min-h-[52px] items-center gap-2.5 rounded-[18px] border pr-2 pl-3.5">
-              <Backpack className="size-5 shrink-0" aria-hidden />
-              <span className="flex-1 text-sm font-bold">
-                Rien pour ce jour
-              </span>
-              <button
-                type="button"
-                onClick={editor.editDay}
-                className="text-primary flex min-h-11 items-center px-2.5 text-sm font-extrabold"
-              >
-                Ajouter
-              </button>
-            </div>
-          )}
-        </section>
-
-        <TipsList day={day} editor={editor} />
-
-        <p className="text-muted-foreground mx-5 my-3 flex items-center justify-center gap-1.5 text-xs font-bold">
-          <Hand className="size-4" aria-hidden />
-          Appui long sur un élément pour plus d’actions
-        </p>
-
-        <span className="flex-1" />
-
-        <nav aria-label="Jours voisins" className="mx-5 mt-2 flex gap-2.5">
-          {previous ? (
-            <button
-              type="button"
-              onClick={() => goToDay(index - 1)}
-              className="bg-card border-border pressable flex min-w-0 flex-1 items-center gap-2 rounded-2xl border px-3 py-2.5 text-left"
-            >
-              <ChevronLeft className="size-5 shrink-0" aria-hidden />
-              <span className="flex min-w-0 flex-col">
-                <span className="text-muted-foreground text-xs font-extrabold capitalize">
-                  {shortDate(previous.date)}
-                </span>
-                <span className="truncate text-sm font-black">
-                  {previous.title}
-                </span>
-              </span>
-            </button>
-          ) : (
-            <span className="flex-1" />
-          )}
-          {following ? (
-            <button
-              type="button"
-              onClick={() => goToDay(index + 1)}
-              className="bg-card border-border pressable flex min-w-0 flex-1 items-center justify-end gap-2 rounded-2xl border px-3 py-2.5 text-right"
-            >
-              <span className="flex min-w-0 flex-col">
-                <span className="text-muted-foreground text-xs font-extrabold capitalize">
-                  {shortDate(following.date)}
-                </span>
-                <span className="truncate text-sm font-black">
-                  {following.title}
-                </span>
-              </span>
-              <ChevronRight className="size-5 shrink-0" aria-hidden />
-            </button>
-          ) : (
-            <span className="flex-1" />
-          )}
-        </nav>
+        <DayView index={index} editor={editor} onSelectDay={goToDay} />
       </div>
       {editor.sheets}
     </div>
