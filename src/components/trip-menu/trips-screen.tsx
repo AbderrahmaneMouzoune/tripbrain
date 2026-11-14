@@ -126,10 +126,10 @@ export function TripsScreen({ onClose }: ScreenProps<'trips'>) {
             <Button
               variant="ghost"
               className="text-primary-strong h-11 text-[15px] font-extrabold"
-              onClick={() => push({ kind: 'import-file' })}
+              onClick={() => push({ kind: 'import-program' })}
             >
               <FileUp aria-hidden />
-              Importer un fichier
+              Importer un programme
             </Button>
           </div>
         </>

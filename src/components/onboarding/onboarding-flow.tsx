@@ -6,14 +6,18 @@ import {
   ArrowRight,
   BedDouble,
   Bus,
+  CalendarDays,
   Car,
   ClipboardCheck,
   FileText,
   PlayCircle,
   Plane,
   Route,
+  Ticket,
   TrainFront,
+  WifiOff,
 } from 'lucide-react'
+import { IconBadge } from '@/components/mobile/icon-badge'
 import { MobileScreen } from '@/components/mobile/mobile-screen'
 import { Button } from '@/components/ui/button'
 import { useTrip } from '@/components/app/trip-provider'
@@ -38,7 +42,10 @@ import { TripPreviewStep } from '@/components/receive/trip-preview-step'
 import type { ReceivedTrip } from '@/components/receive/received-trip'
 import { groupCodeDigits } from '@/components/receive/share-input'
 import { ImportFilePanel } from '@/components/onboarding/import-file-screen'
-import { IntentionOptions } from '@/components/onboarding/intention-options'
+import {
+  IntentionOptions,
+  type IntentionChoice,
+} from '@/components/onboarding/intention-options'
 import { useClipboardShare } from '@/components/onboarding/use-clipboard-share'
 import { buildShowcase } from '@/components/onboarding/showcase'
 
@@ -70,12 +77,11 @@ export function OnboardingFlow(_props: {}) {
   const [childStatusBar, setChildStatusBar] =
     useState<ScreenStatusBarRequest | null>(null)
 
-  // Barre d'état de l'app native : icônes claires sur le bleu de l'accueil,
-  // foncées sur les étapes à fond clair. Seule source de vérité tant qu'aucun
-  // écran n'est ouvert par-dessus (`ScreenHost` gère alors la sienne) : on la
-  // réaffirme quand la pile se vide.
-  const statusBar: NativeStatusBarStyle =
-    childStatusBar?.style ?? (step.kind === 'welcome' ? 'light' : 'dark')
+  // Barre d'état de l'app native : icônes foncées, toutes les étapes ayant un
+  // fond clair, sauf demande d'une étape enfant (caméra du scan). Seule source
+  // de vérité tant qu'aucun écran n'est ouvert par-dessus (`ScreenHost` gère
+  // alors la sienne) : on la réaffirme quand la pile se vide.
+  const statusBar: NativeStatusBarStyle = childStatusBar?.style ?? 'dark'
   const stackEmpty = stack.length === 0
   useEffect(() => {
     if (stackEmpty) setNativeStatusBarStyle(statusBar)
@@ -100,6 +106,7 @@ export function OnboardingFlow(_props: {}) {
             onBack={() => setStep({ kind: 'welcome' })}
             onChoose={(choice) => {
               if (choice === 'generator') push({ kind: 'generator' })
+              else if (choice === 'program') push({ kind: 'import-program' })
               else if (choice === 'file') setStep({ kind: 'file' })
               else setStep({ kind: 'receive', start: { method: choice } })
             }}
@@ -149,11 +156,38 @@ export function OnboardingFlow(_props: {}) {
 
 // ── Bienvenue ─────────────────────────────────────────────────────────────────
 
+/** Ce que l'app fait sur place, en trois lignes : l'essentiel avant de commencer. */
+const WELCOME_FEATURES = [
+  {
+    icon: CalendarDays,
+    tone: 'primary',
+    title: 'Le programme, jour par jour',
+    description: 'Ce que vous faites aujourd’hui et l’étape suivante.',
+  },
+  {
+    icon: Ticket,
+    tone: 'secondary',
+    title: 'Billets et adresses sous la main',
+    description: 'Réservations, et l’adresse de l’hôtel pour le chauffeur.',
+  },
+  {
+    icon: WifiOff,
+    tone: 'accent',
+    title: 'Tout marche sans réseau',
+    description: 'En avion ou sans données mobiles, rien ne manque.',
+  },
+] as const
+
+/**
+ * Premier écran d'une app, pas la page d'accueil d'un site : l'icône, un mot
+ * de bienvenue, ce que l'app fait en trois lignes, et les actions collées en
+ * bas, sous le pouce. L'aperçu reprend la carte « Jour » de l'onglet
+ * Aujourd'hui, avec le voyage d'exemple que le second bouton ouvre.
+ */
 function WelcomeStep({ onStart }: { onStart: () => void }) {
   const { loadMockData } = useTrip()
   const [loadingDemo, setLoadingDemo] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Les cartes montrent le voyage d'exemple, celui qu'ouvre le second bouton.
   const showcase = useMemo(() => buildShowcase(demoItinerary), [])
   const TransportIcon = showcase.transport
     ? TRANSPORT_ICONS[showcase.transport.type]
@@ -171,85 +205,96 @@ function WelcomeStep({ onStart }: { onStart: () => void }) {
   }
 
   return (
-    <div className="bg-primary relative flex min-h-dvh flex-col overflow-hidden">
-      <div className="mx-auto flex w-full max-w-xl flex-col">
-        <div className="animate-rise flex items-center gap-2.5 px-6 pt-[calc(var(--safe-top)+16px)]">
-          <span className="bg-card text-primary flex size-10 items-center justify-center rounded-xl">
-            <Route className="size-[22px]" aria-hidden />
-          </span>
-          <span className="font-display text-primary-foreground text-xl tracking-[0.08em]">
-            TRIPBRAIN
-          </span>
-        </div>
+    <div className="bg-background text-foreground flex min-h-dvh flex-col">
+      <div className="mx-auto flex w-full max-w-xl flex-1 flex-col px-6 pt-[calc(var(--safe-top)+36px)] pb-6">
+        <span className="bg-primary text-primary-foreground animate-pop flex size-[68px] items-center justify-center rounded-[20px] shadow-[0_12px_26px_color-mix(in_srgb,var(--primary)_34%,transparent)]">
+          <Route className="size-9" aria-hidden />
+        </span>
+        <h1 className="font-display animate-rise mt-6 text-[30px] leading-[1.12]">
+          Bienvenue dans TripBrain
+        </h1>
+        <p className="text-muted-foreground animate-rise mt-2 text-base leading-relaxed [animation-delay:0.05s]">
+          Tout votre voyage dans la poche, même sans réseau.
+        </p>
 
-        {/*
-          Vitrine : une seule carte, compacte. Trois cartes prenaient la moitié
-          de l'écran et repoussaient « Commencer » sous le pouce ; celle-ci dit
-          l'essentiel (la journée, le billet, l'adresse) sans voler la vedette.
-        */}
-        <div
-          aria-hidden
-          className="relative flex h-[188px] items-center justify-center px-6"
-        >
-          {showcase.day && (
-            <div className="animate-rise [animation-delay:0.08s]">
-              <div className="animate-float bg-card text-foreground flex w-[290px] -rotate-2 flex-col gap-2.5 rounded-[20px] p-4 shadow-[0_14px_32px_rgba(6,20,60,0.28)]">
-                <span className="text-secondary-strong text-[11px] font-black tracking-[0.1em] uppercase">
-                  Aujourd’hui · Jour {showcase.day.dayNumber}
+        {showcase.day && (
+          <div
+            aria-hidden
+            className="bg-card border-border animate-rise mt-6 flex items-center gap-3.5 rounded-[20px] border p-3.5 [animation-delay:0.1s]"
+          >
+            <span className="bg-secondary-soft text-secondary-strong flex size-[52px] shrink-0 flex-col items-center justify-center rounded-2xl leading-none">
+              <span className="text-[10px] font-black tracking-[0.06em] uppercase">
+                Jour
+              </span>
+              <span className="font-display mt-0.5 text-xl">
+                {showcase.day.dayNumber}
+              </span>
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <span className="truncate text-base leading-tight font-extrabold">
+                {showcase.day.title}
+              </span>
+              <span className="flex flex-wrap gap-1.5">
+                <span className="bg-primary-soft text-primary-strong rounded-full px-2.5 py-0.5 text-[11px] font-extrabold">
+                  {showcase.day.stepCount} étapes
                 </span>
-                <span className="truncate text-lg leading-tight font-extrabold">
-                  {showcase.day.title}
-                </span>
-                <span className="flex flex-wrap gap-1.5">
-                  <span className="bg-primary-soft text-primary-strong rounded-full px-2.5 py-1 text-xs font-extrabold">
-                    {showcase.day.stepCount} étapes
+                {showcase.transport && (
+                  <span className="bg-ink text-ink-foreground flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-extrabold">
+                    <TransportIcon className="size-3" />
+                    Billet hors ligne
                   </span>
-                  {showcase.transport && (
-                    <span className="bg-ink text-ink-foreground flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold">
-                      <TransportIcon className="size-3.5" />
-                      Billet hors ligne
-                    </span>
-                  )}
-                  {showcase.stay && (
-                    <span className="bg-secondary-soft text-secondary-strong flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold">
-                      <BedDouble className="size-3.5" />
-                      Adresse de l’hôtel
-                    </span>
-                  )}
+                )}
+                {showcase.stay && (
+                  <span className="bg-secondary-soft text-secondary-strong flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-extrabold">
+                    <BedDouble className="size-3" />
+                    Hôtel
+                  </span>
+                )}
+              </span>
+            </span>
+          </div>
+        )}
+
+        <ul className="stagger mt-7 flex flex-col gap-5">
+          {WELCOME_FEATURES.map((feature) => (
+            <li key={feature.title} className="flex items-center gap-3.5">
+              <IconBadge icon={feature.icon} tone={feature.tone} size="lg" />
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-base leading-snug font-extrabold">
+                  {feature.title}
                 </span>
-              </div>
-            </div>
-          )}
-        </div>
+                <span className="text-muted-foreground text-[13px] leading-snug">
+                  {feature.description}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
       </div>
 
-      <div className="bg-background text-foreground animate-sheet relative z-10 mx-auto flex w-full max-w-xl flex-1 flex-col gap-3.5 rounded-t-[28px] px-6 pt-8 pb-[calc(var(--safe-bottom)+28px)] [animation-delay:0.1s]">
-        <h1 className="font-display text-[31px] leading-[1.12]">
-          Tout votre voyage, même sans réseau.
-        </h1>
-        <p className="text-muted-foreground text-base leading-relaxed">
-          Programme, billets et adresses réunis dans un roadbook qui tient dans
-          la poche — et qui marche en avion.
-        </p>
+      <div className="bg-background/95 sticky bottom-0 z-10 mx-auto flex w-full max-w-xl flex-col gap-1.5 px-6 pt-3 pb-[calc(var(--safe-bottom)+16px)] backdrop-blur">
         {error && (
-          <p role="alert" className="text-destructive text-sm font-bold">
+          <p
+            role="alert"
+            className="text-destructive text-center text-sm font-bold"
+          >
             {error}
           </p>
         )}
-        <Button size="xl" className="mt-3 w-full" onClick={onStart}>
+        <Button size="xl" className="w-full" onClick={onStart}>
           Commencer
           <ArrowRight aria-hidden />
         </Button>
         <Button
-          variant="outline"
-          className="h-[52px] w-full rounded-2xl border-[1.5px] text-base font-extrabold"
+          variant="ghost"
+          className="text-primary-strong h-12 w-full rounded-2xl text-[15px] font-extrabold"
           onClick={exploreDemo}
           disabled={loadingDemo}
         >
           <PlayCircle className="size-[18px]" aria-hidden />
           {loadingDemo ? 'Ouverture…' : 'Explorer un voyage exemple'}
         </Button>
-        <p className="text-muted-foreground mt-0.5 text-center text-xs leading-relaxed">
+        <p className="text-muted-foreground text-center text-xs leading-relaxed">
           Vos voyages restent sur ce téléphone.{' '}
           <Link
             href="/politique-de-confidentialite"
@@ -278,7 +323,7 @@ function IntentionStep({
   onUseClipboard,
 }: {
   onBack: () => void
-  onChoose: (choice: 'code' | 'scan' | 'generator' | 'file') => void
+  onChoose: (choice: IntentionChoice) => void
   onUseClipboard: (incoming: IncomingShare) => void
 }) {
   const clipboard = useClipboardShare()
@@ -297,7 +342,7 @@ function IntentionStep({
             onClick={() => onChoose('file')}
           >
             <FileText className="size-[18px]" aria-hidden />
-            J’ai un fichier (JSON, Excel ou CSV)
+            J’ai un fichier au format TripBrain
           </Button>
           <Link
             href="/guide"

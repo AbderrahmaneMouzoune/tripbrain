@@ -18,6 +18,8 @@ export const GENERATOR_FAILURE_REASONS = [
   'refused',
   /** La réponse n'a pas pu être lue comme un itinéraire. */
   'invalid_json',
+  /** Le document importé ne décrit pas un voyage. */
+  'not_a_program',
   /** Demande mal formée (date passée, description trop courte…). */
   'invalid_request',
   /** Connexion perdue entre l'app et le serveur. */
@@ -48,6 +50,8 @@ export const FAILURE_MESSAGES: Record<GeneratorFailureReason, string> = {
     'Cette demande n’a pas pu être traitée. Reformulez votre voyage et réessayez.',
   invalid_json:
     'La réponse reçue était incomplète ou illisible. Relancez la génération.',
+  not_a_program:
+    'Ce document ne ressemble pas à un programme de voyage. Vérifiez le texte ou le fichier choisi.',
   invalid_request: 'La demande est incomplète. Vérifiez les champs.',
   network: 'La connexion a été perdue. Vérifiez le réseau et réessayez.',
   unknown: 'La génération a échoué. Réessayez dans un instant.',
@@ -60,6 +64,7 @@ export const FAILURE_STATUS: Record<GeneratorFailureReason, number> = {
   overloaded: 503,
   refused: 422,
   invalid_json: 502,
+  not_a_program: 422,
   invalid_request: 400,
   network: 502,
   unknown: 500,

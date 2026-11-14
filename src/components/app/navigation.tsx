@@ -53,6 +53,8 @@ export type AppScreen =
   /** Fin d'arrivée d'un voyage : hors ligne et rappels (après import ou génération). */
   | { kind: 'trip-ready' }
   | { kind: 'import-file' }
+  /** « J'ai déjà un programme » : texte collé ou fichier, recopié par l'IA. */
+  | { kind: 'import-program' }
   | { kind: 'document'; documentId: string }
   | { kind: 'add-document'; dayIndex?: number }
 

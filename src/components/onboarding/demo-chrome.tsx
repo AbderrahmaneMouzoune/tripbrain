@@ -103,7 +103,9 @@ export function DemoChrome(_props: {}) {
               push(
                 choice === 'generator'
                   ? { kind: 'generator' }
-                  : { kind: 'receive', method: choice },
+                  : choice === 'program'
+                    ? { kind: 'import-program' }
+                    : { kind: 'receive', method: choice },
               ),
             )
           }
@@ -111,7 +113,7 @@ export function DemoChrome(_props: {}) {
         <ListRow
           icon={FileText}
           tone="muted"
-          label="J’ai un fichier"
+          label="J’ai un fichier au format TripBrain"
           description="JSON, Excel ou CSV"
           className="mt-2"
           onClick={() => choose(() => push({ kind: 'import-file' }))}

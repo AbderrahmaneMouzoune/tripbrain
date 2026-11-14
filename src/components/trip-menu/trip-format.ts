@@ -112,6 +112,7 @@ export function formatRelativeDays(
 /** Le verbe dit d'où vient le voyage ; sans provenance connue, rien. */
 const ORIGIN_VERBS: Partial<Record<TripSource, string>> = {
   generator: 'Généré',
+  program: 'Importé',
   share: 'Reçu',
   json: 'Importé',
   xlsx: 'Importé',

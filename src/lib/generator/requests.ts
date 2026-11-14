@@ -116,7 +116,13 @@ export const refineRequestSchema = z.object({
     .trim()
     .min(3, MESSAGES.shortInstruction)
     .max(MAX_INSTRUCTION_LENGTH, MESSAGES.longInstruction),
-  startDate: startDateSchema,
+  /**
+   * Une vraie date, sans plus : l'itinéraire existe déjà, et un programme
+   * importé peut décrire un voyage passé.
+   */
+  startDate: z.string().refine(isValidIsoDate, MESSAGES.invalidDate),
+  /** Itinéraire recopié d'un programme existant : la correction reste fidèle. */
+  imported: z.boolean().optional(),
   /**
    * La demande d'origine : régime, mobilité, budget, « à éviter » doivent
    * survivre à l'affinage. Le brief du parcours, ou la phrase d'une demande

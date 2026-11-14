@@ -29,10 +29,8 @@ import {
   toDayItineraries,
   type GeneratedItinerary,
 } from '@/lib/generator/itinerary-schema'
-import {
-  MAX_INSTRUCTION_LENGTH,
-  type GenerateRequest,
-} from '@/lib/generator/requests'
+import type { GenerationRequest } from '@/lib/generator/generation-store'
+import { MAX_INSTRUCTION_LENGTH } from '@/lib/generator/requests'
 import { groupByCity } from '@/lib/generator/review'
 import {
   countChanges,
@@ -123,15 +121,21 @@ export function RefineSheet({
   itinerary: GeneratedItinerary
   startDate: string
   /** La demande d'origine, renvoyée à chaque affinage pour en garder les contraintes. */
-  request: GenerateRequest | null
+  request: GenerationRequest | null
 }) {
+  const imported = request?.mode === 'import'
   const [input, setInput] = useState('')
   const [sent, setSent] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [proposal, setProposal] = useState<Proposal | null>(null)
   const [error, setError] = useState<string | null>(null)
   const controller = useRef<AbortController | null>(null)
-  const suggestions = useMemo(() => suggestionsFor(itinerary), [itinerary])
+  // Un programme importé se corrige, il ne se réinvente pas : pas de
+  // suggestions d'ambiance (« moins de musées ») qui le réécriraient.
+  const suggestions = useMemo(
+    () => (imported ? [] : suggestionsFor(itinerary)),
+    [imported, itinerary],
+  )
 
   const reset = () => {
     controller.current?.abort()
@@ -168,7 +172,9 @@ export function RefineSheet({
             ? { brief: request.brief }
             : request?.mode === 'express'
               ? { description: request.description }
-              : {}),
+              : imported
+                ? { imported: true }
+                : {}),
         },
         own.signal,
       )
@@ -229,13 +235,13 @@ export function RefineSheet({
     <BottomSheet
       open={open}
       onOpenChange={(next) => (next ? onOpenChange(true) : close())}
-      title="Que voulez-vous changer ?"
+      title={imported ? 'Que faut-il corriger ?' : 'Que voulez-vous changer ?'}
       hideHeader
       className="bg-card"
     >
       <div className="flex items-center gap-3 pt-1">
         <h2 className="font-display flex-1 text-2xl leading-[1.2]">
-          Que voulez-vous changer ?
+          {imported ? 'Que faut-il corriger ?' : 'Que voulez-vous changer ?'}
         </h2>
         <Button
           variant="outline"
@@ -418,7 +424,11 @@ export function RefineSheet({
           value={input}
           maxLength={MAX_INSTRUCTION_LENGTH}
           placeholder={
-            sent ? 'Autre chose à changer ?' : 'Ex. ajoute une nuit à la mer'
+            sent
+              ? 'Autre chose à changer ?'
+              : imported
+                ? 'Ex. le jour 3 est à Porto, pas à Lisbonne'
+                : 'Ex. ajoute une nuit à la mer'
           }
           onChange={(event) => setInput(event.target.value)}
           className="text-foreground placeholder:text-muted-foreground/70 h-11 min-w-0 flex-1 bg-transparent text-[15px] font-bold outline-none"
