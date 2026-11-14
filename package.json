@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "node scripts/copy-pdfjs-assets.mjs && next dev",
+    "build": "node scripts/copy-pdfjs-assets.mjs && next build",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
@@ -59,6 +59,7 @@
     "lucide-react": "^0.564.0",
     "next": "16.1.6",
     "next-themes": "^0.4.6",
+    "pdfjs-dist": "6.4.299",
     "posthog-js": "^1.427.2",
     "qrcode.react": "^4.0.1",
     "react": "19.2.4",

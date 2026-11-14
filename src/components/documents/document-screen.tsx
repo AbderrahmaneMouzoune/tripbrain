@@ -43,6 +43,7 @@ import {
   downloadDocument,
 } from './document-actions'
 import { PhoneText } from '@/components/phone-text'
+import { PdfViewer } from './pdf-viewer'
 
 type PreviewKind = 'image' | 'pdf' | 'text' | 'none'
 
@@ -275,9 +276,12 @@ function Preview({ file, kind }: { file: StoredFile; kind: PreviewKind }) {
   const [url, setUrl] = useState<string | null>(null)
   const [text, setText] = useState<string | null>(null)
   const [embedPdf, setEmbedPdf] = useState(false)
+  // pdf.js d'abord ; s'il échoue, on retombe sur le lecteur du navigateur.
+  const [pdfFailed, setPdfFailed] = useState(false)
 
   useEffect(() => {
     setEmbedPdf(canEmbedPdf())
+    setPdfFailed(false)
     const objectUrl = URL.createObjectURL(file.blob)
     setUrl(objectUrl)
     return () => URL.revokeObjectURL(objectUrl)
@@ -303,6 +307,16 @@ function Preview({ file, kind }: { file: StoredFile; kind: PreviewKind }) {
         src={url}
         alt={`Aperçu de ${file.name}`}
         className="max-h-full max-w-full touch-pinch-zoom rounded-md bg-white object-contain shadow-[0_24px_60px_rgba(0,0,0,0.55)]"
+      />
+    )
+  }
+
+  if (kind === 'pdf' && !pdfFailed) {
+    return (
+      <PdfViewer
+        data={file.blob}
+        name={file.name}
+        onError={() => setPdfFailed(true)}
       />
     )
   }

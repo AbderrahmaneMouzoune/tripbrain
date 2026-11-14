@@ -1,7 +1,9 @@
 /**
- * Lecture rapide du texte d'un PDF, sur le téléphone, sans bibliothèque.
+ * Lecture du texte d'un PDF, sur le téléphone : par pdf.js dans le
+ * navigateur, sinon par une lecture brute sans bibliothèque.
  *
- * On décompresse les flux du fichier (FlateDecode) et on récupère les chaînes
+ * La lecture brute décompresse les flux du fichier (FlateDecode) et récupère
+ * les chaînes
  * affichées par les opérateurs `Tj` et `TJ`. Cela suffit pour la plupart des
  * confirmations générées par les sites de réservation ; un PDF scanné ou aux
  * polices encodées ne donne rien, et l'app se rabat alors sur le nom du
@@ -69,8 +71,28 @@ export function textFromContentStream(content: string): string {
   return lines.join('\n')
 }
 
-/** Texte lisible d'un PDF (vide si rien n'est lisible). */
+/**
+ * Texte lisible d'un PDF (vide si rien n'est lisible). Dans le navigateur,
+ * pdf.js d'abord : il décode les polices encodées que la lecture brute ne
+ * sait pas lire (cartes d'embarquement, billets de train). La lecture brute
+ * reste le filet quand pdf.js ne se charge pas.
+ */
 export async function extractPdfText(data: Blob): Promise<string> {
+  if (data.size > MAX_PDF_BYTES) return ''
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    try {
+      const { pdfText } = await import('@/lib/pdf')
+      const text = (await pdfText(data)).slice(0, MAX_TEXT_LENGTH)
+      if (text.trim()) return text
+    } catch {
+      // pdf.js indisponible (hors ligne avant sa première utilisation…).
+    }
+  }
+  return extractPdfTextRaw(data)
+}
+
+/** Lecture brute des flux du fichier, sans bibliothèque. */
+export async function extractPdfTextRaw(data: Blob): Promise<string> {
   if (data.size > MAX_PDF_BYTES) return ''
   try {
     const bytes = new Uint8Array(await data.arrayBuffer())
