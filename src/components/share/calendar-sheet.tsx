@@ -28,6 +28,7 @@ import {
   countCalendarEvents,
   downloadICS,
   hasScheduledTransport,
+  nativeCalendarFailureStep,
   nativeCalendarSignature,
   toNativeCalendarEvents,
   transportSummary,
@@ -84,6 +85,7 @@ type NativeState =
   | { kind: 'adding' }
   | { kind: 'added'; count: number }
   | { kind: 'denied' }
+  | { kind: 'failed' }
 
 const longDate = new Intl.DateTimeFormat('fr-FR', {
   day: 'numeric',
@@ -177,9 +179,16 @@ export function CalendarSheet({ screen, onClose }: ScreenProps<'calendar'>) {
       setNativeState({ kind: 'denied' })
       return
     }
-    // Pas de réponse, ou pas de calendrier modifiable : le fichier .ics.
-    setNativeState({ kind: 'idle' })
-    exportFile()
+    // Pas de réponse, ou pas de calendrier modifiable. Dans l'app, la feuille
+    // de partage d'un .ics surprend : on le dit, et le fichier reste un choix.
+    trackEvent('calendar_native_failed', {
+      scope,
+      step: result
+        ? nativeCalendarFailureStep(result.reason ?? '')
+        : 'no_response',
+    })
+    triggerHaptic('error')
+    setNativeState({ kind: 'failed' })
   }
 
   const preview = days.slice(0, PREVIEW_DAYS)
@@ -201,6 +210,7 @@ export function CalendarSheet({ screen, onClose }: ScreenProps<'calendar'>) {
             alreadyAdded={alreadyAdded}
             disabled={days.length === 0}
             onAdd={() => void handleExport()}
+            onExportFile={exportFile}
           />
         ) : (
           <>
@@ -364,12 +374,14 @@ function NativeFooter({
   alreadyAdded,
   disabled,
   onAdd,
+  onExportFile,
 }: {
   state: NativeState
   dayCount: number
   alreadyAdded: boolean
   disabled: boolean
   onAdd: () => void
+  onExportFile: () => void
 }) {
   if (state.kind === 'added') {
     return (
@@ -408,6 +420,35 @@ function NativeFooter({
           onClick={onAdd}
         >
           Réessayer
+        </Button>
+      </>
+    )
+  }
+
+  if (state.kind === 'failed') {
+    return (
+      <>
+        <p
+          role="alert"
+          className="bg-destructive-soft text-destructive flex items-start gap-2 rounded-2xl px-4 py-3 text-sm leading-snug font-bold"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>
+            Impossible d’écrire dans l’agenda du téléphone. Réessayez, ou
+            exportez un fichier à ouvrir dans votre agenda.
+          </span>
+        </p>
+        <Button size="xl" className="w-full" onClick={onAdd}>
+          <CalendarPlus aria-hidden />
+          Réessayer
+        </Button>
+        <Button
+          variant="ghost"
+          className="text-muted-foreground min-h-11 w-full font-extrabold"
+          onClick={onExportFile}
+        >
+          <FileText aria-hidden />
+          Exporter le fichier .ics
         </Button>
       </>
     )
