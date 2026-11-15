@@ -54,7 +54,8 @@ export type AppScreen =
   | { kind: 'trip-ready' }
   | { kind: 'import-file' }
   | { kind: 'document'; documentId: string }
-  | { kind: 'add-document'; dayIndex?: number }
+  /** `preset` : ce qu'on ajoute est déjà connu (depuis un trajet, une suggestion). */
+  | { kind: 'add-document'; dayIndex?: number; preset?: 'ticket' | 'hotel' }
 
 export type AppScreenKind = AppScreen['kind']
 
