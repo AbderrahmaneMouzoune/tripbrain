@@ -437,7 +437,11 @@ export function TransportScreen({ screen, onClose }: ScreenProps<'transport'>) {
               variant="soft"
               className="w-full"
               onClick={() =>
-                push({ kind: 'add-document', dayIndex: screen.dayIndex })
+                push({
+                  kind: 'add-document',
+                  dayIndex: screen.dayIndex,
+                  preset: 'ticket',
+                })
               }
             >
               <Plus />

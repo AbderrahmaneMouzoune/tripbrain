@@ -285,7 +285,12 @@ export function documentCategory(
     return 'ticket'
   }
   if (file.linkedTo === 'accommodation') return 'hotel'
-  const tokens = nameTokens(file.name)
+  return categoryFromName(file.name)
+}
+
+/** Famille devinée d'après les seuls mots d'un nom de fichier. */
+export function categoryFromName(name: string): DocumentCategory {
+  const tokens = nameTokens(name)
   const has = (words: string[]) => words.some((word) => tokens.has(word))
   if (has(IDENTITY_WORDS)) return 'identity'
   if (has(HOTEL_WORDS)) return 'hotel'

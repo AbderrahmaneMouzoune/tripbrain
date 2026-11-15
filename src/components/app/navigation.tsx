@@ -58,7 +58,8 @@ export type AppScreen =
   /** « J'ai déjà un programme » : texte collé ou fichier, recopié par l'IA. */
   | { kind: 'import-program' }
   | { kind: 'document'; documentId: string }
-  | { kind: 'add-document'; dayIndex?: number }
+  /** `preset` : ce qu'on ajoute est déjà connu (depuis un trajet, une suggestion). */
+  | { kind: 'add-document'; dayIndex?: number; preset?: 'ticket' | 'hotel' }
 
 export type AppScreenKind = AppScreen['kind']
 
