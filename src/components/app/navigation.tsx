@@ -40,6 +40,8 @@ export type AppScreen =
   /** Menu « Voyage » : partage, calendrier, réglages, réinitialisation. */
   | { kind: 'menu' }
   | { kind: 'trips' }
+  /** « Nouveau voyage » : choisir d'où il vient (code, partage, programme, générateur). */
+  | { kind: 'new-trip' }
   | { kind: 'share' }
   /** Voyager à plusieurs : synchronisation et invitations. */
   | { kind: 'group' }
@@ -53,6 +55,8 @@ export type AppScreen =
   /** Fin d'arrivée d'un voyage : hors ligne et rappels (après import ou génération). */
   | { kind: 'trip-ready' }
   | { kind: 'import-file' }
+  /** « J'ai déjà un programme » : texte collé ou fichier, recopié par l'IA. */
+  | { kind: 'import-program' }
   | { kind: 'document'; documentId: string }
   /** `preset` : ce qu'on ajoute est déjà connu (depuis un trajet, une suggestion). */
   | { kind: 'add-document'; dayIndex?: number; preset?: 'ticket' | 'hotel' }

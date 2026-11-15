@@ -19,6 +19,8 @@ export type TripSource =
   | 'csv'
   | 'share'
   | 'generator'
+  /** Programme existant (texte, PDF, Word, tableur) recopié par l'import. */
+  | 'program'
   | 'legacy'
 
 export interface StoredTrip {

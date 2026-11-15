@@ -13,10 +13,18 @@ export interface TripTarget {
 export type NativePathIntent =
   | { kind: 'trip'; target: TripTarget }
   | { kind: 'share'; share: IncomingShare }
+  /** `/?importer=programme` : l'import d'un programme existant. */
+  | { kind: 'program-import' }
   /** L'accueil : on referme les écrans ouverts. */
   | { kind: 'home' }
   /** Une autre page du site : rechargement classique. */
   | { kind: 'page'; href: string }
+
+/**
+ * Paramètre du lien de tripbrain.fr vers l'import d'un programme existant :
+ * `/?importer=programme`.
+ */
+export const PROGRAM_IMPORT_PARAM = 'importer'
 
 const REMINDER_KINDS: readonly ReminderKind[] = [
   'transport-eve',
@@ -61,6 +69,9 @@ export function parseNativePath(
     if (target) return { kind: 'trip', target }
     const share = readIncomingShare(url.search, url.hash)
     if (share) return { kind: 'share', share }
+    if (url.searchParams.get(PROGRAM_IMPORT_PARAM) === 'programme') {
+      return { kind: 'program-import' }
+    }
     return { kind: 'home' }
   }
 

@@ -26,9 +26,11 @@ import {
   type NativeStatusBarStyle,
 } from '@/lib/native-app'
 import { ImportFileScreen } from '@/components/onboarding/import-file-screen'
+import { NewTripSheet } from '@/components/trip-menu/new-trip-sheet'
 import { ReceiveScreen } from '@/components/receive/receive-screen'
 import { TripReadyScreen } from '@/components/onboarding/trip-ready-screen'
 import { GeneratorScreen } from '@/components/generator/generator-flow'
+import { ProgramImportScreen } from '@/components/generator/program-import-flow'
 import { DayScreen } from '@/components/day/day-screen'
 import { ActivityScreen } from '@/components/day/activity-screen'
 import { TransportScreen } from '@/components/day/transport-screen'
@@ -94,6 +96,11 @@ const REGISTRY: { [K in AppScreenKind]: Entry<K> } = {
     presentation: 'screen',
     label: 'Voyager à plusieurs',
   },
+  'new-trip': {
+    component: NewTripSheet,
+    presentation: 'sheet',
+    label: 'Nouveau voyage',
+  },
   receive: {
     component: ReceiveScreen,
     presentation: 'screen',
@@ -133,6 +140,11 @@ const REGISTRY: { [K in AppScreenKind]: Entry<K> } = {
     component: ImportFileScreen,
     presentation: 'screen',
     label: 'Importer un fichier',
+  },
+  'import-program': {
+    component: ProgramImportScreen,
+    presentation: 'screen',
+    label: 'Importer un programme existant',
   },
   document: {
     component: DocumentScreen,

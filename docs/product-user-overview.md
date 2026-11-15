@@ -101,11 +101,19 @@ chemins :
 - le **generateur** de tripbrain.fr : tu decris ton voyage, ChatGPT ou Claude
   en fait un programme jour par jour, et un clic l'ouvre ici. Sur un autre
   appareil, un code a huit chiffres fait le meme trajet.
-- un **fichier** que tu as prepare toi-meme : JSON, Excel ou trois CSV.
+- un **programme que tu as deja ailleurs** : le PDF de l'agence, une reponse
+  de ChatGPT, des notes, un Word ou un tableur. Tu colles le texte ou tu
+  choisis le fichier (PDF, Word, Excel, CSV, texte, 3 Mo max), et l'app le
+  recopie jour par jour sans rien inventer. Avant d'enregistrer, elle montre
+  ce qui a ete repris et ce qui manquait dans ton document (nuit sans
+  hebergement, trajet sans horaire, journee vide), a completer ensuite dans le
+  mode edition. Les dates du programme font foi ; s'il n'en a pas, tu donnes
+  la date de depart.
+- un **fichier** deja au format TripBrain : JSON, Excel ou trois CSV.
 - un **partage** recu de quelqu'un d'autre : QR code, lien ou code.
 
 Le premier ecran de l'app, celui qu'on voit sans voyage enregistre, mene aux
-trois. C'est aussi la que se trouve la demo.
+quatre. C'est aussi la que se trouve la demo.
 
 ### Itineraire jour par jour
 

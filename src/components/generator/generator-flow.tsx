@@ -52,7 +52,9 @@ type View = 'journey' | 'recap' | 'generation'
  * ou son résultat, sinon le parcours.
  */
 function initialView(state: GenerationState): View {
-  return state.status === 'idle' ? 'journey' : 'generation'
+  return state.status === 'idle' || state.request?.mode === 'import'
+    ? 'journey'
+    : 'generation'
 }
 
 /** La date choisie est-elle exploitable : lisible, et pas dans le passé ? */
@@ -103,8 +105,14 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
       startDate: draft.startDate,
     })
 
+  /**
+   * La demande du générateur. Le magasin sert aussi à l'import d'un programme
+   * existant, qui a son propre écran : son état ne s'affiche pas ici.
+   */
+  const request = state.request?.mode === 'import' ? null : state.request
+
   const regenerate = () => {
-    if (state.request) launch(state.request)
+    if (request) launch(request)
   }
 
   /**
@@ -144,11 +152,11 @@ export function GeneratorScreen({ onClose }: ScreenProps<'generator'>) {
     }
   }
 
-  if (view === 'generation' && state.status !== 'idle') {
+  if (view === 'generation' && state.status !== 'idle' && request) {
     if (state.status === 'error' && state.error?.reason === 'not_configured') {
       return (
         <GeneratorUnavailable
-          request={state.request}
+          request={request}
           onBack={editRequest}
           onClose={onClose}
         />

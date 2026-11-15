@@ -8,6 +8,7 @@ import {
   CalendarPlus,
   CloudDownload,
   Download,
+  FileText,
   FileUp,
   Info,
   KeyRound,
@@ -218,9 +219,16 @@ export function MenuScreen({ onClose }: ScreenProps<'menu'>) {
           onClick={() => push({ kind: 'generator' })}
         />
         <ListRow
+          icon={FileText}
+          tone="success"
+          label="Importer un programme existant"
+          description="PDF, Word, tableur ou texte collé"
+          onClick={() => push({ kind: 'import-program' })}
+        />
+        <ListRow
           icon={FileUp}
           tone="muted"
-          label="Importer un fichier"
+          label="Importer un fichier TripBrain"
           description="JSON, Excel ou CSV"
           onClick={() => push({ kind: 'import-file' })}
         />

@@ -106,6 +106,7 @@ export const analyticsEvents = {
         'share_code',
         'demo',
         'generator',
+        'program',
       ),
       days_count: count(),
       activities_count: count(),
@@ -284,12 +285,15 @@ export const analyticsEvents = {
   generator_started: {
     description:
       "Lancement d'une génération d'itinéraire dans l'app, et par quelle voie : phrase libre ou questionnaire.",
-    properties: { mode: choice('express', 'brief') },
+    properties: { mode: choice('express', 'brief', 'import') },
   },
   generator_completed: {
     description:
       "Fin d'une génération d'itinéraire dans l'app, avec le nombre de journées obtenues.",
-    properties: { mode: choice('express', 'brief'), days_count: count() },
+    properties: {
+      mode: choice('express', 'brief', 'import'),
+      days_count: count(),
+    },
   },
   generator_failed: {
     description:
@@ -302,6 +306,7 @@ export const analyticsEvents = {
         'overloaded',
         'refused',
         'invalid_json',
+        'not_a_program',
         'invalid_request',
         'network',
         'unknown',
