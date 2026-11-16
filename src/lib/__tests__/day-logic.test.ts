@@ -8,7 +8,9 @@ import {
   dayEyebrow,
   directionsUrl,
   findNextActivity,
+  findDepartingStay,
   findStay,
+  stayEmphasis,
   formatDateRange,
   formatDuration,
   isApplePlatform,
@@ -418,5 +420,77 @@ describe('itinéraires et transports', () => {
       name: 'Thé au lait perlé (bubble tea)',
       detail: undefined,
     })
+  })
+})
+
+describe('findDepartingStay', () => {
+  const first = {
+    id: 'a',
+    name: 'Premier',
+    address: 'Rue A',
+    bookingUrl: '',
+    checkIn: '2026-05-10',
+    checkOut: '2026-05-12',
+  }
+  const second = {
+    ...first,
+    id: 'b',
+    name: 'Second',
+    checkIn: '2026-05-12',
+    checkOut: '2026-05-14',
+  }
+
+  it('donne le logement quitté le jour du transfert', () => {
+    const itinerary = [
+      day(0, { accommodation: first }),
+      day(1),
+      day(2, { accommodation: second }),
+    ]
+    expect(findDepartingStay(itinerary, 2)?.accommodation).toBe(first)
+  })
+
+  it('ne dit rien quand on dort au même endroit', () => {
+    const itinerary = [day(0, { accommodation: first }), day(1), day(2)]
+    expect(findDepartingStay(itinerary, 1)).toBeNull()
+  })
+
+  it('donne le logement quitté même sans hébergement le soir', () => {
+    const itinerary = [day(0, { accommodation: first }), day(1), day(2)]
+    expect(findDepartingStay(itinerary, 2)?.accommodation).toBe(first)
+  })
+
+  it('ne dit rien le premier jour', () => {
+    expect(findDepartingStay([day(0, { accommodation: first })], 0)).toBeNull()
+  })
+})
+
+describe('stayEmphasis', () => {
+  const hotel = {
+    id: 'h',
+    name: 'Hôtel',
+    address: 'Rue',
+    bookingUrl: '',
+    checkIn: '2026-05-10',
+    checkOut: '2026-05-13',
+  }
+  const itinerary = [day(0, { accommodation: hotel }), day(1), day(2)]
+  const at = (dayOffset: number, hours: number) =>
+    new Date(2026, 4, 10 + dayOffset, hours, 0)
+
+  it('met en avant le jour d’arrivée, dès le matin', () => {
+    const stay = findStay(itinerary, 0)!
+    expect(stayEmphasis(itinerary[0], stay, at(0, 9))).toBe('full')
+  })
+
+  it('reste en une ligne la journée, passe en grand à partir de 16 h', () => {
+    const stay = findStay(itinerary, 1)!
+    expect(stayEmphasis(itinerary[1], stay, at(1, 15))).toBe('compact')
+    expect(stayEmphasis(itinerary[1], stay, at(1, 16))).toBe('full')
+  })
+
+  it('reste en une ligne pour une autre journée que celle du jour', () => {
+    const stay = findStay(itinerary, 2)!
+    expect(stayEmphasis(itinerary[2], stay, at(1, 20))).toBe('compact')
+    expect(stayEmphasis(itinerary[2], stay, undefined)).toBe('compact')
   })
 })

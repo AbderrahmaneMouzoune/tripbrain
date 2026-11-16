@@ -227,6 +227,19 @@ const DAY_COLUMNS: ColumnDef[] = [
     example: '5 rue Tholozé 75018 Paris',
   },
   {
+    name: 'accommodation_local_address',
+    required: false,
+    description:
+      'Adresse en écriture locale, montrée au chauffeur (Chine, Japon…)',
+    example: '上海市静安区巨鹿路786弄',
+  },
+  {
+    name: 'accommodation_coordinates',
+    required: false,
+    description: "Position de l'hébergement : lat|lng",
+    example: '48.8867|2.3361',
+  },
+  {
     name: 'accommodation_booking_url',
     required: false,
     description: 'URL de réservation',
@@ -509,6 +522,8 @@ const DAYS_HEADERS = [
   'accommodation_currency',
   'accommodation_booking_reference',
   'accommodation_status',
+  'accommodation_local_address',
+  'accommodation_coordinates',
 ] as const
 
 const DAYS_ROWS = [
@@ -536,6 +551,8 @@ const DAYS_ROWS = [
     'EUR',
     'HDM-2026-001',
     'booked',
+    '',
+    '48.8867|2.3361',
   ],
   [
     'day-2',
@@ -561,6 +578,8 @@ const DAYS_ROWS = [
     'EUR',
     'HDM-2026-001',
     'booked',
+    '',
+    '48.8867|2.3361',
   ],
   [
     'day-3',
@@ -586,6 +605,8 @@ const DAYS_ROWS = [
     'EUR',
     'LRL-2026-042',
     'booked',
+    '',
+    '45.7578|4.8320',
   ],
 ] as const
 

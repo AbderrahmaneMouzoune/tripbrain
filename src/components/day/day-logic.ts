@@ -317,6 +317,43 @@ export function findStay(
   return null
 }
 
+/**
+ * Le logement qu'on quitte ce jour-là : celui de la nuit précédente, quand ce
+ * n'est pas celui du soir. Le matin d'un transfert, son adresse sert encore
+ * (bagagerie, objet oublié) alors que « Ce soir » montre déjà le suivant.
+ */
+export function findDepartingStay(
+  itinerary: DayItinerary[],
+  dayIndex: number,
+): Stay | null {
+  if (dayIndex <= 0) return null
+  const previous = findStay(itinerary, dayIndex - 1)
+  if (!previous) return null
+  const tonight = findStay(itinerary, dayIndex)
+  if (tonight && tonight.accommodation === previous.accommodation) return null
+  return previous
+}
+
+/** Heure à partir de laquelle l'hébergement passe devant la journée. */
+export const EVENING_HOUR = 16
+
+/**
+ * Faut-il montrer l'hébergement en grand en tête de journée ? Oui quand on
+ * va y dormir bientôt : le jour même à partir de 16 h, et toute la journée
+ * d'arrivée (on y va, valise en main). Sinon une ligne suffit, l'adresse
+ * restant lisible sans toucher l'écran.
+ */
+export function stayEmphasis(
+  day: DayItinerary,
+  stay: Stay,
+  now: Date | undefined,
+): 'full' | 'compact' {
+  if (!now || dayTiming(day.date, now) !== 'today') return 'compact'
+  // Jour d'arrivée : l'hébergement est porté par la journée elle-même.
+  if (day.accommodation === stay.accommodation) return 'full'
+  return now.getHours() >= EVENING_HOUR ? 'full' : 'compact'
+}
+
 // ── Avant le départ ───────────────────────────────────────────────────────────
 
 export type DepartureChecklistId =

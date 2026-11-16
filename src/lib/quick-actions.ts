@@ -581,6 +581,19 @@ export function buildAccommodationActions(
     })
   }
 
+  const localAddress = accommodation.localAddress
+
+  if (filled(localAddress)) {
+    actions.push({
+      id: 'accommodation-copy-local-address',
+      kind: 'copy',
+      label: "Copier l'adresse locale",
+      hint: localAddress,
+      icon: 'copy',
+      run: () => handlers.onCopy(localAddress),
+    })
+  }
+
   const reference = accommodation.bookingReference
 
   if (filled(reference)) {

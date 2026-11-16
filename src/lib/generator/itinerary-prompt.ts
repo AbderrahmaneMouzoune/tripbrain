@@ -70,7 +70,7 @@ export const IMPORT_JSON_SHAPE = JSON_SHAPE.replace(
   '"datesFound":true,"days":[',
 ).replace(
   '"activities":[',
-  '"accommodation":{"name":"Nom de l\'hébergement","address":"Adresse","bookingReference":"Référence","price":120,"currency":"EUR"},"activities":[',
+  '"accommodation":{"name":"Nom de l\'hébergement","address":"Adresse","localAddress":"Adresse en écriture locale","coordinates":{"lat":31.2,"lng":121.4},"bookingReference":"Référence","price":120,"currency":"EUR"},"activities":[',
 )
 
 /** Calendrier listé quand la durée n'est pas imposée : le maximum accepté. */
@@ -156,6 +156,7 @@ const FIDELITY_RULES = [
   '- Recopie tels quels les noms propres, horaires, numéros de vol ou de train, adresses et références de réservation.',
   '- Seuls ajouts permis : "tripTitle" et "summary" (une synthèse factuelle de ce que contient le programme), un "title" de journée quand le programme n’en donne pas (la ville et l’essentiel du jour), le classement dans les énumérations ("type", "dayType"), et les coordonnées GPS approximatives des villes et des lieux nommés. Omets les coordonnées d’un lieu que tu ne situes pas avec certitude.',
   '- "accommodation" : l’hébergement de la nuit, sur chaque journée dont la nuit s’y passe, uniquement s’il est nommé dans le programme.',
+  '- "localAddress" : l’adresse de l’hébergement dans l’écriture du pays (caractères chinois, japonais, coréens, cyrilliques, arabes…), recopiée seulement si le programme la donne. Ne la traduis ni ne la translittère jamais toi-même : un chauffeur la lira telle quelle.',
   '- "transport" : uniquement un trajet entre deux villes qui figure dans le programme (vol, train, bus, route). Un déplacement local mentionné devient une activité de type "transport".',
 ]
 

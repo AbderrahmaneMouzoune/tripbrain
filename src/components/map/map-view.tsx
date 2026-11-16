@@ -186,6 +186,7 @@ export function MapView(_props: {}) {
           const target = stops[stopIndex]
           if (target) selectDay(target.startIndex, 'map')
         }}
+        onSelectStay={() => push({ kind: 'accommodation', dayIndex: index })}
         userPosition={position}
         recenterToken={recenterToken}
       />

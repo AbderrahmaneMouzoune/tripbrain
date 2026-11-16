@@ -1,15 +1,7 @@
 'use client'
 
 import { useState, type Ref } from 'react'
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Hotel,
-  Info,
-  Navigation,
-  X,
-} from 'lucide-react'
+import { Check, ChevronDown, Info, Navigation, X } from 'lucide-react'
 import type { Activity, DayItinerary } from '@/lib/itinerary-data'
 import { cn } from '@/lib/utils'
 import { useAppNav } from '@/components/app/navigation'
@@ -216,36 +208,6 @@ export function DayTimeline({
         )
       })}
     </ol>
-  )
-}
-
-/** « Ce soir » : l'hébergement en une ligne, le détail dans sa fiche. */
-export function StayRow({
-  dayIndex,
-  editor,
-}: {
-  dayIndex: number
-  editor: DayEditor
-}) {
-  const { push } = useAppNav()
-  const stay = editor.stay
-  if (!stay) return null
-  return (
-    <button
-      type="button"
-      onClick={() => push({ kind: 'accommodation', dayIndex })}
-      className="pressable focus-visible:ring-ring/50 flex min-h-[52px] w-full items-center gap-3 px-3.5 text-left outline-none focus-visible:ring-[3px]"
-    >
-      <Hotel className="text-muted-foreground size-5 shrink-0" aria-hidden />
-      <span className="min-w-0 flex-1 truncate text-[15px] font-bold">
-        <span className="text-muted-foreground font-medium">Ce soir · </span>
-        {stay.accommodation.name || 'Hébergement'}
-      </span>
-      <ChevronRight
-        className="text-muted-foreground size-5 shrink-0"
-        aria-hidden
-      />
-    </button>
   )
 }
 

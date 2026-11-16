@@ -461,9 +461,18 @@ export const analyticsEvents = {
   },
   driver_mode_opened: {
     description:
-      'Ouverture du mode chauffeur (adresse du logement en très grand), avec ou sans écran maintenu allumé.',
+      'Ouverture du mode chauffeur (adresse du logement en très grand), avec ou sans écran maintenu allumé, et si une adresse en écriture locale est connue — jamais l’adresse.',
     properties: {
       wake_lock: flag(),
+      local_address: flag(),
+    },
+  },
+  accommodation_address_copied: {
+    description:
+      'Copie de l’adresse du logement, et depuis quel écran — jamais l’adresse elle-même.',
+    properties: {
+      surface: choice('today', 'accommodation', 'driver'),
+      local: flag(),
     },
   },
   location_requested: {

@@ -10,7 +10,7 @@ import type {
 import { MapPin } from 'lucide-react'
 import type { Activity, DayItinerary } from '@/lib/itinerary-data'
 import { cn } from '@/lib/utils'
-import { cityStops } from '@/components/day/day-logic'
+import { cityStops, findStay } from '@/components/day/day-logic'
 
 export type MapScope = 'day' | 'trip'
 
@@ -56,6 +56,10 @@ function selectedPinHtml(label: string, name: string) {
   return `<span class="relative flex size-[52px] items-center justify-center"><span class="animate-bounce-soft bg-secondary text-secondary-foreground border-card ring-secondary/25 flex size-[42px] items-center justify-center rounded-full border-[3px] font-sans text-lg font-black shadow-lg ring-[6px]">${escapeHtml(label)}</span><span class="bg-ink text-ink-foreground absolute top-3 left-[50px] max-w-[180px] truncate rounded-[10px] px-2.5 py-1 font-sans text-[13px] font-black whitespace-nowrap shadow-md">${escapeHtml(name)}</span></span>`
 }
 
+/** Repère de l'hébergement du soir : une maison, aux couleurs de « Ce soir ». */
+const STAY_PIN_HTML =
+  '<span class="flex size-11 items-center justify-center"><span class="bg-secondary text-secondary-foreground border-card flex size-[34px] items-center justify-center rounded-[12px] border-[2.5px] shadow-md"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span></span>'
+
 const USER_PIN_HTML =
   '<span class="bg-primary/20 flex size-11 items-center justify-center rounded-full"><span class="animate-halo bg-primary border-card size-4 rounded-full border-[3px] shadow-md"></span></span>'
 
@@ -72,6 +76,7 @@ export function TripLeaflet({
   selectedStop,
   onSelectActivity,
   onSelectStop,
+  onSelectStay,
   userPosition,
   recenterToken,
   className,
@@ -83,6 +88,8 @@ export function TripLeaflet({
   selectedStop: number | null
   onSelectActivity: (activityId: string) => void
   onSelectStop: (stopIndex: number) => void
+  /** Toucher la maison ouvre la fiche de l'hébergement du soir. */
+  onSelectStay?: () => void
   userPosition: [number, number] | null
   /** Change à chaque demande de recentrage sur la position. */
   recenterToken: number
@@ -99,8 +106,8 @@ export function TripLeaflet({
   const [isLoaded, setIsLoaded] = useState(false)
 
   // Les rappels changent d'identité à chaque rendu : on garde les derniers.
-  const handlersRef = useRef({ onSelectActivity, onSelectStop })
-  handlersRef.current = { onSelectActivity, onSelectStop }
+  const handlersRef = useRef({ onSelectActivity, onSelectStop, onSelectStay })
+  handlersRef.current = { onSelectActivity, onSelectStop, onSelectStay }
 
   useEffect(() => {
     let cancelled = false
@@ -258,6 +265,20 @@ export function TripLeaflet({
         if (selected) selectedPoint = activity.coordinates
       })
       if (placed.length > 1) drawRoute(points, 'secondary')
+      // L'hébergement du soir, hors du tracé : on y rentre, on n'y passe pas.
+      const stay = findStay(itinerary, dayIndex)
+      const home = stay?.accommodation.coordinates
+      if (stay && Array.isArray(home) && home.length === 2) {
+        addMarker(
+          home,
+          STAY_PIN_HTML,
+          44,
+          `Hébergement du soir : ${stay.accommodation.name || 'hébergement'}`,
+          false,
+          () => handlersRef.current.onSelectStay?.(),
+        )
+        points.push(home)
+      }
       // Aucune activité localisée : le centre de la journée situe au moins la ville.
       if (placed.length === 0 && day) {
         addMarker(

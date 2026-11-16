@@ -91,6 +91,15 @@ const generatedTransportSchema = z.object({
 const generatedAccommodationSchema = z.object({
   name: z.string().describe("Nom de l'hébergement"),
   address: z.string().optional().describe('Adresse'),
+  localAddress: z
+    .string()
+    .optional()
+    .describe(
+      'Adresse en écriture locale (chinois, japonais…), seulement si le programme la donne',
+    ),
+  coordinates: coordinatesSchema
+    .optional()
+    .describe("Coordonnées GPS de l'hébergement"),
   checkIn: z.string().optional().describe("Date d'arrivée (YYYY-MM-DD)"),
   checkOut: z.string().optional().describe('Date de départ (YYYY-MM-DD)'),
   bookingReference: z.string().optional().describe('Référence de réservation'),
@@ -372,6 +381,8 @@ export function toDayItineraries(
           id: `acc-${dayIndex + 1}`,
           name: day.accommodation.name,
           address: day.accommodation.address ?? '',
+          localAddress: day.accommodation.localAddress,
+          coordinates: toCoords(day.accommodation.coordinates),
           bookingUrl: '',
           checkIn: day.accommodation.checkIn ?? '',
           checkOut: day.accommodation.checkOut ?? '',

@@ -7,6 +7,13 @@ export interface Accommodation extends EntityMetadata {
   id: string
   name: string
   address: string
+  /**
+   * Adresse écrite comme sur place (上海市静安区巨鹿路786弄, 東京都新宿区…),
+   * pour un chauffeur ou un passant qui ne lit pas l'alphabet latin.
+   */
+  localAddress?: string
+  /** Position sur la carte : l'épingle du logement */
+  coordinates?: [number, number]
   bookingUrl: string
   checkIn: string
   checkOut: string
@@ -140,6 +147,8 @@ export const itinerary: DayItinerary[] = [
       name: "柃居 B&B - Jing'an Temple Branch",
       address:
         "Lane 786, Julu Road, Jing'an District, Shanghai, Jing'an, 200000 Shanghai, Chine",
+      localAddress: '上海市静安区巨鹿路786弄',
+      coordinates: [31.2186, 121.4489],
       bookingUrl: 'https://secure.booking.com/confirmation.fr.html?aid=2311236',
       checkIn: '2026-05-10',
       checkOut: '2026-05-12',
@@ -1468,6 +1477,7 @@ export const itinerary: DayItinerary[] = [
       id: 'acc-day14',
       name: 'Xin Hui City Hotel (Shanghai Railway Station Changshou Road Subway Station Branch)',
       address: 'No. 949 Jiaozhou Road, Putuo, Shanghai, Chine',
+      localAddress: '上海市普陀区胶州路949号',
       bookingUrl:
         'https://fr.trip.com/hotels/ctorderdetail?orderid=1306266282788121',
       checkIn: '2026-05-23',
@@ -1609,6 +1619,7 @@ export const itinerary: DayItinerary[] = [
       id: 'acc-day16',
       name: 'Caesar Metro Taipei',
       address: 'No.167 Bangka Blvd, Wanhua District, Taipei, Taïwan, Chine',
+      localAddress: '台北市萬華區艋舺大道167號',
       bookingUrl:
         'https://fr.trip.com/hotels/ctorderdetail?orderid=1306267683977184',
       checkIn: '2026-05-25',

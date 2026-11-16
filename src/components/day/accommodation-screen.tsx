@@ -32,6 +32,7 @@ import {
   shortDate,
 } from '@/components/day/day-logic'
 import { openDirections, useApplePlatform } from '@/components/day/day-ui'
+import { trackEvent } from '@/lib/analytics/client'
 
 /** « Hôtel (Succursale) » → le nom et sa précision entre parenthèses. */
 function splitName(name: string): { title: string; subtitle?: string } {
@@ -41,7 +42,7 @@ function splitName(name: string): { title: string; subtitle?: string } {
 }
 
 /** Hauteur des photos en tête de fiche (px). */
-const HERO_HEIGHT = 200
+const HERO_HEIGHT = 150
 
 /** Fiche de l'hébergement du soir. */
 export function AccommodationScreen({
@@ -89,9 +90,19 @@ export function AccommodationScreen({
       address: [accommodation.name, accommodation.address]
         .filter(Boolean)
         .join(' '),
+      coordinates: accommodation.coordinates,
     },
     apple,
   )
+  const address = accommodation.address.trim()
+  const localAddress = accommodation.localAddress?.trim() ?? ''
+  const copyAddress = (value: string, local: boolean) => {
+    trackEvent('accommodation_address_copied', {
+      surface: 'accommodation',
+      local,
+    })
+    void editor.copyText(value, 'Adresse copiée')
+  }
   const hasDates = Boolean(accommodation.checkIn && accommodation.checkOut)
   const backButton = (
     <Button
@@ -122,7 +133,7 @@ export function AccommodationScreen({
         {images.length > 0 ? (
           <section
             aria-label="Photos de l’hébergement"
-            className="relative grid h-[200px] shrink-0 grid-cols-[2fr_1fr] grid-rows-2 gap-[3px]"
+            className="relative grid h-[150px] shrink-0 grid-cols-[2fr_1fr] grid-rows-2 gap-[3px]"
           >
             <Lightbox
               images={images.map((url, index) => ({
@@ -212,13 +223,104 @@ export function AccommodationScreen({
               {subtitle}
             </p>
           )}
-          {accommodation.address && (
-            <p className="text-muted-foreground mt-2 flex gap-1.5 text-[13px] leading-[18px]">
-              <MapPin className="mt-px size-4 shrink-0" aria-hidden />
-              <span className="select-text">{accommodation.address}</span>
-            </p>
-          )}
         </div>
+
+        {/* L'adresse d'abord : c'est ce qu'on vient chercher ici. */}
+        <section
+          aria-label="Adresse"
+          className="bg-card border-border mx-5 mt-3.5 flex flex-col gap-3 rounded-[20px] border p-3.5"
+        >
+          {address || localAddress ? (
+            <>
+              <div className="flex flex-col gap-1.5">
+                {address && (
+                  <button
+                    type="button"
+                    onClick={() => copyAddress(address, false)}
+                    aria-label={`Copier l’adresse : ${address}`}
+                    className="pressable flex gap-2 rounded-lg text-left"
+                  >
+                    <MapPin
+                      className="text-secondary-strong mt-0.5 size-5 shrink-0"
+                      aria-hidden
+                    />
+                    <span className="text-[17px] leading-[23px] font-black">
+                      {address}
+                    </span>
+                  </button>
+                )}
+                {localAddress && (
+                  <button
+                    type="button"
+                    onClick={() => copyAddress(localAddress, true)}
+                    aria-label={`Copier l’adresse locale : ${localAddress}`}
+                    className="pressable text-muted-foreground rounded-lg pl-7 text-left text-[17px] leading-[23px] font-bold"
+                  >
+                    {localAddress}
+                  </button>
+                )}
+                <p className="text-muted-foreground pl-7 text-xs font-bold">
+                  Touchez l’adresse pour la copier
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {directions && (
+                  <a
+                    href={directions}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(event) =>
+                      openDirections(event, 'accommodation', 'accommodation', {
+                        name: accommodation.name,
+                        address: accommodation.address,
+                        coordinates: accommodation.coordinates,
+                      })
+                    }
+                    className={cn(
+                      'border-border-strong bg-card pressable flex h-12 items-center justify-center gap-2 rounded-[14px] border-[1.5px] px-2.5 text-sm font-extrabold',
+                      !address && 'col-span-2',
+                    )}
+                  >
+                    <Navigation className="size-5 shrink-0" aria-hidden />
+                    Itinéraire
+                  </a>
+                )}
+                {address && (
+                  <button
+                    type="button"
+                    onClick={() => copyAddress(address, false)}
+                    className={cn(
+                      'border-border-strong bg-card pressable flex h-12 items-center justify-center gap-2 rounded-[14px] border-[1.5px] px-2.5 text-sm font-extrabold',
+                      !directions && 'col-span-2',
+                    )}
+                  >
+                    <Copy className="size-5 shrink-0" aria-hidden />
+                    Copier
+                  </button>
+                )}
+                <Button
+                  size="xl"
+                  className="col-span-2 w-full"
+                  onClick={() =>
+                    push({ kind: 'driver', dayIndex: screen.dayIndex })
+                  }
+                >
+                  <Car />
+                  Montrer au chauffeur
+                </Button>
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={editor.editAccommodation}
+              className="text-primary flex min-h-11 items-center gap-1 text-sm font-extrabold"
+            >
+              <Plus className="size-4" aria-hidden />
+              Ajouter l’adresse
+            </button>
+          )}
+        </section>
 
         {hasDates && (
           <section
@@ -336,54 +438,6 @@ export function AccommodationScreen({
             )}
           </div>
         </section>
-
-        <span className="min-h-6 flex-1" />
-
-        <div className="flex flex-col gap-2.5 px-5">
-          <div className="grid grid-cols-2 gap-2.5">
-            {directions && (
-              <a
-                href={directions}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(event) =>
-                  openDirections(event, 'accommodation', 'accommodation', {
-                    name: accommodation.name,
-                    address: accommodation.address,
-                  })
-                }
-                className="border-border-strong bg-card pressable flex h-[52px] items-center justify-center gap-2 rounded-[14px] border-[1.5px] px-2.5 text-left text-sm leading-[17px] font-extrabold"
-              >
-                <Navigation className="size-5 shrink-0" aria-hidden />
-                Itinéraire vers le logement
-              </a>
-            )}
-            {accommodation.address && (
-              <button
-                type="button"
-                onClick={() =>
-                  void editor.copyText(accommodation.address, 'Adresse copiée')
-                }
-                className="border-border-strong bg-card pressable flex h-[52px] items-center justify-center gap-2 rounded-[14px] border-[1.5px] px-2.5 text-sm font-extrabold"
-              >
-                <Copy className="size-5 shrink-0" aria-hidden />
-                Copier l’adresse
-              </button>
-            )}
-          </div>
-          {accommodation.address && (
-            <Button
-              size="xl"
-              className="w-full"
-              onClick={() =>
-                push({ kind: 'driver', dayIndex: screen.dayIndex })
-              }
-            >
-              <Car />
-              Montrer au chauffeur
-            </Button>
-          )}
-        </div>
       </div>
       {editor.sheets}
     </div>

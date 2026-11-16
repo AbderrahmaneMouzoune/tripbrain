@@ -88,13 +88,20 @@ export function DriverScreen({ screen, onClose }: ScreenProps<'driver'>) {
   useEffect(() => {
     if (tracked.current || wakeLock === 'pending') return
     tracked.current = true
-    trackEvent('driver_mode_opened', { wake_lock: wakeLock === 'active' })
-  }, [wakeLock])
+    trackEvent('driver_mode_opened', {
+      wake_lock: wakeLock === 'active',
+      local_address: Boolean(stay?.accommodation.localAddress?.trim()),
+    })
+  }, [wakeLock, stay])
 
   const accommodation = stay?.accommodation
+  const address = accommodation?.address.trim() ?? ''
+  const localAddress = accommodation?.localAddress?.trim() ?? ''
+  // Le chauffeur lit d'abord l'écriture de son pays ; l'adresse latine suit.
+  const shown = localAddress || address
   // Fond de nuit sous la barre d'état : icônes claires.
-  useScreenStatusBar(accommodation?.address ? 'light' : null)
-  if (!accommodation?.address) {
+  useScreenStatusBar(shown ? 'light' : null)
+  if (!accommodation || !shown) {
     return (
       <MobileScreen onBack={onClose} backIcon="close" title="Pas d’adresse">
         <p className="text-muted-foreground text-sm">
@@ -133,8 +140,13 @@ export function DriverScreen({ screen, onClose }: ScreenProps<'driver'>) {
             ADRESSE
           </p>
           <p className="mt-2 text-[34px] leading-[1.15] font-black break-words select-text">
-            {accommodation.address}
+            {shown}
           </p>
+          {localAddress && address && (
+            <p className="text-muted-foreground mt-3 text-lg leading-6 font-bold break-words select-text">
+              {address}
+            </p>
+          )}
         </div>
 
         <div className="mx-5 mt-5">
@@ -153,9 +165,13 @@ export function DriverScreen({ screen, onClose }: ScreenProps<'driver'>) {
             variant="outline"
             size="xl"
             className="border-ink-foreground/40 text-ink-foreground hover:bg-ink-foreground/10 w-full border-[1.5px] bg-transparent"
-            onClick={() =>
-              void copyText(accommodation.address, 'Adresse copiée')
-            }
+            onClick={() => {
+              trackEvent('accommodation_address_copied', {
+                surface: 'driver',
+                local: Boolean(localAddress),
+              })
+              void copyText(shown, 'Adresse copiée')
+            }}
           >
             <Copy />
             Copier l’adresse

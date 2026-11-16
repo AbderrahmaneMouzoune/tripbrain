@@ -604,6 +604,21 @@ export const accommodationForm: EditFormSchema = {
       allowEmpty: true,
     },
     {
+      key: 'localAddress',
+      label: 'Adresse en langue locale',
+      type: 'textarea',
+      section: 'main',
+      placeholder: '上海市静安区巨鹿路786弄',
+      hint: 'Celle que lit un chauffeur sur place. Copiez-la depuis la confirmation de réservation ou Google Maps.',
+    },
+    {
+      key: 'coordinates',
+      label: 'Position sur la carte',
+      type: 'coordinates',
+      section: 'main',
+      folded: true,
+    },
+    {
       key: 'checkIn',
       label: 'Arrivée',
       type: 'date',

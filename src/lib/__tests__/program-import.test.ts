@@ -216,6 +216,29 @@ describe('toDayItineraries (import)', () => {
     })
   })
 
+  it('garde l’adresse locale et la position de l’hébergement', () => {
+    const { itinerary } = readImportedItinerary(
+      answer(
+        [
+          day({
+            accommodation: {
+              name: 'B&B',
+              address: 'Lane 786 Julu Road',
+              localAddress: '上海市静安区巨鹿路786弄',
+              coordinates: { lat: 31.2186, lng: 121.4489 },
+            },
+          }),
+        ],
+        { datesFound: true },
+      ),
+    )
+    const [first] = toDayItineraries(itinerary!, 'import')
+    expect(first.accommodation).toMatchObject({
+      localAddress: '上海市静安区巨鹿路786弄',
+      coordinates: [31.2186, 121.4489],
+    })
+  })
+
   it('reste « ai » par défaut, pour le générateur', () => {
     const { itinerary } = readImportedItinerary(
       answer([day()], { datesFound: true }),
