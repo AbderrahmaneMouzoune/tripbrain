@@ -77,6 +77,8 @@ function rowToDay(row: RawRow, index: number): DayRow {
       id: str(row['accommodation_id']) ?? `acc-${id}`,
       name: accName,
       address: str(row['accommodation_address']) ?? '',
+      localAddress: str(row['accommodation_local_address']),
+      coordinates: coords(row['accommodation_coordinates']),
       bookingUrl: str(row['accommodation_booking_url']) ?? '',
       checkIn: str(row['accommodation_check_in']) ?? '',
       checkOut: str(row['accommodation_check_out']) ?? '',

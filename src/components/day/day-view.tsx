@@ -9,7 +9,8 @@ import { QuickActionsTarget } from '@/components/quick-actions'
 import type { DayEditor } from '@/components/day/use-day-editor'
 import { PhotoCarousel } from '@/components/day/photo-carousel'
 import { DashedAdd, TransportSummary } from '@/components/day/day-sections'
-import { DayExtras, DayTimeline, StayRow } from '@/components/day/day-timeline'
+import { DayExtras, DayTimeline } from '@/components/day/day-timeline'
+import { TonightCard } from '@/components/day/tonight-card'
 import {
   findNextActivity,
   longDate,
@@ -116,6 +117,8 @@ export function DayView({
           </QuickActionsTarget>
         </div>
 
+        <TonightCard dayIndex={index} editor={editor} now={now} />
+
         {day.notes && (
           <p className="text-muted-foreground mx-5 mt-2 text-[15px] leading-[21px]">
             <PhoneText text={day.notes} />
@@ -161,9 +164,8 @@ export function DayView({
           />
         )}
 
-        {(editor.stay || hasExtras) && (
+        {hasExtras && (
           <div className="bg-card border-border divide-border/70 mx-5 mt-4 divide-y overflow-hidden rounded-[18px] border">
-            <StayRow dayIndex={index} editor={editor} />
             <DayExtras day={day} editor={editor} />
           </div>
         )}

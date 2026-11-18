@@ -508,3 +508,20 @@ describe('importFromXlsx', () => {
     expect(result.itinerary).toHaveLength(0)
   })
 })
+
+describe('importFromCsv — hébergement localisé', () => {
+  it('lit l’adresse locale et la position de l’hébergement', async () => {
+    const days = `id,date,day_number,city,title,accommodation_name,accommodation_address,accommodation_local_address,accommodation_coordinates
+day-1,2026-05-10,1,Shanghai,Arrivée,B&B,Lane 786 Julu Road,上海市静安区巨鹿路786弄,31.2186|121.4489`
+    const result = await importFromCsv([
+      makeCsvFile('days.csv', days),
+      makeCsvFile('activities.csv', ACTIVITIES_CSV),
+      makeCsvFile('transports.csv', TRANSPORTS_CSV),
+    ])
+    expect(result.itinerary[0].accommodation).toMatchObject({
+      address: 'Lane 786 Julu Road',
+      localAddress: '上海市静安区巨鹿路786弄',
+      coordinates: [31.2186, 121.4489],
+    })
+  })
+})

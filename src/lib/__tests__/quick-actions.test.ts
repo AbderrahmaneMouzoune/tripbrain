@@ -278,6 +278,19 @@ describe('buildAccommodationActions', () => {
     expect(ids(actions)).not.toContain('accommodation-booking')
   })
 
+  it('copie l’adresse en langue locale quand elle est connue', () => {
+    const handlers = entityHandlers()
+    const actions = buildAccommodationActions(
+      makeAccommodation({ localAddress: '上海市静安区巨鹿路786弄' }),
+      handlers,
+    )
+    find(actions, 'accommodation-copy-local-address').run?.()
+    expect(handlers.onCopy).toHaveBeenCalledWith('上海市静安区巨鹿路786弄')
+    expect(
+      ids(buildAccommodationActions(makeAccommodation(), entityHandlers())),
+    ).not.toContain('accommodation-copy-local-address')
+  })
+
   it('demande une confirmation avant de supprimer', () => {
     const handlers = entityHandlers()
     const actions = buildAccommodationActions(makeAccommodation(), handlers)
