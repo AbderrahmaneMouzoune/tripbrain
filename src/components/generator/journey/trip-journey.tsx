@@ -25,6 +25,11 @@ import {
   JourneyPanel,
   type PanelTab,
 } from '@/components/generator/journey/journey-panel'
+import {
+  briefTextLimit,
+  MAX_DESCRIPTION_LENGTH,
+  MAX_FREE_TEXT,
+} from '@/lib/generator/requests'
 import { BUDGETS, type TripBrief } from '@/lib/generator/trip-brief'
 import { triggerHaptic } from '@/lib/native-app'
 import {
@@ -472,7 +477,7 @@ export function TripJourney(props: TripJourneyProps) {
     }
     if (question.id === 'destination' && !returnTo) {
       secondary = {
-        label: 'Je préfère tout écrire en une phrase',
+        label: 'Je préfère tout raconter en quelques phrases',
         onClick: () => go('express'),
       }
     }
@@ -992,7 +997,7 @@ function QuestionScreen({
             }}
             placeholder={question.placeholder}
             autoComplete="off"
-            maxLength={300}
+            maxLength={briefTextLimit(question.id)}
             className="border-border-strong focus:border-primary h-14 w-full rounded-2xl border-2 bg-white px-4 text-[17px] font-bold outline-none placeholder:text-[#5b6b8c] focus:shadow-[0_0_0_4px_#e6eefd]"
           />
         )}
@@ -1005,7 +1010,7 @@ function QuestionScreen({
               onBriefChange(setText(brief, question.id, event.target.value))
             }
             placeholder={question.placeholder}
-            maxLength={300}
+            maxLength={briefTextLimit(question.id)}
             className="border-border-strong focus:border-primary h-[110px] w-full resize-none rounded-2xl border-2 bg-white px-4 py-3.5 text-base leading-[1.45] font-bold outline-none placeholder:text-[#5b6b8c] focus:shadow-[0_0_0_4px_#e6eefd]"
           />
         )}
@@ -1052,7 +1057,7 @@ function QuestionScreen({
                   onBriefChange({ ...brief, childrenAges: event.target.value })
                 }
                 placeholder="Âge des enfants, ex. : 4 et 9 ans"
-                maxLength={300}
+                maxLength={MAX_FREE_TEXT}
                 className="border-border-strong focus:border-primary h-12 w-full rounded-2xl border-2 bg-white px-4 text-[15px] font-bold outline-none placeholder:text-[#5b6b8c]"
               />
             )}
@@ -1184,7 +1189,11 @@ function QuestionScreen({
                             ? toggleIdea(value, idea)
                             : `${value ? `${value}\n` : ''}${idea}`
                       onBriefChange(
-                        setText(brief, question.id, nextValue.slice(0, 300)),
+                        setText(
+                          brief,
+                          question.id,
+                          nextValue.slice(0, briefTextLimit(question.id)),
+                        ),
                       )
                     }}
                   >
@@ -1727,6 +1736,11 @@ function ExpressScreen({
   detected: Detected[]
   onChange: (value: string) => void
 }) {
+  const counterId = useId()
+  const remaining = Math.max(0, MAX_DESCRIPTION_LENGTH - value.length)
+  // Le compteur n'apparaît qu'à l'approche de la limite : avant, il ne ferait
+  // que pousser à raccourcir un texte qui gagne à être détaillé.
+  const nearLimit = remaining <= MAX_DESCRIPTION_LENGTH * 0.2
   const tones: Record<string, string> = {
     Durée: 'bg-primary-soft text-primary-strong',
     Destination: 'bg-[#fff1e8] text-[#c2410c]',
@@ -1741,19 +1755,36 @@ function ExpressScreen({
         Mode express
       </p>
       <h2 className="font-display text-[29px] leading-[1.08]">
-        Racontez votre voyage en une phrase.
+        Racontez votre voyage en quelques phrases.
       </h2>
       <p className="text-muted-foreground text-[15px] font-bold">
-        On remplit le billet à mesure que vous écrivez.
+        On remplit le billet à mesure que vous écrivez. Plus vous en dites
+        (vols, hôtel réservé, allergies…), plus l’itinéraire colle.
       </p>
-      <textarea
-        aria-label="Votre voyage en une phrase"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        maxLength={300}
-        placeholder="Ex. : 5 jours à Lisbonne entre amis, tranquille, on aime les bonnes tables et les musées."
-        className="border-border-strong focus:border-primary h-[120px] w-full resize-none rounded-2xl border-2 bg-white px-4 py-3.5 text-base leading-[1.45] font-bold outline-none placeholder:text-[#5b6b8c] focus:shadow-[0_0_0_4px_#e6eefd]"
-      />
+      <div className="flex flex-col gap-1">
+        <textarea
+          aria-label="Votre voyage en quelques phrases"
+          aria-describedby={nearLimit ? counterId : undefined}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          maxLength={MAX_DESCRIPTION_LENGTH}
+          placeholder="Ex. : 5 jours à Lisbonne entre amis, tranquille, on aime les bonnes tables et les musées."
+          className="border-border-strong focus:border-primary [field-sizing:content] max-h-[45vh] min-h-[120px] w-full resize-none rounded-2xl border-2 bg-white px-4 py-3.5 text-base leading-[1.45] font-bold outline-none placeholder:text-[#5b6b8c] focus:shadow-[0_0_0_4px_#e6eefd]"
+        />
+        {nearLimit && (
+          <p
+            id={counterId}
+            aria-live="polite"
+            className={`self-end text-xs font-black tabular-nums ${
+              remaining === 0 ? 'text-[#c2410c]' : 'text-muted-foreground'
+            }`}
+          >
+            {remaining === 0
+              ? 'Limite atteinte'
+              : `Encore ${remaining} caractère${remaining > 1 ? 's' : ''}`}
+          </p>
+        )}
+      </div>
       <div className="flex flex-col gap-2">
         <p className="text-muted-foreground text-[10px] font-black tracking-[0.12em] uppercase">
           On a compris

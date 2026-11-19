@@ -65,7 +65,7 @@ const TRANSPORT_ICONS: Record<Transport['type'], typeof Plane> = {
  * avant d'enregistrer. Une fois le voyage enregistré, l'écran « voyage prêt »
  * prend le relais au-dessus des onglets.
  */
-export function OnboardingFlow(_props: {}) {
+export function OnboardingFlow(_props: Record<string, never>) {
   const { push, stack } = useAppNav()
   const [step, setStep] = useState<Step>({ kind: 'welcome' })
   // Demande d'une étape enfant au fond particulier (caméra du scan) : même

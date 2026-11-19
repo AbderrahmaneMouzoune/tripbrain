@@ -110,7 +110,7 @@ function tripRange(first?: string, last?: string): string {
 }
 
 /** Onglet Documents : premier usage, puis liste rangée par journée. */
-export function DocumentsTab(_props: {}) {
+export function DocumentsTab(_props: Record<string, never>) {
   const { itinerary } = useTrip()
   const { push } = useAppNav()
   const { files, loading, addFiles, exportAll } = useDocuments()

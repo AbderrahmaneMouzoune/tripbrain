@@ -11,12 +11,13 @@
 
 import { IconMoodSmile } from '@tabler/icons-react'
 import { durationFromDescription } from '@/lib/generator/duration-hint'
-import { MAX_DURATION_DAYS } from '@/lib/generator/requests'
+import { briefTextLimit, MAX_DURATION_DAYS } from '@/lib/generator/requests'
 import {
   BUDGETS,
   DAY_STARTS,
   DIETS,
   EMPTY_BRIEF,
+  EXPRESS_NOTE,
   FAMILIARITY_LEVELS,
   INTERESTS,
   MOBILITIES,
@@ -1197,8 +1198,6 @@ export function parseExpress(sentence: string): {
   return { detected, brief: patch }
 }
 
-const EXPRESS_NOTE = 'En une phrase : '
-
 /**
  * Applique ce que la phrase a révélé, sans écraser ce qui était déjà dit :
  * les envies s'ajoutent, un groupe déjà choisi garde ses compteurs, et la
@@ -1220,14 +1219,16 @@ export function applyExpress(brief: TripBrief, sentence: string): TripBrief {
       ...patch.interests.filter((id) => !next.interests.includes(id)),
     ]
   }
-  const trimmed = sentence.trim()
+  // Une seule ligne : « À savoir » se découpe ligne par ligne, et une suite
+  // de récit sans étiquette survivrait à la version suivante de la phrase.
+  const trimmed = sentence.trim().replace(/\s*\n\s*/g, ' ')
   if (trimmed) {
     const others = brief.extra
       .split('\n')
       .filter((line) => line.trim() && !line.startsWith(EXPRESS_NOTE))
     const note = `${EXPRESS_NOTE}${trimmed}`
     // La phrase passe en premier : c'est elle qui ne doit pas être coupée.
-    next.extra = [note, ...others].join('\n').slice(0, 300)
+    next.extra = [note, ...others].join('\n').slice(0, briefTextLimit('extra'))
   }
   return next
 }
@@ -1274,7 +1275,9 @@ export function sanitizeBrief(
   const brief: TripBrief = { ...EMPTY_BRIEF }
   for (const key of STRING_FIELDS) {
     const value = source[key]
-    if (typeof value === 'string') brief[key] = value.slice(0, 300)
+    if (typeof value === 'string') {
+      brief[key] = value.slice(0, briefTextLimit(key))
+    }
   }
   for (const key of LIST_FIELDS) {
     const value = source[key]

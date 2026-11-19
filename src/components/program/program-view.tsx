@@ -17,7 +17,7 @@ import {
 import { GroupSyncPill } from '@/components/share/group-sync-button'
 
 /** Onglet Programme : tout le voyage, étape par étape. */
-export function ProgramView(_props: {}) {
+export function ProgramView(_props: Record<string, never>) {
   const { itinerary, activeTrip } = useTrip()
   const { selectedDay, selectDay, push } = useAppNav()
   const { startEditing } = useEditSession()
