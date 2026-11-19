@@ -95,31 +95,32 @@ export const TRIP_SHAPES: BriefOption[] = [
   {
     id: 'roaming',
     icon: IconRoute,
-    label: 'Itinérant',
-    hint: 'Plusieurs villes étapes',
+    label: 'Souvent, en circuit',
+    hint: 'Une nouvelle ville tous les 2 ou 3 jours',
     prompt:
       'Voyage itinérant : plusieurs villes étapes, avec les trajets entre elles.',
   },
   {
     id: 'twoBases',
     icon: IconBuildingCommunity,
-    label: 'Deux ou trois bases',
-    hint: 'Peu de valises à refaire',
+    label: 'Deux ou trois fois',
+    hint: 'Quelques nuits dans chaque ville',
     prompt:
       'Deux ou trois bases seulement sur tout le séjour : limite les changements de ville et regroupe les journées par base.',
   },
   {
     id: 'base',
     icon: IconHome,
-    label: 'Une seule base',
-    hint: 'Excursions à la journée',
+    label: 'Jamais, un seul logement',
+    hint: 'Des excursions à la journée autour',
     prompt:
       'Une seule base pour tout le séjour : uniquement des excursions à la journée, avec retour au même endroit chaque soir.',
   },
   {
     id: 'undecided',
     icon: IconHelpCircle,
-    label: 'À toi de voir',
+    label: 'Je ne sais pas',
+    hint: 'L’IA choisit le plus logique',
     prompt:
       'Le voyageur n’a pas d’avis sur le découpage : propose le plus logique et explique ton choix dans le résumé.',
   },

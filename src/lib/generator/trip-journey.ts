@@ -186,7 +186,8 @@ export const QUESTIONS: Question[] = [
     id: 'shape',
     chapter: 'trip',
     kind: 'single',
-    title: 'Vous bougez, ou vous posez vos valises ?',
+    title: 'Combien de fois changez-vous de logement ?',
+    sub: 'Hôtel, location, chez des amis : c’est ce qui décide si l’on enchaîne les villes ou si l’on rayonne depuis un seul endroit.',
     short: 'Organisation',
     tracked: true,
     illustration: 'shape',
@@ -651,7 +652,7 @@ export function smartNote(question: Question, answers: JourneyAnswers): string {
         : ''
     case 'transports':
       return brief.shape === 'roaming'
-        ? 'Itinérant : le train relie souvent les étapes plus vite que la voiture.'
+        ? 'En circuit : le train relie souvent les étapes plus vite que la voiture.'
         : ''
     default:
       return ''
