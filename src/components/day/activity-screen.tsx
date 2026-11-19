@@ -147,7 +147,7 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
           </Button>
         </div>
 
-        <div className="bg-background relative -mt-[22px] flex flex-1 flex-col rounded-t-[26px] px-5 pt-[18px] pb-[calc(var(--safe-bottom)+24px)]">
+        <div className="bg-background relative -mt-[22px] flex flex-1 flex-col rounded-t-[26px] px-5 pt-[18px]">
           <p className="text-secondary-strong text-xs leading-4 font-black tracking-[0.08em]">
             {[
               ACTIVITY_TYPE_LABELS[activity.type],
@@ -301,10 +301,38 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
             </div>
           )}
 
+          <div className="mt-1 flex justify-between">
+            {activity.address ? (
+              <button
+                type="button"
+                onClick={() =>
+                  void editor.copyText(activity.address ?? '', 'Adresse copiée')
+                }
+                className="text-primary flex min-h-11 items-center gap-1.5 px-2 text-[15px] font-extrabold"
+              >
+                <Copy className="size-[18px]" aria-hidden />
+                Copier l’adresse
+              </button>
+            ) : (
+              <span />
+            )}
+            {activity.coordinates && itinerary.length > 0 && (
+              <button
+                type="button"
+                onClick={showOnMap}
+                className="text-primary flex min-h-11 items-center gap-1.5 px-2 text-[15px] font-extrabold"
+              >
+                <MapIcon className="size-[18px]" aria-hidden />
+                Voir sur la carte
+              </button>
+            )}
+          </div>
+
           <span className="min-h-6 flex-1" />
 
+          {/* Collé en bas, au-dessus de la barre d'onglets : « Y aller » sans défiler. */}
           {(url || activity.bookingUrl) && (
-            <div className="flex gap-2.5">
+            <div className="bg-background/95 sticky bottom-[var(--tab-bar-offset,0px)] z-10 -mx-5 flex gap-2.5 px-5 pt-3 pb-[max(12px,calc(var(--safe-bottom)+12px-var(--tab-bar-offset,0px)))] backdrop-blur">
               {url && (
                 <Button asChild size="xl" className="flex-1 px-3">
                   <a
@@ -338,32 +366,9 @@ export function ActivityScreen({ screen, onClose }: ScreenProps<'activity'>) {
               )}
             </div>
           )}
-          <div className="mt-1 flex justify-between">
-            {activity.address ? (
-              <button
-                type="button"
-                onClick={() =>
-                  void editor.copyText(activity.address ?? '', 'Adresse copiée')
-                }
-                className="text-primary flex min-h-11 items-center gap-1.5 px-2 text-[15px] font-extrabold"
-              >
-                <Copy className="size-[18px]" aria-hidden />
-                Copier l’adresse
-              </button>
-            ) : (
-              <span />
-            )}
-            {activity.coordinates && itinerary.length > 0 && (
-              <button
-                type="button"
-                onClick={showOnMap}
-                className="text-primary flex min-h-11 items-center gap-1.5 px-2 text-[15px] font-extrabold"
-              >
-                <MapIcon className="size-[18px]" aria-hidden />
-                Voir sur la carte
-              </button>
-            )}
-          </div>
+          {!url && !activity.bookingUrl && (
+            <span aria-hidden className="h-[calc(var(--safe-bottom)+24px)]" />
+          )}
         </div>
       </div>
       {editor.sheets}
