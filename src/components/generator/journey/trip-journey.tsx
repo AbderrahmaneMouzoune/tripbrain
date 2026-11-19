@@ -477,7 +477,7 @@ export function TripJourney(props: TripJourneyProps) {
     }
     if (question.id === 'destination' && !returnTo) {
       secondary = {
-        label: 'Je préfère tout écrire en une phrase',
+        label: 'Je préfère tout raconter en quelques phrases',
         onClick: () => go('express'),
       }
     }
@@ -1755,7 +1755,7 @@ function ExpressScreen({
         Mode express
       </p>
       <h2 className="font-display text-[29px] leading-[1.08]">
-        Racontez votre voyage en une phrase.
+        Racontez votre voyage en quelques phrases.
       </h2>
       <p className="text-muted-foreground text-[15px] font-bold">
         On remplit le billet à mesure que vous écrivez. Plus vous en dites
@@ -1763,7 +1763,7 @@ function ExpressScreen({
       </p>
       <div className="flex flex-col gap-1">
         <textarea
-          aria-label="Votre voyage en une phrase"
+          aria-label="Votre voyage en quelques phrases"
           aria-describedby={nearLimit ? counterId : undefined}
           value={value}
           onChange={(event) => onChange(event.target.value)}

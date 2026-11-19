@@ -46,7 +46,7 @@ export function focusActivityOnMap(dayIndex: number, activityId: string) {
 }
 
 /** Onglet Carte : la journée ou tout le voyage, en plein écran. */
-export function MapView(_props: {}) {
+export function MapView(_props: Record<string, never>) {
   const { itinerary } = useTrip()
   const { selectedDay, selectDay, push } = useAppNav()
   const apple = useApplePlatform()

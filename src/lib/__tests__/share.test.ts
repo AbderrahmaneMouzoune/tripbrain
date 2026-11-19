@@ -152,7 +152,7 @@ describe('compressItinerary', () => {
   })
 
   it('accepte une journée réduite à ses champs obligatoires', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // Les champs facultatifs manquent volontairement.
     const minimalDay = {
       id: 'x',
       date: '2025-01-01',
@@ -161,7 +161,7 @@ describe('compressItinerary', () => {
       title: 'T',
       activities: [],
       coordinates: [0, 0],
-    } as any
+    } as unknown as DayItinerary
     await expect(compressItinerary([minimalDay])).resolves.toMatch(
       /^[A-Za-z0-9_-]+$/,
     )

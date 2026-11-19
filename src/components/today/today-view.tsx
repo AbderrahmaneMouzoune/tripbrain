@@ -38,7 +38,7 @@ function useNow(intervalMs = 60_000): Date {
 }
 
 /** Onglet Aujourd'hui : avant le départ, pendant le voyage, ou après. */
-export function TodayView(_props: {}) {
+export function TodayView(_props: Record<string, never>) {
   const { itinerary } = useTrip()
   const now = useNow()
   if (itinerary.length === 0) return null

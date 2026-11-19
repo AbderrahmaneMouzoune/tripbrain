@@ -15,7 +15,7 @@ import { IntentionOptions } from '@/components/onboarding/intention-options'
  * pas pour son propre voyage, un moyen d'en sortir, et une invitation à
  * charger le sien. Rien n'est rendu hors démo.
  */
-export function DemoChrome(_props: {}) {
+export function DemoChrome(_props: Record<string, never>) {
   const { isDemo, activeTrip, deleteTrip } = useTrip()
   const { tab, push } = useAppNav()
   const [inviteDismissed, setInviteDismissed] = useState(false)
