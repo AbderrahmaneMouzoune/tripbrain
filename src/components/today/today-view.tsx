@@ -11,6 +11,7 @@ import {
 import { tripStatus } from '@/lib/trips'
 import { useSwipe } from '@/hooks/use-swipe'
 import { usePreferences } from '@/hooks/use-preferences'
+import { useAnalytics } from '@/hooks/use-analytics'
 import { useTrip } from '@/components/app/trip-provider'
 import { useAppNav, type DayChangeMethod } from '@/components/app/navigation'
 import { useEditSession } from '@/components/app/edit-session'
@@ -53,6 +54,9 @@ function TodayDay({ now }: { now: Date }) {
   const { selectedDay, selectDay, push, stack } = useAppNav()
   const { startEditing } = useEditSession()
   const { markTipSeen, update } = usePreferences()
+  // La feuille de consentement passe avant les astuces : une astuce posée
+  // par-dessus viserait un élément caché sous la feuille.
+  const { bannerOpen } = useAnalytics()
   const index = Math.min(Math.max(selectedDay, 0), itinerary.length - 1)
   const editor = useDayEditor(index)
   const day = itinerary[index]
@@ -87,7 +91,8 @@ function TodayDay({ now }: { now: Date }) {
   // apprise. Jamais deux astuces spontanées dans la même visite.
   useEffect(() => {
     // Pas d'astuce sous un écran ouvert par-dessus l'onglet.
-    if (tip || stack.length > 0 || !canShowSpontaneousTip()) return
+    if (tip || bannerOpen || stack.length > 0 || !canShowSpontaneousTip())
+      return
     const timer = setTimeout(() => {
       if (!canShowSpontaneousTip()) return
       if (day.activities.length > 0 && tipAvailable('long-press')) {
@@ -103,7 +108,7 @@ function TodayDay({ now }: { now: Date }) {
       }
     }, 900)
     return () => clearTimeout(timer)
-  }, [day.activities.length, day.transport, tip, stack.length])
+  }, [day.activities.length, day.transport, tip, bannerOpen, stack.length])
 
   const selectFromView = (target: number, method: DayChangeMethod) => {
     goTo(target, method)
@@ -176,7 +181,7 @@ function TodayDay({ now }: { now: Date }) {
 
       {editor.sheets}
 
-      {tip === 'long-press' && (
+      {!bannerOpen && tip === 'long-press' && (
         <ContextualTip
           id="long-press"
           target={activityRef}
@@ -188,7 +193,7 @@ function TodayDay({ now }: { now: Date }) {
           onSkipAll={() => closeTip(true)}
         />
       )}
-      {tip === 'swipe-days' && (
+      {!bannerOpen && tip === 'swipe-days' && (
         <ContextualTip
           id="swipe-days"
           target={stripRef}
@@ -200,7 +205,7 @@ function TodayDay({ now }: { now: Date }) {
           onSkipAll={() => closeTip(true)}
         />
       )}
-      {tip === 'documents' && transport && (
+      {!bannerOpen && tip === 'documents' && transport && (
         <ContextualTip
           id="documents"
           target={transportRef}

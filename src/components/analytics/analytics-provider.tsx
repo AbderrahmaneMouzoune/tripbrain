@@ -72,6 +72,11 @@ export interface AnalyticsContextValue {
   /** `false` quand aucune clé n'est configurée : la mesure n'existe pas. */
   isConfigured: boolean
   consent: ConsentRecord | null
+  /**
+   * La feuille de consentement est à l'écran : les surcouches spontanées
+   * (astuces contextuelles) attendent qu'elle soit refermée.
+   */
+  bannerOpen: boolean
   decide: (status: ConsentStatus, surface?: ConsentSurface) => void
   /** Rouvre la bannière pour revenir sur un choix déjà fait. */
   openPreferences: () => void
@@ -85,6 +90,7 @@ export interface AnalyticsContextValue {
 export const AnalyticsContext = createContext<AnalyticsContextValue>({
   isConfigured: false,
   consent: null,
+  bannerOpen: false,
   decide: () => {},
   openPreferences: () => {},
   track: () => {},
@@ -152,19 +158,20 @@ export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
 
   const openPreferences = useCallback(() => setPreferencesOpen(true), [])
 
+  const showBanner =
+    configured && isReady && (preferencesOpen || (!consent && !deferred))
+
   const value = useMemo<AnalyticsContextValue>(
     () => ({
       isConfigured: configured,
       consent,
+      bannerOpen: showBanner,
       decide,
       openPreferences,
       track: trackEvent,
     }),
-    [configured, consent, decide, openPreferences],
+    [configured, consent, showBanner, decide, openPreferences],
   )
-
-  const showBanner =
-    configured && isReady && (preferencesOpen || (!consent && !deferred))
 
   return (
     <AnalyticsContext.Provider value={value}>
