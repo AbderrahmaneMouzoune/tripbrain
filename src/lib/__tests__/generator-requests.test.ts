@@ -3,6 +3,8 @@ import {
   expectedDays,
   firstIssueMessage,
   generateRequestSchema,
+  MAX_DESCRIPTION_LENGTH,
+  MAX_FREE_TEXT,
   refineRequestSchema,
 } from '@/lib/generator/requests'
 import { EMPTY_BRIEF, SAMPLE_BRIEF } from '@/lib/generator/trip-brief'
@@ -71,7 +73,10 @@ describe('generateRequestSchema', () => {
   it.each([
     ['date impossible', { startDate: '2027-02-31' }],
     ['description trop courte', { description: 'Rome' }],
-    ['description trop longue', { description: 'a'.repeat(301) }],
+    [
+      'description trop longue',
+      { description: 'a'.repeat(MAX_DESCRIPTION_LENGTH + 1) },
+    ],
     ['durée nulle', { durationDays: 0 }],
     ['durée trop longue', { durationDays: 31 }],
     ['durée décimale', { durationDays: 2.5 }],
@@ -84,6 +89,29 @@ describe('generateRequestSchema', () => {
         ...patch,
       }).success,
     ).toBe(false)
+  })
+
+  it('accepte un récit express de plusieurs phrases', () => {
+    expect(
+      generateRequestSchema.safeParse({
+        mode: 'express',
+        description: 'a'.repeat(MAX_DESCRIPTION_LENGTH),
+        startDate: future,
+      }).success,
+    ).toBe(true)
+  })
+
+  it('laisse « À savoir » porter le récit express, pas les autres champs', () => {
+    const request = (patch: object) =>
+      generateRequestSchema.safeParse({
+        mode: 'brief',
+        brief: { ...SAMPLE_BRIEF, ...patch },
+        startDate: future,
+      }).success
+    expect(request({ extra: 'a'.repeat(MAX_DESCRIPTION_LENGTH + 20) })).toBe(
+      true,
+    )
+    expect(request({ avoid: 'a'.repeat(MAX_FREE_TEXT + 1) })).toBe(false)
   })
 
   it('refuse un mode inconnu', () => {
@@ -133,7 +161,7 @@ describe('refineRequestSchema', () => {
         itinerary,
         instruction: 'Plus de musées',
         startDate: future,
-        description: 'x'.repeat(400),
+        description: 'x'.repeat(MAX_DESCRIPTION_LENGTH + 1),
       }).success,
     ).toBe(false)
   })

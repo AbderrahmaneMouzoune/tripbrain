@@ -5,6 +5,11 @@ import {
   type TripBrief,
 } from '@/lib/generator/trip-brief'
 import {
+  MAX_DESCRIPTION_LENGTH,
+  MAX_EXTRA_LENGTH,
+  tripBriefSchema,
+} from '@/lib/generator/requests'
+import {
   answerLabel,
   applyExpress,
   chapterQuestions,
@@ -145,8 +150,42 @@ describe('parcours du générateur', () => {
     expect(brief.adults).toBe(2)
     expect(brief.extra).toBe('En une phrase : Une semaine en couple à Rome')
     expect(
-      applyExpress(EMPTY_BRIEF, 'x'.repeat(400)).extra.length,
-    ).toBeLessThanOrEqual(300)
+      applyExpress(EMPTY_BRIEF, 'x'.repeat(5000)).extra.length,
+    ).toBeLessThanOrEqual(MAX_EXTRA_LENGTH)
+  })
+
+  it('garde un récit express long en entier, avec les autres notes', () => {
+    const story = `${'Vol aller le 3 à 9 h, hôtel déjà réservé à Alfama. '.repeat(19)}Fin.`
+    expect(story.length).toBeLessThanOrEqual(MAX_DESCRIPTION_LENGTH)
+    const brief = applyExpress(
+      { ...EMPTY_BRIEF, extra: 'Allergie aux arachides' },
+      story,
+    )
+    expect(brief.extra).toContain(`${story.trim()}`)
+    expect(brief.extra).toContain('Allergie aux arachides')
+    expect(tripBriefSchema.safeParse(brief).success).toBe(true)
+    // Relu depuis le brouillon, il n'est pas recoupé.
+    expect(sanitizeBrief(brief).extra).toBe(brief.extra)
+  })
+
+  it('un récit sur plusieurs lignes est remplacé, pas dupliqué', () => {
+    const first = applyExpress(EMPTY_BRIEF, 'Lisbonne 5 jours\nentre amis')
+    const second = applyExpress(first, 'Porto 4 jours\nen couple')
+    expect(second.extra).toBe('En une phrase : Porto 4 jours en couple')
+  })
+
+  it('place le récit express en tête du brief, pas dans les contraintes', () => {
+    const brief = applyExpress(
+      { ...EMPTY_BRIEF, extra: 'Pass Navigante déjà acheté' },
+      '5 jours à Lisbonne, vol retour le dernier jour à 18 h',
+    )
+    const text = buildBriefSections(brief)
+    expect(text.indexOf('## Le voyage raconté par le voyageur')).toBe(0)
+    expect(text).toContain(
+      '- 5 jours à Lisbonne, vol retour le dernier jour à 18 h',
+    )
+    expect(text).toContain('À savoir : Pass Navigante déjà acheté')
+    expect(text).not.toContain('En une phrase')
   })
 
   it('propose des dates à venir', () => {

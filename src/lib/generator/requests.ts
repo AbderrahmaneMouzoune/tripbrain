@@ -19,13 +19,28 @@ import type { TripBrief } from '@/lib/generator/trip-brief'
 /** Durée d'un voyage, en jours : de quoi couvrir un tour du monde raisonnable. */
 export const MIN_DURATION_DAYS = 1
 export const MAX_DURATION_DAYS = 30
-/** Longueur de la description express. Le champ en affiche le compteur. */
+/**
+ * Longueur du récit express. Assez pour quelques phrases — vols, hôtel déjà
+ * réservé, allergie, envies — sans devenir un accès gratuit à Claude : 1 000
+ * caractères pèsent environ 300 jetons, rien à côté de l'itinéraire rendu.
+ * Le champ en affiche le compteur à l'approche de la limite.
+ */
 export const MIN_DESCRIPTION_LENGTH = 10
-export const MAX_DESCRIPTION_LENGTH = 300
+export const MAX_DESCRIPTION_LENGTH = 1000
 /** Longueur d'une demande d'affinage. */
 export const MAX_INSTRUCTION_LENGTH = 300
 /** Un champ libre du questionnaire. */
-const MAX_FREE_TEXT = 300
+export const MAX_FREE_TEXT = 300
+/**
+ * « À savoir » reçoit, en plus de ses propres notes, le récit express
+ * précédé de son étiquette (`EXPRESS_NOTE`) : il lui faut la place des deux.
+ */
+export const MAX_EXTRA_LENGTH = MAX_DESCRIPTION_LENGTH + MAX_FREE_TEXT + 40
+
+/** Longueur maximale d'un champ texte du questionnaire. */
+export function briefTextLimit(field: string): number {
+  return field === 'extra' ? MAX_EXTRA_LENGTH : MAX_FREE_TEXT
+}
 
 /** Messages montrés au voyageur quand sa demande est refusée. */
 const MESSAGES = {
@@ -84,7 +99,7 @@ export const tripBriefSchema = z.object({
   mobility: idList,
   transports: idList,
   booked: freeText,
-  extra: freeText,
+  extra: z.string().max(MAX_EXTRA_LENGTH),
 }) satisfies z.ZodType<TripBrief>
 
 export const generateRequestSchema = z.discriminatedUnion('mode', [

@@ -874,6 +874,13 @@ function travelersLine(brief: TripBrief): string {
 }
 
 /**
+ * Étiquette du récit du mode express, rangé dans « À savoir » : c'est elle
+ * qui permet de le remplacer quand la phrase change, et de le sortir du lot
+ * dans le prompt.
+ */
+export const EXPRESS_NOTE = 'En une phrase : '
+
+/**
  * Le brief tel qu'il apparaît dans le prompt : des sections courtes, une
  * information par ligne. Les questions sans réponse sont omises plutôt que
  * marquées « non renseigné », pour ne pas attirer l'attention du modèle sur
@@ -901,6 +908,28 @@ function withSafeText(brief: TripBrief): TripBrief {
 export function buildBriefSections(rawBrief: TripBrief): string {
   const brief = withSafeText(rawBrief)
   const sections: { title: string; lines: string[] }[] = []
+
+  // Le récit express passe en tête, avec sa propre section : c'est la source
+  // de tout le reste (destination, durée, rythme en sont déduits), et un long
+  // texte relégué en dernière ligne des contraintes serait lu comme un détail.
+  const extraLines = brief.extra
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+  const story = extraLines
+    .filter((line) => line.startsWith(EXPRESS_NOTE))
+    .map((line) => line.slice(EXPRESS_NOTE.length).trim())
+    .filter(Boolean)
+  const notes = extraLines.filter((line) => !line.startsWith(EXPRESS_NOTE))
+  if (story.length > 0) {
+    sections.push({
+      title: 'Le voyage raconté par le voyageur',
+      lines: [
+        ...story,
+        'Ce récit fait foi : chaque précision qu’il donne (dates, lieux, réservations, personnes, contraintes) doit se retrouver dans l’itinéraire, même si elle n’est pas reprise dans les sections suivantes.',
+      ],
+    })
+  }
 
   const trip: string[] = [
     `Destination : ${brief.destination.trim() || '[à compléter : ta destination]'}`,
@@ -993,8 +1022,8 @@ export function buildBriefSections(rawBrief: TripBrief): string {
   if (brief.booked.trim()) {
     constraints.push(`Déjà réservé : ${brief.booked.trim()}`)
   }
-  if (brief.extra.trim()) {
-    constraints.push(`À savoir : ${brief.extra.trim()}`)
+  if (notes.length > 0) {
+    constraints.push(`À savoir : ${notes.join('\n')}`)
   }
   if (constraints.length > 0) {
     sections.push({ title: 'Contraintes', lines: constraints })
